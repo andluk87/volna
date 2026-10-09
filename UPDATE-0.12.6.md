@@ -4,6 +4,30 @@
 
 Инструкция предназначена для существующей установки 0.12.x на Linux с Docker Compose. Выполняйте команды в прежнем каталоге установки, где находятся `compose.yaml` и ваш `.env`. Используйте прежнего пользователя и настройки Compose, чтобы сохранить тот же проект и его volumes. Переход с 0.11.x описан отдельно в [UPDATE-0.12.0.md](UPDATE-0.12.0.md).
 
+## Быстрое обновление: скопировать и вставить
+
+Откройте терминал в существующем каталоге Волны, где лежат `compose.yaml` и `.env`, и вставьте весь блок. Он останавливается при ошибке, скачивает именно 0.12.6 и сохраняет резервную копию до замены исходников. Локальные изменения кода будут заменены.
+
+```sh
+(
+  set -eu
+  test -f compose.yaml && test -f .env || {
+    echo 'Откройте каталог установленной Волны, где лежат compose.yaml и .env.'
+    exit 1
+  }
+  command -v git >/dev/null
+  docker compose version >/dev/null
+  volna_update_dir=$(mktemp -d)
+  trap 'rm -rf "$volna_update_dir"' EXIT
+  git clone --depth 1 --branch v0.12.6 https://github.com/andluk87/volna.git "$volna_update_dir/source"
+  git -C "$volna_update_dir/source" archive --output="$volna_update_dir/source.tar" HEAD
+  sh "$volna_update_dir/source/scripts/backup.sh"
+  tar -xf "$volna_update_dir/source.tar" -C .
+  VOLNA_BUILD_NETWORK=host sh scripts/update.sh
+  echo 'Волна обновлена до 0.12.6. Обновите браузер: Ctrl+F5.'
+)
+```
+
 ## 1. Сохраните данные
 
 Перейдите в свой каталог установки (замените путь, если он другой):
