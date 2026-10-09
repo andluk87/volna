@@ -184,7 +184,7 @@ internal fun ChatRoomScreen(
         val actualHeight = maxHeight.value
         NativeWallpaperView(if (LocalNativeAppearance.current.design != null) LocalThemeVariant.current.wallpaper else NativeWallpaper(colors = listOf(ChatBackground.toArgb().toLong() and 0xFFFFFFFFL)), Modifier.matchParentSize().hazeSource(backdrop), listState.firstVisibleItemScrollOffset.toFloat())
     Column(Modifier.fillMaxSize()) {
-        NativeGlassSurface(Modifier.fillMaxWidth(), radius = 0.dp) { Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        NativeGlassSurface(Modifier.fillMaxWidth(), radius = 0.dp) { Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { if (selection.isNotEmpty()) selection = emptySet() else onBack() }) { Icon(if (selection.isNotEmpty()) Icons.Outlined.Close else Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
             if (selection.isNotEmpty()) {
                 NativeText("Выбрано: ${selection.size}", Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -251,7 +251,7 @@ internal fun ChatRoomScreen(
         }
         if (!chat.canSend) NativeText(if(chat.topicClosed) "Подтема закрыта. История доступна для чтения." else "Публиковать могут только администраторы", Modifier.fillMaxWidth().background(Panel).padding(16.dp), color = Muted, fontSize = 13.sp)
         else NativeGlassSurface(Modifier.fillMaxWidth().onSizeChanged { composerHeight = it.height / density.density }, radius = 0.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
-            if (!recorder.recording) IconButton(onClick = { attachmentMenu = true }, enabled = !busy && editTarget == null) { Icon(Icons.Outlined.AttachFile, "Вложение", tint = Muted) }
+            IconButton(onClick = { if (editTarget != null) panel.tab = "emoji"; togglePanel() }) { Icon(if (panel.open) Icons.Outlined.Keyboard else Icons.Outlined.EmojiEmotions, if (panel.open) "Переключиться на клавиатуру" else "Эмодзи, стикеры и GIF", tint = if (panel.open) Accent else Muted) }
             if (recorder.recording) {
                 IconButton(onClick = recorder::cancel) { Icon(Icons.Outlined.DeleteOutline, "Отменить запись", tint = MaterialTheme.colorScheme.error) }
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 3.dp)) {
@@ -262,7 +262,7 @@ internal fun ChatRoomScreen(
                 NativeRichComposer(input, ::changeInput, entities, user?.id ?: 0, token, api,
                     Modifier.weight(1f).focusRequester(inputFocus).onFocusChanged { if (it.isFocused && panel.open && !panel.searching) panel.open = false },
                     enabled = !busy, maxLines = if (LocalConfiguration.current.screenHeightDp < 480) 3 else 6)
-                IconButton(onClick = { if (editTarget != null) panel.tab = "emoji"; togglePanel() }) { Icon(if (panel.open) Icons.Outlined.Keyboard else Icons.Outlined.EmojiEmotions, if (panel.open) "Переключиться на клавиатуру" else "Эмодзи, стикеры и GIF", tint = if (panel.open) Accent else Muted) }
+                if (!recorder.recording) IconButton(onClick = { attachmentMenu = true }, enabled = !busy && editTarget == null) { Icon(Icons.Outlined.AttachFile, "Вложение", tint = Muted) }
             }
             if (input.text.isBlank() && editTarget == null || recorder.recording) NativeRecordButton(recorder, enabled = !busy && !callActive) { micPermission.launch(Manifest.permission.RECORD_AUDIO) }
             else IconButton(onClick = ::submit, enabled = !busy, modifier = Modifier.size(48.dp).clip(CircleShape).background(Accent)) { if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = AccentText, strokeWidth = 2.dp) else Icon(if (editTarget != null) Icons.Outlined.Check else Icons.Outlined.Send, "Отправить сообщение", tint = AccentText) }

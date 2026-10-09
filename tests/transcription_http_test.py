@@ -148,6 +148,22 @@ class HTTPTest(unittest.TestCase):
             self.assertEqual(request(base, '/transcribe', b'')[0], 400)
             self.assertEqual(request(base, '/transcribe', b'file', mime='text/plain')[0], 415)
 
+    def test_silence_decoder_and_runtime_errors_keep_distinct_statuses_and_remove_files(self):
+        for expected, error in ((422, None), (400, type('InvalidDataError', (Exception,), {'__module__': 'av.error'})('private')), (500, RuntimeError('private'))):
+            with self.subTest(status=expected):
+                paths = []
+                class FakeModel:
+                    def transcribe(self, path, **options):
+                        paths.append(path)
+                        if error is not None:
+                            raise error
+                        return iter([]), None
+                with running_app(FakeModel) as (base, runtime):
+                    status, body = request(base, '/transcribe', b'voice', mime='audio/webm;codecs=opus')
+                    self.assertEqual(status, expected)
+                    self.assertNotIn('private', str(body))
+                    self.assertFalse(Path(paths[0]).exists())
+
 
 if __name__ == '__main__':
     unittest.main()

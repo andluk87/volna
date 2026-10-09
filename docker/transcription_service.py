@@ -93,7 +93,7 @@ def create_app(model_factory=load_model, retry_seconds=60):
 
     @app.post("/transcribe")
     async def transcribe_audio(file: UploadFile = File(...)):
-        suffix = SUFFIXES.get(file.content_type or "")
+        suffix = SUFFIXES.get((file.content_type or "").split(";", 1)[0].strip().lower())
         if suffix is None:
             raise HTTPException(status_code=415, detail="Unsupported audio format")
         model = runtime.get_model()
@@ -109,7 +109,14 @@ def create_app(model_factory=load_model, retry_seconds=60):
             with tempfile.NamedTemporaryFile(prefix="volna-", suffix=suffix, delete=False) as audio:
                 audio.write(payload)
                 path = audio.name
-            text = await asyncio.to_thread(transcribe, model, model_lock, path)
+            try:
+                text = await asyncio.to_thread(transcribe, model, model_lock, path)
+            except Exception as error:
+                # PyAV decoder failures are bad recordings, not service outages.
+                if type(error).__module__.startswith("av.") and type(error).__name__ in ("InvalidDataError", "EOFError"):
+                    raise HTTPException(status_code=400, detail="Invalid audio recording") from None
+                print(f"[whisper] transcription_failed type={type(error).__name__}", flush=True)
+                raise HTTPException(status_code=500, detail="Transcription failed") from None
             if not text:
                 raise HTTPException(status_code=422, detail="No speech recognized")
             return {"text": text}

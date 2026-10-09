@@ -41,3 +41,18 @@ test('transcriber reports local Whisper service errors without exposing internal
  const failed=createTranscriber({fetchImpl:async()=>new Response(JSON.stringify({detail:{state:'failed',error:{type:'OSError',private:'secret'}}}),{status:503})});
  await assert.rejects(failed({bytes:Buffer.from('x'),mime:'audio/webm'}),error=>error.status===503&&/временно недоступно/.test(error.message)&&!/secret|OSError/.test(error.message));
 });
+
+test('transcription distinguishes silent audio and invalid recordings from service outages',async()=>{
+ for(const [status,phrase] of [[422,'не удалось распознать речь'],[415,'формат аудио'],[413,'слишком большая'],[400,'повреждена']]){
+  let calls=0;const transcribe=createTranscriber({fetchImpl:async()=>{calls++;return new Response('{"detail":"private"}',{status});},wait:async()=>{}});
+  await assert.rejects(transcribe({bytes:Buffer.from('x')}),e=>e.status===status&&e.message.includes(phrase)&&!e.message.includes('private'));assert.equal(calls,1);
+ }
+});
+test('transcription retries a transient service or connection failure once and bounds retries',async()=>{
+ for(const first of [()=>new Response('{}',{status:502}),()=>{throw Object.assign(new TypeError('fetch failed'),{cause:{code:'ECONNRESET'}});}]){
+  let calls=0,pauses=0;const transcribe=createTranscriber({fetchImpl:async()=>++calls===1?first():new Response('{"text":"Работает"}'),wait:async()=>{pauses++;}});
+  assert.equal(await transcribe({bytes:Buffer.from('x')}),'Работает');assert.equal(calls,2);assert.equal(pauses,1);
+ }
+ let calls=0;const transcribe=createTranscriber({fetchImpl:async()=>{calls++;return new Response('{}',{status:500});},wait:async()=>{}});
+ await assert.rejects(transcribe({bytes:Buffer.from('x')}),e=>e.status===502);assert.equal(calls,2);
+});

@@ -39,7 +39,7 @@ data class NativeAppearance(
     val avatars: Boolean = false, val timeOnTap: Boolean = false,
     val background: String = "plain", val outgoing: Long = 0, val uiScale: Float = 1f,
     val animations: Boolean = true, val powerSaving: Boolean = false,
-    val design: NativeTheme? = null, val glass: Boolean = true, val glassOpacity: Float = .78f,
+    val design: NativeTheme? = null, val glass: Boolean = false, val glassOpacity: Float = .78f,
     val blurMode: String = "simple", val blurIntensity: Int = 18, val quality: String = "balanced",
     val nightStart: Int = 22 * 60, val nightEnd: Int = 7 * 60
 ) {
@@ -67,7 +67,7 @@ data class NativeAppearance(
             outgoing = prefs.getLong("outgoing", 0), uiScale = prefs.getFloat("uiScale", 1f).takeIf { it.isFinite() }?.coerceIn(0.9f, 1.15f) ?: 1f,
             animations = prefs.getBoolean("animations", true), powerSaving = prefs.getBoolean("powerSaving", false),
             design = runCatching { prefs.getString("design", null)?.let { NativeTheme.parse(org.json.JSONObject(it)) } }.getOrNull(),
-            glass = prefs.getBoolean("glass", true), glassOpacity = prefs.getFloat("glassOpacity", .78f).takeIf { it.isFinite() }?.coerceIn(.65f, 1f) ?: .78f,
+            glass = prefs.getBoolean("glass", false), glassOpacity = prefs.getFloat("glassOpacity", .78f).takeIf { it.isFinite() }?.coerceIn(.65f, 1f) ?: .78f,
             blurMode = prefs.getString("blurMode", "simple").takeIf { it in listOf("full", "simple", "off") } ?: "simple",
             blurIntensity = prefs.getInt("blurIntensity", 18).coerceIn(0, 30), quality = prefs.getString("quality", "balanced").takeIf { it in listOf("max", "balanced", "economy") } ?: "balanced",
             nightStart = prefs.getInt("nightStart", 1320).coerceIn(0, 1439), nightEnd = prefs.getInt("nightEnd", 420).coerceIn(0, 1439)

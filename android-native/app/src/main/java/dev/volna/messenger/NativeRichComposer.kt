@@ -58,13 +58,13 @@ internal fun NativeRichComposer(
             TransformedText(result, OffsetMapping.Identity)
         }
     }
-    val style = nativeEmojiTextStyle(LocalTextStyle.current.copy(color = TextMain, fontSize = 15.sp, lineHeight = 20.sp))
+    val style = nativeEmojiTextStyle(LocalTextStyle.current.copy(color = TextMain, fontSize = 16.sp, lineHeight = 22.sp))
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Accent, unfocusedBorderColor = Color.Transparent,
-        focusedContainerColor = Input, unfocusedContainerColor = Input,
+        focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
+        focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
         focusedTextColor = TextMain, unfocusedTextColor = TextMain, cursorColor = Accent
     )
-    val textHeight = with(density) { 20.sp.toDp() } * maxLines.coerceIn(1, 6)
+    val textHeight = with(density) { 22.sp.toDp() } * maxLines.coerceIn(1, 6)
     LaunchedEffect(value.selection, layout, scroll.viewportSize) {
         val current = layout ?: return@LaunchedEffect
         if (current.layoutInput.text.text != value.text || scroll.viewportSize <= 0) return@LaunchedEffect

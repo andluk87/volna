@@ -1,14 +1,18 @@
-const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage}=require('electron');
+const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage,screen}=require('electron');
 const path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
 const {trustedRenderer,externalURL,validateConfig,rendererFile}=require('./desktop-core.cjs');
+const {restoredBounds,readWindowState,trackWindowState,desktopShortcut}=require('./window-state.cjs');
 const {createUpdates}=require('./updates.cjs');const {pickScreen}=require('./screen-picker.cjs');
 protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true}}]);
 app.commandLine.appendSwitch('autoplay-policy','no-user-gesture-required');
 let win,tray,quitting=false,config,updates,activeCall=false,lastIncoming='',callNotification;
 const show=()=>{if(!win||win.isDestroyed())createWindow();if(win.isMinimized())win.restore();win.show();win.focus();win.flashFrame(false);};
 function createWindow(){
- win=new BrowserWindow({width:1180,height:800,minWidth:390,minHeight:600,title:'Волна',backgroundColor:'#17212b',autoHideMenuBar:true,show:false,icon:path.join(app.getAppPath(),'dist/icons/icon-192.png'),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false}});
- win.once('ready-to-show',()=>win.show());const external=url=>{const target=externalURL(url);if(target)shell.openExternal(target).catch(()=>{});};
+ const stateFile=path.join(app.getPath('userData'),'window-state.json'),saved=readWindowState(stateFile);
+ win=new BrowserWindow({...restoredBounds(saved,screen.getAllDisplays()),minWidth:390,minHeight:500,title:'Волна',backgroundColor:'#17212b',autoHideMenuBar:true,show:false,icon:path.join(app.getAppPath(),'dist/icons/icon-192.png'),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false}});
+ trackWindowState(win,stateFile);if(saved.maximized===true)win.maximize();
+ win.once('ready-to-show',()=>win.show());
+ win.webContents.on('before-input-event',(event,input)=>{const shortcut=desktopShortcut(input);if(!shortcut)return;event.preventDefault();if(shortcut==='close')win.close();else win.webContents.send('desktop:shortcut',shortcut);});const external=url=>{const target=externalURL(url);if(target)shell.openExternal(target).catch(()=>{});};
  win.webContents.setWindowOpenHandler(({url})=>{external(url);return {action:'deny'};});win.webContents.on('will-navigate',(event,url)=>{event.preventDefault();external(url);});
  win.on('close',event=>{if(!quitting&&tray){event.preventDefault();win.hide();}});win.loadURL('app://volna/index.html');
 }
@@ -31,9 +35,10 @@ if(!app.requestSingleInstanceLock())app.quit();else{
    if(!request.frame||request.frame!==win?.webContents.mainFrame||!trustedRenderer(request.securityOrigin)||!request.userGesture||!request.videoRequested)return callback({});
    try{const sources=await desktopCapturer.getSources({types:['screen','window'],thumbnailSize:{width:320,height:180},fetchWindowIcons:true}),selected=await pickScreen(win,sources);if(!request.frame.isDestroyed()&&selected)callback({video:selected});else callback({});}catch{callback({});}
   });
-  createWindow();tray=new Tray(path.join(root,'icons/icon-192.png'));tray.setToolTip('Волна');
+  Menu.setApplicationMenu(null);createWindow();tray=new Tray(path.join(root,'icons/icon-192.png'));tray.setToolTip('Волна');
   tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть Волну',click:show},{label:'Проверить обновления',click:()=>{show();updates.check(true);}},{type:'separator'},{label:'Выйти',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',show);
   const {autoUpdater}=require('electron-updater');updates=createUpdates({updater:autoUpdater,version:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',publish:state=>{if(!win.isDestroyed())win.webContents.send('desktop:update-state',state);},inCall:()=>activeCall,install:()=>{quitting=true;autoUpdater.quitAndInstall(true,true);}});
+  ipc('desktop:unread',count=>{if(!Number.isSafeInteger(count)||count<0||count>1000000)throw Error('Invalid unread count');app.setBadgeCount(count);tray?.setToolTip(count?'Волна · Непрочитанных: '+count:'Волна');return true;});
   ipc('desktop:update-state',()=>updates.snapshot());ipc('desktop:check-update',()=>updates.check(true));ipc('desktop:update',()=>updates.update());
   const sessionFile=path.join(app.getPath('userData'),'phone-session.dat');
   ipc('desktop:save-session',refresh=>{if(typeof refresh!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(refresh))throw Error('Invalid session');if(!safeStorage.isEncryptionAvailable())throw Error('Secure storage unavailable');const temp=sessionFile+'.tmp';fs.writeFileSync(temp,safeStorage.encryptString(refresh),{mode:0o600});fs.renameSync(temp,sessionFile);return true;});
