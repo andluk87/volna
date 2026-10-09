@@ -1,0 +1,225 @@
+[
+  {
+    "file": "happy.png",
+    "kind": "sticker",
+    "label": "Улыбка",
+    "keywords": [
+      "улыбка",
+      "радость",
+      "привет",
+      "хорошо"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "wink.png",
+    "kind": "sticker",
+    "label": "Подмигнуть",
+    "keywords": [
+      "подмигнуть",
+      "ок",
+      "wink"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "love.png",
+    "kind": "sticker",
+    "label": "Любовь",
+    "keywords": [
+      "любовь",
+      "сердце",
+      "нравишься"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "laugh.png",
+    "kind": "sticker",
+    "label": "Смешно",
+    "keywords": [
+      "смешно",
+      "смех",
+      "смеюсь"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "wow.png",
+    "kind": "sticker",
+    "label": "Удивление",
+    "keywords": [
+      "ого",
+      "удивление",
+      "вау"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "sleep.png",
+    "kind": "sticker",
+    "label": "Спокойной ночи",
+    "keywords": [
+      "сон",
+      "ночь",
+      "спать"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "sad.png",
+    "kind": "sticker",
+    "label": "Грустно",
+    "keywords": [
+      "грустно",
+      "печаль"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "cool.png",
+    "kind": "sticker",
+    "label": "Круто",
+    "keywords": [
+      "круто",
+      "очки",
+      "cool"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "heart.png",
+    "kind": "sticker",
+    "label": "Сердце",
+    "keywords": [
+      "сердце",
+      "любовь",
+      "спасибо"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "wave.png",
+    "kind": "sticker",
+    "label": "Волна",
+    "keywords": [
+      "волна",
+      "привет",
+      "море"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "sparkle.png",
+    "kind": "sticker",
+    "label": "Искры",
+    "keywords": [
+      "искры",
+      "магия",
+      "звезда"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "party.png",
+    "kind": "sticker",
+    "label": "Праздник",
+    "keywords": [
+      "праздник",
+      "поздравляю",
+      "день",
+      "рождения"
+    ],
+    "mime": "image/png"
+  },
+  {
+    "file": "heart.gif",
+    "kind": "gif",
+    "label": "Сердце",
+    "keywords": [
+      "сердце",
+      "любовь",
+      "спасибо"
+    ],
+    "mime": "image/gif"
+  },
+  {
+    "file": "wave.gif",
+    "kind": "gif",
+    "label": "Волна",
+    "keywords": [
+      "волна",
+      "привет",
+      "море"
+    ],
+    "mime": "image/gif"
+  },
+  {
+    "file": "sparkle.gif",
+    "kind": "gif",
+    "label": "Искры",
+    "keywords": [
+      "искры",
+      "магия",
+      "звезда"
+    ],
+    "mime": "image/gif"
+  },
+  {
+    "file": "party.gif",
+    "kind": "gif",
+    "label": "Праздник",
+    "keywords": [
+      "праздник",
+      "поздравляю",
+      "день",
+      "рождения"
+    ],
+    "mime": "image/gif"
+  },
+  {
+    "file": "happy.gif",
+    "kind": "gif",
+    "label": "Улыбка",
+    "keywords": [
+      "улыбка",
+      "радость",
+      "привет",
+      "хорошо"
+    ],
+    "mime": "image/gif"
+  },
+  {
+    "file": "wink.gif",
+    "kind": "gif",
+    "label": "Подмигнуть",
+    "keywords": [
+      "подмигнуть",
+      "ок",
+      "wink"
+    ],
+    "mime": "image/gif"
+  },
+  {
+    "file": "love.gif",
+    "kind": "gif",
+    "label": "Любовь",
+    "keywords": [
+      "любовь",
+      "сердце",
+      "нравишься"
+    ],
+    "mime": "image/gif"
+  },
+  {
+    "file": "sleep.gif",
+    "kind": "gif",
+    "label": "Спокойной ночи",
+    "keywords": [
+      "сон",
+      "ночь",
+      "спать"
+    ],
+    "mime": "image/gif"
+  }
+]

@@ -1,0 +1,23 @@
+import React,{useState,useRef,useEffect} from 'react';
+import {parseInline,parseMessage} from './message-format.mjs';
+import {boundaries,isEmoji} from '../../shared/emoji-text.mjs';
+import EmojiAsset from './EmojiAsset';
+
+export default function MessageText({text='',entities=[],token='',meta}){
+ const [copied,setCopied]=useState(false),timer=useRef(null);useEffect(()=>()=>clearTimeout(timer.current),[]);
+ async function copy(value){try{await navigator.clipboard.writeText(value);setCopied(true);clearTimeout(timer.current);timer.current=setTimeout(()=>setCopied(false),1600);}catch{}}
+ // Placeholders carry emoji through the same block and inline parser as ordinary text.
+ let prefix='\uE000volna';while(text.includes(prefix))prefix+='x';const end='\uE001',assets=new Map(),edges=boundaries(text);let cursor=0,encoded='';
+ for(const entity of [...entities].sort((a,b)=>a.start-b.start)){if(!Number.isSafeInteger(entity.start)||!Number.isSafeInteger(entity.length)||entity.start<cursor||entity.length<1||!edges.has(entity.start)||!edges.has(entity.start+entity.length))continue;const marker=prefix+assets.size+end;assets.set(marker,{entity,fallback:text.slice(entity.start,entity.start+entity.length)});encoded+=text.slice(cursor,entity.start)+marker;cursor=entity.start+entity.length;}encoded+=text.slice(cursor);
+ const pattern=new RegExp('('+prefix+'\\d+'+end+')','g');
+ const plain=value=>value.replace(pattern,x=>assets.get(x)?.fallback||x);
+ const rich=value=>value.split(pattern).map((part,i)=>assets.has(part)?<EmojiAsset key={i} entity={assets.get(part).entity} fallback={assets.get(part).fallback} token={token}/>:part);
+ function Inline({value}){return parseInline(value).map((part,index)=>{const content=rich(part.text);if(part.type==='strong')return <strong key={index}>{content}</strong>;if(part.type==='underline')return <u key={index}>{content}</u>;if(part.type==='em')return <em key={index}>{content}</em>;if(part.type==='del')return <s key={index}>{content}</s>;if(part.type==='inline-code')return <code className="inline-code" key={index}>{plain(part.text)}</code>;if(part.type==='link')return <a key={index} href={plain(part.href)} target="_blank" rel="noopener noreferrer">{content}</a>;return <React.Fragment key={index}>{part.text.split(/(https?:\/\/[^\s<>]+)/g).map((v,i)=>/^https?:\/\//.test(v)?<a key={i} href={plain(v)} target="_blank" rel="noopener noreferrer">{rich(v)}</a>:<React.Fragment key={i}>{rich(v)}</React.Fragment>)}</React.Fragment>;});}
+ function copySelected(e){const selection=window.getSelection();if(!selection?.rangeCount||!e.currentTarget.contains(selection.anchorNode)||!e.currentTarget.contains(selection.focusNode))return;const fragment=selection.getRangeAt(0).cloneContents();let text='',entities=[];function visit(node){if(node.nodeType===3){text+=node.data;return;}if(node.classList?.contains('message-time-space')||node.classList?.contains('message-inline-meta')||node.classList?.contains('message-block-meta'))return;if(node.dataset?.emojiFallback){const fallback=node.dataset.emojiFallback;if(/^[a-f0-9]{32}$/.test(node.dataset.emojiId||''))entities.push({id:node.dataset.emojiId,start:text.length,length:fallback.length});text+=fallback;return;}if(node.tagName==='BR'){text+='\n';return;}for(const child of node.childNodes)visit(child);if(['P','BLOCKQUOTE','PRE'].includes(node.tagName)&&text&&!text.endsWith('\n'))text+='\n';}visit(fragment);if(!text)return;e.preventDefault();e.clipboardData.setData('text/plain',text.replace(/\n$/,''));try{e.clipboardData.setData('application/x-volna-emoji+json',JSON.stringify({version:1,text,entities}));}catch{}}
+ const blocks=parseMessage(encoded);
+ return <div onCopy={copySelected} className={'message-text '+(isEmoji(text.trim())?'single-emoji-text':'')}>{blocks.map((block,index)=>{
+ if(block.type==='code')return <section className="formatted-code" key={index}><header><span>{block.language||'Код'}</span><button type="button" aria-label="Копировать код" onClick={()=>copy(plain(block.text))}>{copied?'Скопировано':'Копировать'}</button></header><pre><code>{plain(block.text)}</code></pre></section>;
+ if(block.type==='quote')return <blockquote className="formatted-quote" key={index}><Inline value={block.text}/></blockquote>;
+ return <p className="formatted-paragraph" key={index}><Inline value={block.text}/>{meta&&index===blocks.length-1&&<><span className="message-time-space" aria-hidden="true">{meta}</span><span className="message-inline-meta">{meta}</span></>}</p>;
+ })}{meta&&blocks.at(-1)?.type!=='paragraph'&&blocks.at(-1)?.type!=='text'&&<div className="message-block-meta">{meta}</div>}</div>;
+}

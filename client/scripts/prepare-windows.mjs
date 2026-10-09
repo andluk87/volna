@@ -1,0 +1,7 @@
+import {readFileSync,writeFileSync,mkdirSync,cpSync,existsSync} from 'node:fs';
+import {createRequire} from 'node:module';import {fileURLToPath} from 'node:url';import path from 'node:path';
+const require=createRequire(import.meta.url),{validateConfig}=require('../electron/desktop-core.cjs'),root=fileURLToPath(new URL('../',import.meta.url));
+const config=validateConfig({apiBase:process.env.VITE_API_URL||''});writeFileSync(path.join(root,'electron/config.json'),JSON.stringify(config)+'\n');
+const pkg=JSON.parse(readFileSync(path.join(root,'package.json')));writeFileSync(path.join(root,'electron-builder.windows.json'),JSON.stringify({...pkg.build,directories:{...pkg.build.directories,output:path.resolve(root,pkg.build.directories?.output||'release')},afterPack:'scripts/windows-resources.cjs',publish:[{provider:'generic',url:config.updateBase}],win:{...pkg.build.win,icon:'electron/icon.ico',signAndEditExecutable:false},nsis:{...pkg.build.nsis,perMachine:false,allowElevation:false,runAfterFinish:true,createDesktopShortcut:true,createStartMenuShortcut:true,shortcutName:'Волна',deleteAppDataOnUninstall:false}},null,2)+'\n');
+const desktopPublic=path.join(root,'.desktop-public');mkdirSync(desktopPublic,{recursive:true});for(const name of ['boot.js','manifest.webmanifest','appearance-sample.wav','icons','demo']){const source=path.join(root,'public',name);if(existsSync(source))cpSync(source,path.join(desktopPublic,name),{recursive:true});}
+console.log('Windows HTTPS API and update feed configured.');

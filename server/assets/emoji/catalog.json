@@ -1,0 +1,249 @@
+[
+  {
+    "file": "01.png",
+    "title": "Радость",
+    "keywords": [
+      "радость",
+      "joy",
+      "happy",
+      "smile"
+    ],
+    "fallback": "😀"
+  },
+  {
+    "file": "02.png",
+    "title": "Смех",
+    "keywords": [
+      "смех",
+      "laugh",
+      "funny",
+      "lol"
+    ],
+    "fallback": "😂"
+  },
+  {
+    "file": "03.png",
+    "title": "Удивление",
+    "keywords": [
+      "удивление",
+      "surprise",
+      "wow"
+    ],
+    "fallback": "😮"
+  },
+  {
+    "file": "04.png",
+    "title": "Грусть",
+    "keywords": [
+      "грусть",
+      "sad",
+      "sorrow"
+    ],
+    "fallback": "😞"
+  },
+  {
+    "file": "05.png",
+    "title": "Плач",
+    "keywords": [
+      "плач",
+      "cry",
+      "tears"
+    ],
+    "fallback": "😭"
+  },
+  {
+    "file": "06.png",
+    "title": "Злость",
+    "keywords": [
+      "злость",
+      "angry",
+      "rage"
+    ],
+    "fallback": "😡"
+  },
+  {
+    "file": "07.png",
+    "title": "Раздражение",
+    "keywords": [
+      "раздражение",
+      "annoyed",
+      "irritated"
+    ],
+    "fallback": "😤"
+  },
+  {
+    "file": "08.png",
+    "title": "Влюблённость",
+    "keywords": [
+      "влюблённость",
+      "love",
+      "heart"
+    ],
+    "fallback": "😍"
+  },
+  {
+    "file": "09.png",
+    "title": "Подмигивание",
+    "keywords": [
+      "подмигивание",
+      "wink"
+    ],
+    "fallback": "😉"
+  },
+  {
+    "file": "10.png",
+    "title": "Смущение",
+    "keywords": [
+      "смущение",
+      "shy",
+      "blush"
+    ],
+    "fallback": "😊"
+  },
+  {
+    "file": "11.png",
+    "title": "Ирония",
+    "keywords": [
+      "ирония",
+      "ironic",
+      "upside",
+      "down"
+    ],
+    "fallback": "🙃"
+  },
+  {
+    "file": "12.png",
+    "title": "Сонливость",
+    "keywords": [
+      "сонливость",
+      "sleep",
+      "sleepy"
+    ],
+    "fallback": "😴"
+  },
+  {
+    "file": "13.png",
+    "title": "Задумчивость",
+    "keywords": [
+      "задумчивость",
+      "think",
+      "thoughtful"
+    ],
+    "fallback": "🤔"
+  },
+  {
+    "file": "14.png",
+    "title": "Восторг",
+    "keywords": [
+      "восторг",
+      "excited",
+      "amazing"
+    ],
+    "fallback": "🤩"
+  },
+  {
+    "file": "15.png",
+    "title": "Испуг",
+    "keywords": [
+      "испуг",
+      "afraid",
+      "scared"
+    ],
+    "fallback": "😨"
+  },
+  {
+    "file": "16.png",
+    "title": "Шок",
+    "keywords": [
+      "шок",
+      "shock",
+      "mind",
+      "blown"
+    ],
+    "fallback": "🤯"
+  },
+  {
+    "file": "17.png",
+    "title": "Подозрение",
+    "keywords": [
+      "подозрение",
+      "suspicious",
+      "doubtful"
+    ],
+    "fallback": "🤨"
+  },
+  {
+    "file": "18.png",
+    "title": "Одобрение",
+    "keywords": [
+      "одобрение",
+      "yes",
+      "approval",
+      "good"
+    ],
+    "fallback": "👍"
+  },
+  {
+    "file": "19.png",
+    "title": "Несогласие",
+    "keywords": [
+      "несогласие",
+      "no",
+      "disagree"
+    ],
+    "fallback": "👎"
+  },
+  {
+    "file": "20.png",
+    "title": "Благодарность",
+    "keywords": [
+      "благодарность",
+      "thanks",
+      "thank",
+      "you"
+    ],
+    "fallback": "🙏"
+  },
+  {
+    "file": "21.png",
+    "title": "Поздравление",
+    "keywords": [
+      "поздравление",
+      "congratulations",
+      "party"
+    ],
+    "fallback": "🥳"
+  },
+  {
+    "file": "22.png",
+    "title": "Поддержка",
+    "keywords": [
+      "поддержка",
+      "support",
+      "care",
+      "hug"
+    ],
+    "fallback": "🤗"
+  },
+  {
+    "file": "23.png",
+    "title": "Приветствие",
+    "keywords": [
+      "приветствие",
+      "hello",
+      "wave",
+      "hi"
+    ],
+    "fallback": "👋"
+  },
+  {
+    "file": "24.png",
+    "title": "Прощание",
+    "keywords": [
+      "прощание",
+      "bye",
+      "goodbye"
+    ],
+    "fallback": "🫡"
+  }
+]

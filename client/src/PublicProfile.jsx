@@ -1,0 +1,6 @@
+import React,{useEffect,useState} from 'react';import {API} from './api';
+export default function PublicProfile({username}){
+ const [user,setUser]=useState(null),[error,setError]=useState('');
+ useEffect(()=>{const controller=new AbortController();fetch(API+'/api/public/users/'+encodeURIComponent(username),{signal:controller.signal}).then(async r=>{const value=await r.json();if(!r.ok)throw Error(value.error||'Профиль не найден');setUser(value);}).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>controller.abort();},[username]);
+ return <main className="auth"><section className="auth-card public-profile">{user?<>{user.avatar_url&&<img width="96" height="96" style={{borderRadius:'50%',objectFit:'cover'}} src={API+user.avatar_url} alt={user.name}/>}<h1>{user.name}</h1><p><a href={user.profile_url}>@{user.username}</a></p><p className="profile-bio">{user.bio||'На одной волне'}</p><a className="primary" href={(API||'')+'/app?profile='+encodeURIComponent(user.username)}>Открыть профиль в Волне</a><p><a href={"volna://profile/"+user.username}>Открыть в Android</a></p></>:<p role="status">{error||'Загружаем профиль…'}</p>}<p><a href={(API||'')+'/'}>Волна · главная</a></p></section></main>;
+}

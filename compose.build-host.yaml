@@ -1,0 +1,19 @@
+# Optional Linux VPS build networking when the Docker bridge cannot resolve DNS.
+services:
+  android-builder:
+    build:
+      network: host
+    network_mode: host
+  windows-builder:
+    build:
+      network: host
+    network_mode: host
+  server:
+    build:
+      network: host
+  web:
+    build:
+      network: host
+  transcription:
+    build:
+      network: host

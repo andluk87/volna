@@ -1,0 +1,64 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+
+test('Android APK uses native Compose screens and the Volna API, not a WebView shell',()=>{
+  const activity=read('android-native/app/src/main/java/dev/volna/messenger/MainActivity.kt');
+  const api=read('android-native/app/src/main/java/dev/volna/messenger/NativeApi.kt');
+  const service=read('android-native/app/src/main/java/dev/volna/messenger/MessagingService.kt');
+  const manifest=read('android-native/app/src/main/AndroidManifest.xml');
+  const gradle=read('android-native/app/build.gradle.kts');
+  const docker=read('docker/android.Dockerfile');
+  assert.match(activity,/ComponentActivity/);
+  assert.match(activity,/setContent\s*\{/);
+  assert.match(activity,/NativeSmsLogin/);
+  assert.match(activity,/ChatListScreen/);
+  assert.match(activity,/ChatRoomScreen/);
+  assert.doesNotMatch(activity,/BridgeActivity|android\.webkit\.WebView/);
+  assert.match(api,/\/api\/chats/);
+  assert.match(api,/row\.isNull\("deleted_at"\)/,'JSON null must never be treated as a deleted message');
+  assert.match(api,/fun smsVerify\(/);
+  assert.match(api,/fun qrConfirm\(/);
+  assert.match(api,/fun upload\(/);
+  assert.match(api,/fun transcribe\(/);
+  assert.match(api,/fun checkUpdate\(/);
+  assert.match(api,/fun downloadUpdate\(/);
+  assert.match(api,/fun searchMessages\(/);
+  assert.match(api,/fun pinnedMessages\(/);
+  assert.match(api,/fun forward\(/);
+  assert.match(api,/fun userProfile\(/);
+  assert.match(api,/fun updateProfile\(/);
+  assert.match(api,/fun react\(/);
+  assert.match(api,/fun updateMessage\(/);
+  assert.match(activity,/QuickEmoji/);
+  assert.match(activity,/NativeProfileDialog/);
+  assert.match(api,/Контрольная сумма обновления не совпала/);
+  assert.match(read('android-native/app/src/main/java/dev/volna/messenger/NativeRecorder.kt'),/MediaRecorder\.AudioEncoder\.AAC/);
+  assert.match(activity,/WindowInsets\.systemBars\.union\(WindowInsets\.displayCutout\)/);
+  assert.match(activity,/api\.markDelivered/);
+  assert.match(service,/\/api\/events/);
+  assert.match(service,/startForeground\(/);
+  assert.match(service,/NotificationManager/);
+  assert.match(manifest,/android:foregroundServiceType="remoteMessaging"/);
+  assert.match(manifest,/android\.permission\.POST_NOTIFICATIONS/);
+  assert.match(manifest,/android\.permission\.RECORD_AUDIO/);
+  assert.match(manifest,/<uses-permission\s+android:name="android\.permission\.ACCESS_NETWORK_STATE"\s*\/>/,'WebRTC NetworkMonitor requires an unrestricted network-state permission');
+  assert.match(manifest,/android\.permission\.REQUEST_INSTALL_PACKAGES/);
+  assert.match(manifest,/androidx\.core\.content\.FileProvider/);
+  assert.match(read('android-native/app/src/main/res/xml/provider_paths.xml'),/<files-path name="updates" path="updates\/"\s*\/>/);
+  assert.match(activity,/NativeApi\(BuildConfig\.API_BASE_URL\)/);
+  assert.match(gradle,/buildConfigField\("String", "API_BASE_URL"/);
+  assert.match(docker,/COPY android-native\//);
+  assert.doesNotMatch(docker,/COPY client\/ \.\//);
+  assert.match(read('docker/nginx.conf'),/download\/volna-android-version\.json/);
+  assert.match(read('scripts/build-android.sh'),/volna-android-version\.json/);
+  assert.equal(gradle.match(/volnaVersionName = "([^"]+)"/)?.[1],JSON.parse(read('package.json')).version);
+});
+
+test('web download link imports its API base URL',()=>{
+  const main=read('client/src/main.jsx');
+  assert.match(main,/import \{API,request,events,messageId,uploadFile\} from '\.\/api';/);
+  assert.match(main,/setNotice\(`\$\{event\.message\.sender_name/,'incoming native messages should show an in-app web notification');
+});

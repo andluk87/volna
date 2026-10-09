@@ -1,0 +1,13 @@
+{
+  "reference_url":"https://web.telegram.org/k/",
+  "source_commit":"125a31da7665d5ee09ceb9c5de66e2615e3276b6",
+  "captured_at":"2026-10-09",
+  "viewport":{"width":1363,"height":936},
+  "device_scale_factor":1,
+  "theme":"light",
+  "file":"web-k-login-background-light.jpg",
+  "clip":{"x":0,"y":0,"width":1363,"height":140},
+  "state":"unauthenticated-login-background-only",
+  "chat_reference_available":false,
+  "pixel_acceptance_verified":false
+}

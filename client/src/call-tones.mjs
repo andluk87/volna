@@ -1,0 +1,8 @@
+export function callTone(call,connected=false){return !call||call.status!=='ringing'||connected?'':call.incoming?'incoming':'ringback';}
+export class CallTones{
+ constructor({createContext=()=>new(window.AudioContext||window.webkitAudioContext)(),timers=globalThis}={}){this.createContext=createContext;this.timers=timers;this.context=null;this.timer=null;this.nodes=[];this.kind='';}
+ unlock(){try{this.context??=this.createContext();this.context.resume().catch(()=>{});}catch{}}
+ set(kind){if(kind===this.kind)return;this.stop();this.kind=kind;if(!kind)return;this.unlock();const beep=()=>{const ctx=this.context;if(!ctx||ctx.state!=='running')return;const oscillator=ctx.createOscillator(),gain=ctx.createGain(),now=ctx.currentTime,duration=kind==='ringback'?1:.3;oscillator.frequency.value=kind==='ringback'?425:660;gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(.045,now+.02);gain.gain.setValueAtTime(.045,now+duration-.03);gain.gain.linearRampToValueAtTime(0,now+duration);oscillator.connect(gain);gain.connect(ctx.destination);const item={oscillator,gain};this.nodes.push(item);oscillator.onended=()=>{oscillator.disconnect();gain.disconnect();this.nodes=this.nodes.filter(node=>node!==item);};oscillator.start(now);oscillator.stop(now+duration);};beep();this.timer=this.timers.setInterval(beep,kind==='ringback'?4000:1800);}
+ stop(){if(this.timer!==null)this.timers.clearInterval(this.timer);this.timer=null;this.kind='';for(const {oscillator,gain}of this.nodes){try{oscillator.stop();oscillator.disconnect();gain.disconnect();}catch{}}this.nodes=[];}
+ close(){this.stop();this.context?.close().catch(()=>{});this.context=null;}
+}

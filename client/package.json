@@ -1,0 +1,55 @@
+{
+  "name": "volna-client",
+  "version": "0.12.5",
+  "private": true,
+  "type": "module",
+  "description": "Volna desktop and mobile messenger",
+  "author": "Volna",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "desktop": "node scripts/prepare-windows.mjs && electron .",
+    "windows": "node scripts/prepare-windows.mjs && node scripts/build-windows-installer.cjs",
+    "android:init": "cap add android",
+    "android:sync": "cap sync android",
+    "test:visual": "playwright test"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.0.0",
+    "@capacitor/core": "8.0.0",
+    "@capacitor/filesystem": "8.0.0",
+    "@capacitor/share": "8.0.0",
+    "electron-updater": "6.6.2",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.0.0",
+    "@playwright/test": "1.56.1",
+    "electron": "40.0.0",
+    "electron-builder": "26.0.12",
+    "resedit": "1.7.2",
+    "vite": "7.3.0"
+  },
+  "build": {
+    "appId": "dev.volna.messenger",
+    "productName": "Volna",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "Volna-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

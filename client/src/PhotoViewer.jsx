@@ -1,0 +1,15 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
+import {Capacitor} from '@capacitor/core';
+import {fileBlob} from './api';
+import {shareMedia} from './media';
+export default function PhotoViewer({file,gallery=[],token,onClose}){
+ const list=gallery.some(f=>f.id===file.id)?gallery:[file];
+ const [id,setId]=useState(file.id),[url,setUrl]=useState(''),[zoom,setZoom]=useState(1),[rotation,setRotation]=useState(0),[error,setError]=useState(''),[saving,setSaving]=useState(false);
+ const index=Math.max(0,list.findIndex(f=>f.id===id)),current=list[index],touch=useRef(null),close=useRef(null);
+ const step=delta=>{const next=list[index+delta];if(next)setId(next.id);};
+ useEffect(()=>{setUrl('');setError('');setZoom(1);setRotation(0);let object;const c=new AbortController();fileBlob(current.id,token,c.signal).then(blob=>{object=URL.createObjectURL(blob);setUrl(object);}).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>{c.abort();if(object)URL.revokeObjectURL(object);};},[current.id,token]);
+ useEffect(()=>{const before=document.activeElement;close.current?.focus();return()=>before?.focus();},[]);
+ useEffect(()=>{const key=e=>{if(e.key==='Escape'){e.preventDefault();onClose();}if(e.key==='ArrowRight')step(1);if(e.key==='ArrowLeft')step(-1);};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[index,list,onClose]);
+ return createPortal(<section className="photo-lightbox" role="dialog" aria-modal="true" aria-label="Просмотр изображения"><header><span>{index+1} / {list.length}</span><span className="photo-view-name">{current.name}</span>{url&&(Capacitor.isNativePlatform()?<button disabled={saving} onClick={async()=>{setSaving(true);try{await shareMedia(url,current);}catch(e){setError(e.message);}finally{setSaving(false);}}}>Сохранить</button>:<a href={url} download={current.name}>Скачать</a>)}<button aria-label="Уменьшить фото" disabled={zoom===1} onClick={()=>setZoom(v=>Math.max(1,v-.5))}>−</button><button aria-label="Увеличить фото" disabled={zoom===4} onClick={()=>setZoom(v=>Math.min(4,v+.5))}>+</button><button aria-label="Повернуть фото" onClick={()=>setRotation(v=>v+90)}>↻</button><button ref={close} aria-label="Закрыть изображение" onClick={onClose}>×</button></header><div className="photo-viewport" onPointerDown={e=>{if(e.pointerType==='touch')touch.current=e.clientX;}} onPointerUp={e=>{if(touch.current!==null&&zoom===1){const dx=e.clientX-touch.current;if(Math.abs(dx)>70)step(dx<0?1:-1);}touch.current=null;}}>{error?<p role="alert">{error}</p>:url?<img src={url} alt={current.name} onDoubleClick={()=>setZoom(v=>v===1?2:1)} style={{width:zoom===1?'auto':zoom*80+'vw',maxWidth:zoom===1?'90vw':'none',maxHeight:zoom===1?'78dvh':'none',transform:`rotate(${rotation}deg)`}}/>:<p>Загрузка фото…</p>}</div>{list.length>1&&<footer><button aria-label="Предыдущее фото" disabled={index===0} onClick={()=>step(-1)}>← Назад</button><button aria-label="Следующее фото" disabled={index===list.length-1} onClick={()=>step(1)}>Далее →</button></footer>}</section>,document.body);
+}

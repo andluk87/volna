@@ -1,0 +1,102 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createApp,fixtureFetch as fetch} from './phone-fixture.mjs';
+import {randomBytes} from 'node:crypto';
+
+const device=()=>randomBytes(16).toString('hex');
+async function fixture(t){
+ const app=createApp({database:':memory:'});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(()=>app.close());
+ const base=`http://127.0.0.1:${app.server.address().port}/api`;
+ async function request(path,token='',body){const response=await fetch(base+path,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','User-Agent':'VolnaAndroid/test'},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:response.status,data:await response.json()};}
+ const users=[];for(const username of ['mobile_alice','mobile_boris','mobile_carol'])users.push((await request('/register','',{username,name:username==='mobile_boris'?'Борис Иванов':username,password:'long-password-for-test'})).data);
+ return {app,request,users};
+}
+test('mobile: contacts and global search reveal only accessible messages; reply jumps validate chat membership',async t=>{
+ const {request,users:[a,b,c]}=await fixture(t);
+ const chat=(await request('/chats',a.token,{user_id:b.user.id})).data.id;
+ const other=(await request('/chats',b.token,{user_id:c.user.id})).data.id;
+ const message=(await request(`/chats/${chat}/messages`,a.token,{text:'Новая строка\nСЕКРЕТ',client_id:randomBytes(16).toString('hex')})).data;
+ await request(`/chats/${other}/messages`,c.token,{text:'Секрет другого чата',client_id:randomBytes(16).toString('hex')});
+ assert.deepEqual((await request('/search/messages?q='+encodeURIComponent('секрет'),a.token)).data.map(m=>m.id),[message.id]);
+ assert.equal((await request('/contacts',a.token)).data[0].id,b.user.id);
+ assert.equal((await request('/contacts',c.token)).data.some(u=>u.id===a.user.id),false);
+ assert.equal((await request('/users?q='+encodeURIComponent('борис'),a.token)).data[0].id,b.user.id);
+ assert.equal((await request('/users?q=@mobile_boris',a.token)).data[0].id,b.user.id);
+ assert.equal((await request(`/chats/${chat}/messages?around=${message.id}`,a.token)).data[0].id,message.id);
+ assert.equal((await request(`/chats/${other}/messages?around=${message.id}`,a.token)).status,404);
+ assert.equal((await request(`/chats/${chat}/messages?around=-1`,a.token)).status,404);
+});
+test('mobile: session metadata contains no bearer token; revocation is account-scoped',async t=>{
+ const {request,users:[a,b]}=await fixture(t);
+ const a2=(await request('/login','',{username:'mobile_alice',password:'long-password-for-test'})).data;
+ await request('/me',a2.token);await request('/me',b.token);
+ const sessions=(await request('/sessions',a.token)).data;
+ assert.equal(sessions.length,2);assert.equal(sessions.filter(s=>s.current).length,1);
+ assert.equal(JSON.stringify(sessions).includes(a.token),false);assert.equal(JSON.stringify(sessions).includes(a2.token),false);
+ const another=sessions.find(s=>!s.current);
+ assert.equal(another.label,'Волна · Android');
+ assert.equal((await request(`/sessions/${another.id}/revoke`,b.token,{})).status,200);
+ assert.equal((await request('/me',a2.token)).status,200);
+ assert.equal((await request(`/sessions/${sessions.find(s=>s.current).id}/revoke`,a.token,{})).status,400);
+ assert.equal((await request('/sessions/others/revoke',a.token,{})).status,200);
+ assert.equal((await request('/me',a2.token)).status,401);
+ assert.equal((await request('/me',a.token)).status,200);
+ assert.equal((await request('/me',b.token)).status,200);
+});
+test('mobile: call history persists actual participants, completion and screen state without SDP',async t=>{
+ const {app,request,users:[a,b,c]}=await fixture(t);
+ const chat=(await request('/chats',a.token,{user_id:b.user.id})).data.id;
+ const da=device(),db=device();const call=(await request('/calls/start',a.token,{device:da,chat_id:chat})).data;
+ const offer={type:'offer',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n'};
+ await request(`/calls/${call.id}/offer`,a.token,{device:da,description:offer});
+ await request(`/calls/${call.id}/accept`,b.token,{device:db});
+ await request(`/calls/${call.id}/answer`,b.token,{device:db,description:{...offer,type:'answer'}});
+ assert.equal((await request(`/calls/${call.id}/camera`,c.token,{device:device(),enabled:true})).status,404);
+ assert.equal((await request(`/calls/${call.id}/camera`,a.token,{device:device(),enabled:true})).status,409);
+ assert.equal((await request(`/calls/${call.id}/camera`,b.token,{device:db,enabled:'true'})).status,400);
+ assert.equal((await request(`/calls/${call.id}/camera`,b.token,{device:db,enabled:true})).status,200);
+ assert.equal((await request('/calls/current?device='+da,a.token)).data.peer_video,true);
+ await request(`/calls/${call.id}/screen`,b.token,{device:db,sharing:true});
+ assert.equal((await request('/calls/current?device='+da,a.token)).data.peer_video,false);
+ await request(`/calls/${call.id}/end`,a.token,{device:da});
+ const mine=(await request('/calls/history',a.token)).data[0],peer=(await request('/calls/history',b.token)).data[0];
+ assert.equal(mine.status,'ended');assert.equal(mine.incoming,false);assert.equal(peer.incoming,true);assert.equal(mine.peer.id,b.user.id);assert.equal(mine.screen_shared,true);
+ assert.equal(mine.video,true);
+ assert.equal(JSON.stringify(mine).includes('sdp'),false);assert.deepEqual((await request('/calls/history',c.token)).data,[]);
+ assert.equal(app.db.prepare('SELECT ended FROM call_history WHERE id=?').get(call.id).ended>0,true);
+});
+test('mobile: a call that never rang cannot create a missed call for the callee; camera requires video negotiation',async t=>{
+ const {request,users:[a,b]}=await fixture(t);
+ const chat=(await request('/chats',a.token,{user_id:b.user.id})).data.id,da=device(),db=device();
+ assert.equal((await request('/calls/start',a.token,{device:da,chat_id:chat,video:'yes'})).status,400);
+ const unringed=(await request('/calls/start',a.token,{device:da,chat_id:chat})).data;
+ await request(`/calls/${unringed.id}/end`,a.token,{device:da});
+ assert.deepEqual((await request('/calls/history',b.token)).data,[]);
+ assert.equal((await request('/calls/history',a.token)).data[0].status,'interrupted');
+ const call=(await request('/calls/start',a.token,{device:da,chat_id:chat})).data;
+ assert.equal((await request(`/calls/${call.id}/camera`,a.token,{device:da,enabled:true})).status,409);
+ const audio={type:'offer',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n'};
+ await request(`/calls/${call.id}/offer`,a.token,{device:da,description:audio});
+ await request(`/calls/${call.id}/accept`,b.token,{device:db});
+ await request(`/calls/${call.id}/answer`,b.token,{device:db,description:{...audio,type:'answer'}});
+ assert.equal((await request(`/calls/${call.id}/camera`,a.token,{device:da,enabled:true})).status,409);
+ assert.equal((await request(`/calls/${call.id}/camera`,a.token,{device:da,enabled:false})).status,200);
+ assert.equal((await request('/calls/current?device='+db,b.token)).data.peer_video,false);
+ await request(`/calls/${call.id}/end`,a.token,{device:da});
+ assert.equal((await request('/calls/history',b.token)).data.length,1);
+});
+test('mobile: media tabs and group posting permissions are enforced on the server',async t=>{
+ const {request,users:[a,b]}=await fixture(t);
+ const group=(await request('/communities',a.token,{kind:'group',title:'Проверка',description:'',client_id:randomBytes(16).toString('hex')})).data.id;
+ await request(`/communities/${group}/add`,a.token,{user_id:b.user.id});
+ assert.equal((await request(`/communities/${group}/settings`,b.token,{title:'Проверка',description:'',posting_policy:'admins'})).status,403);
+ assert.equal((await request(`/communities/${group}/settings`,a.token,{title:'Проверка',description:'',posting_policy:'admins'})).status,200);
+ assert.equal((await request('/chats',b.token)).data.find(x=>x.id===group).can_send,0);
+ assert.equal((await request(`/chats/${group}/messages`,b.token,{text:'Нельзя',client_id:randomBytes(16).toString('hex')})).status,403);
+ const sent=(await request(`/chats/${group}/messages`,a.token,{text:'https://example.com',client_id:randomBytes(16).toString('hex')})).data;
+ assert.equal((await request(`/chats/${group}/media?type=links`,b.token)).data[0].id,sent.id);
+ assert.deepEqual((await request(`/chats/${group}/media?type=voice`,b.token)).data,[]);
+ assert.equal((await request(`/chats/${group}/media?type=unknown`,b.token)).status,400);
+ assert.equal((await request(`/communities/${group}/settings`,a.token,{title:'Проверка',description:'',posting_policy:'all'})).status,200);
+ assert.equal((await request(`/chats/${group}/messages`,b.token,{text:'Теперь можно',client_id:randomBytes(16).toString('hex')})).status,201);
+});

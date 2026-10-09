@@ -1,0 +1,53 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {randomUUID} from 'node:crypto';
+import {createApp,fixtureFetch as fetch} from './phone-fixture.mjs';
+import {normalizeAppearance,accentText,defaults} from '../client/src/appearance.mjs';
+test('appearance recovers invalid settings, bounds sliders and chooses contrasting button text',()=>{
+ assert.deepEqual(normalizeAppearance(null),defaults);
+ const s=normalizeAppearance({size:400,radius:-5,accent:'red;display:none',font:'fake',theme:'system',density:'minimal'});
+ assert.equal(s.size,20);assert.equal(s.radius,0);assert.equal(s.accent,defaults.accent);assert.equal(s.font,'system');assert.equal(s.density,'minimal');
+ assert.equal(accentText('#ffffff'),'#10202b');assert.equal(accentText('#000000'),'#ffffff');
+});
+test('albums are atomic, idempotent, authorized, survive restart; delivered differs from read; named reactions',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'volna-v10-')),database=join(dir,'data.db');let app,base;
+ const start=async()=>{app=createApp({database});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));base=`http://127.0.0.1:${app.server.address().port}/api`;};await start();
+ const req=async(path,token,data)=>{const r=await fetch(base+path,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,data:await r.json()};};
+ const upload=async(token,name,mime='image/png')=>{const r=await fetch(base+'/uploads',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':mime,'X-File-Name':name},body:Buffer.from('test-fixture')});assert.equal(r.status,201);return (await r.json()).id;};
+ try{
+ const a=(await req('/register','',{username:'albumalice',name:'Алиса',password:'correct-password'})).data;
+ const b=(await req('/register','',{username:'albumbob',name:'Борис',password:'correct-password'})).data;
+ const e=(await req('/register','',{username:'albumeve',name:'Ева',password:'correct-password'})).data;
+ const chat=(await req('/chats',a.token,{user_id:b.user.id})).data.id;
+ const channel=(await req('/communities',b.token,{kind:'channel',title:'Канал',client_id:randomUUID()})).data.id;
+ await req(`/communities/${channel}/add`,b.token,{user_id:a.user.id});
+ const first=await upload(a.token,'a.png'),foreign=await upload(e.token,'e.png'),second=await upload(a.token,'b.mp4','video/mp4');
+ const request={client_id:randomUUID(),attachment_ids:[first,foreign],text:'Альбом'};
+ assert.equal((await req(`/chats/${channel}/album`,a.token,{...request,attachment_ids:[first,second]})).status,403);
+ assert.equal((await req(`/chats/${chat}/album`,a.token,request)).status,403);
+ assert.equal((await req(`/chats/${chat}/messages`,a.token)).data.length,0);
+ request.attachment_ids=[first,second];const sent=await req(`/chats/${chat}/album`,a.token,request);assert.equal(sent.status,201);assert.equal(sent.data.length,2);assert.equal(sent.data[0].album_id,sent.data[1].album_id);
+ assert.equal(sent.data[0].text,'Альбом');assert.equal(sent.data[1].text,'','caption belongs to the first media only');
+ const retry=await req(`/chats/${chat}/album`,a.token,request);assert.equal(retry.status,200);assert.deepEqual(retry.data.map(m=>m.id),sent.data.map(m=>m.id));
+ assert.equal((await req(`/chats/${chat}/album`,a.token,{...request,attachment_ids:[second,first]})).status,409);
+ assert.equal((await req(`/chats/${chat}/album`,e.token,request)).status,404);
+ assert.equal((await req(`/chats/${chat}/album`,a.token,{...request,client_id:randomUUID(),attachment_ids:[first,first]})).status,400);
+ const last=sent.data[1].id;assert.equal((await req(`/chats/${chat}/delivered`,e.token,{message_id:last})).status,404);
+ assert.equal((await req(`/chats/${chat}/delivered`,b.token,{message_id:last})).status,200);
+ let info=(await req('/chats',a.token)).data[0];assert.equal(info.peer_delivered,last);assert.equal(info.peer_read,0);
+ const reacted=await req(`/messages/${last}/react`,b.token,{emoji:'👏',active:true});assert.equal(reacted.status,200);assert.equal(reacted.data.reactions[0].name,'Борис');
+ assert.equal((await req(`/messages/${last}/react`,e.token,{emoji:'👏',active:true})).status,404);
+ await req(`/chats/${chat}/read`,b.token,{message_id:last});info=(await req('/chats',a.token)).data[0];assert.equal(info.peer_read,last);
+ await app.close();await start();assert.equal((await req(`/chats/${chat}/messages`,a.token)).data[0].album_id,sent.data[0].album_id);
+ assert.equal((await req('/chats',a.token)).data[0].peer_delivered,last);
+ await req(`/messages/${sent.data[0].id}/delete`,a.token,{});assert.equal((await req(`/files/${second}`,e.token)).status,404);
+ const allowed=await fetch(base+'/files/'+second,{headers:{Authorization:'Bearer '+b.token}});assert.equal(allowed.status,200);await allowed.arrayBuffer();
+ const plainFiles=[await upload(a.token,'phone-photo-1.jpg','image/jpeg'),await upload(a.token,'phone-photo-2.jpg','image/jpeg')];
+ const nativePayload={client_id:randomUUID().replaceAll('-',''),attachment_ids:plainFiles,text:'',reply_to:last};
+ const plain=await req(`/chats/${chat}/album`,a.token,nativePayload);assert.equal(plain.status,201);assert.deepEqual(plain.data.map(m=>m.text),['',''],'file names never become automatic captions');assert.ok(plain.data.every(m=>m.reply.id===last));
+ const plainRetry=await req(`/chats/${chat}/album`,a.token,nativePayload);assert.equal(plainRetry.status,200);assert.deepEqual(plainRetry.data.map(m=>m.id),plain.data.map(m=>m.id));
+ }finally{await app.close();rmSync(dir,{recursive:true,force:true});}
+});

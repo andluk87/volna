@@ -1,0 +1,13 @@
+.audio-player-wrap{min-width:0;width:100%}
+.transcribe-button{position:relative;flex:none;width:30px;height:30px;padding:0;border:1px solid color-mix(in srgb,var(--accent) 42%,transparent);border-radius:50%;display:grid;place-items:center;color:var(--accent);font-size:16px;font-weight:700;line-height:1;transition:background .16s,transform .16s}
+.transcribe-button:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);transform:scale(1.05)}
+.transcribe-button:disabled{opacity:1}
+.transcribe-button.is-loading{border-color:transparent}
+.transcribe-button.is-loading:before{content:"";position:absolute;inset:0;border:2px solid color-mix(in srgb,var(--accent) 22%,transparent);border-top-color:var(--accent);border-radius:50%;animation:transcribe-spin .75s linear infinite}
+.transcribe-button.is-loading i{width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.transcript-text{margin:4px 0 2px 54px;color:var(--text);font-size:12px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;animation:transcript-appear .18s ease-out both}
+.transcript-error{display:block;margin:4px 0 0 54px;color:#f0a0a0;font-size:10px;line-height:1.35}
+@keyframes transcribe-spin{to{transform:rotate(360deg)}}
+@keyframes transcript-appear{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:760px){.transcript-text,.transcript-error{margin-left:48px}}
+@media(prefers-reduced-motion:reduce){.transcribe-button,.transcript-text{transition:none;animation:none}.transcribe-button.is-loading:before{animation-duration:2s}}

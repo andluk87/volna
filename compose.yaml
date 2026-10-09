@@ -1,0 +1,157 @@
+name: volna
+services:
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    environment:
+      EMOJI_PACK_MAX_ITEMS: ${EMOJI_PACK_MAX_ITEMS:-200}
+      EMOJI_REACTIONS_PER_USER: ${EMOJI_REACTIONS_PER_USER:-3}
+      EMOJI_REACTION_TYPES: ${EMOJI_REACTION_TYPES:-20}
+      EMOJI_MODERATOR_USER_IDS: ${EMOJI_MODERATOR_USER_IDS:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-https://volna.lknet.ru}
+      WHISPER_URL: http://transcription:8000/transcribe
+      NOTIFICORE_API_KEY: ${NOTIFICORE_API_KEY:-}
+      NOTIFICORE_ORIGINATOR: ${NOTIFICORE_ORIGINATOR:-}
+      SMS_REFERENCE_START: ${SMS_REFERENCE_START:-0}
+      AUTH_TRUST_PROXY: ${AUTH_TRUST_PROXY:-1}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://volna.lknet.ru}
+      TURN_HOST: ${TURN_HOST:-}
+      TURN_SECRET: ${TURN_SECRET:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:5173,https://localhost,app://volna}
+    volumes:
+      - chat-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - wg-proxy
+    depends_on:
+      transcription:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+  transcription:
+    build:
+      context: .
+      dockerfile: docker/transcription.Dockerfile
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      WHISPER_CPU_THREADS: ${WHISPER_CPU_THREADS:-4}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
+      WHISPER_BEAM_SIZE: ${WHISPER_BEAM_SIZE:-1}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ru}
+      HF_HOME: /models/huggingface
+      OMP_NUM_THREADS: ${WHISPER_CPU_THREADS:-4}
+    volumes:
+      - whisper-models:/models
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5m
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+  turn:
+    profiles: [calls]
+    image: coturn/coturn:4.18.0-r0
+    environment:
+      TURN_SECRET: ${TURN_SECRET:-}
+    entrypoint: ["/bin/sh", "-ec", 'test "$${#TURN_SECRET}" -eq 64 || { echo "Run scripts/enable-calls.sh first"; exit 1; }; exec turnserver "$$@"', "volna-turn"]
+    network_mode: host
+    restart: unless-stopped
+    command:
+      - -n
+      - --log-file=stdout
+      - --listening-port=3478
+      - --listening-ip=0.0.0.0
+      - --external-ip=${TURN_EXTERNAL_IP:-127.0.0.1}
+      - --realm=${TURN_HOST:-localhost}
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET:-not-configured}
+      - --fingerprint
+      - --min-port=49160
+      - --max-port=49200
+      - --no-tls
+      - --no-multicast-peers
+      - --no-tcp-relay
+      - --user-quota=8
+      - --total-quota=200
+      - --max-bps=${TURN_MAX_BPS:-512000}
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=10.0.0.0-10.255.255.255
+      - --denied-peer-ip=100.64.0.0-100.127.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.255.255
+      - --denied-peer-ip=224.0.0.0-255.255.255.255
+      - --denied-peer-ip=::1
+      - --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+      - --denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+  tests:
+    profiles: [test]
+    build:
+      context: .
+      dockerfile: docker/test.Dockerfile
+  windows-builder:
+    profiles: [build]
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/windows.Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+    volumes:
+      - ./artifacts/windows-release:/out
+      - ./artifacts/windows-npm:/root/.npm
+      - ./artifacts/windows-electron:/root/.cache/electron
+      - ./artifacts/windows-builder:/root/.cache/electron-builder
+      - ./artifacts/windows-node-modules:/app/node_modules
+  android-builder:
+    profiles: [build]
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/android.Dockerfile
+      args:
+        ANDROID_API_URL: ${VITE_API_URL:-}
+    environment:
+      ANDROID_BUILD_OFFLINE: ${ANDROID_BUILD_OFFLINE:-auto}
+    volumes:
+      - ./artifacts:/out
+      - ./artifacts/android-sdk:/opt/android-sdk
+      - ./artifacts/android-home:/root/.android
+      - ./artifacts/gradle-cache:/root/.gradle
+      - ./artifacts/android-downloads:/cache/downloads
+      - ./artifacts/android-build-cache:/app/.gradle
+      - ./artifacts/android-app-build:/app/app/build
+volumes:
+  chat-data:
+  whisper-models:
+networks:
+  default: {}
+  wg-proxy:
+    external: true
+    name: wg-socks-mtproto-v4_default
