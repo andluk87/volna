@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal fun NativeSmsLogin(api: NativeApi, update: VolnaUpdate?, updateBusy: Boolean, updateStatus: String,
     onUpdate: () -> Unit, onSignedIn: (VolnaSession) -> Unit) {
     var country by remember { mutableStateOf("+7") }; var phone by remember { mutableStateOf("") }
+    var requestedPhone by remember { mutableStateOf("") }
     var challenge by remember { mutableStateOf("") }; var code by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }
     var resendAt by remember { mutableStateOf(0L) }; var expiresAt by remember { mutableStateOf(0L) }
@@ -48,7 +49,9 @@ internal fun NativeSmsLogin(api: NativeApi, update: VolnaUpdate?, updateBusy: Bo
         scope.launch {
             busy = true; error = ""
             try {
-                val value = withContext(Dispatchers.IO) { api.smsRequest(country + phone.filter { it.isDigit() }) }
+                val number = nativeSmsPhone(country, phone)
+                val value = withContext(Dispatchers.IO) { api.smsRequest(number) }
+                requestedPhone = number
                 challenge = value.getString("sms_session_id"); code = ""
                 now = System.currentTimeMillis(); resendAt = now + value.getLong("resend_after") * 1000; expiresAt = now + value.getLong("expires_in") * 1000
             } catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось получить SMS" }
@@ -66,10 +69,10 @@ internal fun NativeSmsLogin(api: NativeApi, update: VolnaUpdate?, updateBusy: Bo
                 }
             }
             NativeOutlinedTextField(country, { input -> country = "+" + input.filter { it.isDigit() }.take(3) }, label = { NativeText("Код страны") }, singleLine = true, enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
-            NativeOutlinedTextField(phone, { phone = it.filter { c -> c.isDigit() }.take(14) }, Modifier.fillMaxWidth(), label = { NativeText("Номер телефона") }, singleLine = true, enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+            NativeOutlinedTextField(phone, { phone = it.filter { c -> c in "+0123456789 ()-" }.take(40) }, Modifier.fillMaxWidth(), label = { NativeText("Номер телефона") }, singleLine = true, enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
             Button(onClick = ::send, enabled = !busy && phone.length >= 6 && country.length > 1, modifier = Modifier.fillMaxWidth()) { NativeText(if (busy) "Отправляем…" else "Получить код") }
         } else {
-            NativeText("Отправили на $country $phone. Текст сообщения: 123-456 твоя волна.", color = Muted)
+            NativeText("Код запрошен для $requestedPhone. Доставка SMS может занять некоторое время.", color = Muted)
             NativeOutlinedTextField(code, { code = it.filter { c -> c.isDigit() || c == '-' }.take(7) }, Modifier.fillMaxWidth(), label = { NativeText("123-456") }, singleLine = true, enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             Button(enabled = !busy && code.filter { it.isDigit() }.length == 6 && now < expiresAt, modifier = Modifier.fillMaxWidth(), onClick = { scope.launch {
                 busy = true; error = ""

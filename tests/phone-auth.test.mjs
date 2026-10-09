@@ -86,3 +86,18 @@ test('failed provider invalidates the challenge and SMS phone rate persists in t
  assert.equal((await call('/auth/sms/verify',{sms_session_id:sent[0].id,code:sent[0].code})).status,410);
  assert.equal(app.db.prepare('SELECT COUNT(*) n FROM users').get().n,0);
 });
+
+test('SMS diagnostics distinguish provider rejection without retaining phones, body or secrets',async()=>{
+ const send=notificoreSender({key:'private-key',originator:'Volna',fetcher:async()=>({ok:false,status:401,text:async()=>JSON.stringify({result:{error:25,errorDescription:'private response',body:'123456',msisdn:'79001234567'}})})});
+ await assert.rejects(send({phone:'+79001234567',code:'123456',reference:'ext_id_001'}),e=>{assert.deepEqual(e.smsDiagnostic,{kind:'provider-rejected',http_status:401,provider_error:25});assert.ok(!JSON.stringify(e).includes('private'));return e.status===503;});
+});
+
+test('SMS request logs acceptance or a network failure without leaking the challenge',async t=>{
+ const events=[];let broken=true;
+ const app=createApp({database:':memory:',phoneAuthOptions:{smsReady:true,logger:event=>events.push(event),sender:async()=>{if(broken)throw Object.assign(new Error('private credentials and phone'),{cause:{code:'ECONNREFUSED'}});return {id:'accepted-id'};}}});
+ await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(()=>app.close());
+ const request=phone=>fetch(`http://127.0.0.1:${app.server.address().port}/api/auth/sms/request`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})});
+ assert.equal((await request('+79001234567')).status,503);broken=false;assert.equal((await request('+79007654321')).status,200);
+ assert.deepEqual(events,[{event:'failed',reference:'ext_id_001',kind:'ECONNREFUSED'},{event:'accepted',reference:'ext_id_002'}]);
+ assert.ok(!JSON.stringify(events).includes('private'));assert.ok(!JSON.stringify(events).includes('7900'));
+});

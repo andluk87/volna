@@ -18,13 +18,14 @@ export function notificoreSender({key=process.env.NOTIFICORE_API_KEY||'',origina
     const text=await response.text();if(text.length>32000)throw fail(503,'SMS-провайдер временно недоступен');
     let data;try{data=JSON.parse(text);}catch{throw fail(503,'SMS-провайдер временно недоступен');}
     const result=data.result||data;
-    if(!response.ok||Number(result.error)!==0||!result.id)throw fail(503,'Не удалось отправить SMS. Повторите позже');
+    if(!response.ok||Number(result.error)!==0||!result.id)throw Object.assign(fail(503,'Не удалось отправить SMS. Повторите позже'),{smsDiagnostic:{kind:'provider-rejected',http_status:response.status,provider_error:Number.isSafeInteger(Number(result.error))?Number(result.error):null}});
     // Do not retain the provider's raw response: it may echo phone, body or secrets.
     return {id:String(result.id).slice(0,100),error:0};
   };
 }
 export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=notificoreSender(),clock=Date.now,
   codeGenerator=()=>String(randomInt(0,1000000)).padStart(6,'0'),trustProxy=process.env.AUTH_TRUST_PROXY==='1',
+  logger=event=>console.info('[sms]',JSON.stringify(event)),
   referenceStart=Number(process.env.SMS_REFERENCE_START||0),smsReady=!!(process.env.NOTIFICORE_API_KEY&&process.env.NOTIFICORE_ORIGINATOR)}){
   db.exec(`CREATE TABLE IF NOT EXISTS auth_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sms_challenges(id TEXT PRIMARY KEY,phone TEXT NOT NULL,code_hash TEXT NOT NULL,
@@ -42,6 +43,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=n
   db.prepare('INSERT OR IGNORE INTO auth_settings VALUES(?,?)').run('hmac',randomBytes(32).toString('hex'));
   if(!Number.isSafeInteger(referenceStart)||referenceStart<0)throw Error('SMS_REFERENCE_START must be a non-negative integer');
   db.prepare('INSERT OR IGNORE INTO auth_settings VALUES(?,?)').run('sms-reference',String(referenceStart));
+  const log=event=>{try{logger(event);}catch{}};
   const hmacKey=db.prepare("SELECT value FROM auth_settings WHERE key='hmac'").get().value;
   const hmac=(phone,code,id)=>createHmac('sha256',hmacKey).update(`${phone}\0${id}\0${code}`).digest('hex');
   const ip=req=>trustProxy?String(req.headers['x-real-ip']||req.socket.remoteAddress).slice(0,100):req.socket.remoteAddress||'unknown';
@@ -98,8 +100,9 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=n
       try{
         const provider=await sender(challenge);
         db.prepare("UPDATE sms_challenges SET status='sent',provider_id=? WHERE id=? AND status='created'").run(provider?.id||'',challenge.id);
+        log({event:'accepted',reference:challenge.reference});
         json(res,200,{success:true,sms_session_id:challenge.id,expires_in:300,resend_after:60});
-      }catch(e){db.prepare("UPDATE sms_challenges SET status='failed' WHERE id=?").run(challenge.id);audit('sms-failed',req);throw fail(503,'Не удалось отправить SMS. Повторите позже');}
+      }catch(e){const networkCodes=['ECONNREFUSED','ECONNRESET','ENOTFOUND','EAI_AGAIN','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'];const diagnostic=e.smsDiagnostic||{kind:['AbortError','TimeoutError'].includes(e.name)?'timeout':networkCodes.includes(e.cause?.code)?e.cause.code:'provider-unavailable'};log({event:'failed',reference:challenge.reference,...diagnostic});db.prepare("UPDATE sms_challenges SET status='failed' WHERE id=?").run(challenge.id);audit('sms-failed',req);throw fail(503,'Не удалось отправить SMS. Повторите позже');}
       return true;
     }
     if(path==='/api/auth/sms/verify'&&post){
