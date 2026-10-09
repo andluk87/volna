@@ -81,6 +81,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, transcriber=createT
   let expressionService;
   const handleMessaging = messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions:()=>expressionService});
   expressionService=expressions({db,uploads,body,json,member,publish});
+  handleMessaging.cleanupUnused();
   const handleCommunities = communities({db,member,broadcast,publish,json,body,userById,online:id=>!!streams.get(id)?.size});
   const handleTopics=topics({db,body,json,member,broadcast,publish});
   pushService = notifications({db,auth,body,json,sender:pushSender});

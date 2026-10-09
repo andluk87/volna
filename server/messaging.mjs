@@ -70,13 +70,28 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     return {row:get(messageId),created:true};
   }
   const cleanupUnused=()=>{
+    // Startup must initialize expressions before collecting unreferenced files.
+    const expressionService=expressions();
+    if(!expressionService)return;
     const unused=db.prepare('SELECT id FROM attachments WHERE created_at<? AND NOT EXISTS (SELECT 1 FROM messages WHERE attachment_id=attachments.id) AND NOT EXISTS (SELECT 1 FROM users WHERE avatar_id=attachments.id)').all(Date.now()-86400000);
-    for(const file of unused){if(expressions()?.fileUsed(file.id))continue;try{unlinkSync(join(uploads,file.id));}catch(e){if(e.code!=='ENOENT')continue;}db.prepare('DELETE FROM attachments WHERE id=?').run(file.id);}
+    for(const file of unused){
+      if(expressionService.fileUsed(file.id))continue;
+      // Let SQLite reject any additional references before touching the file.
+      db.exec('SAVEPOINT attachment_cleanup');
+      try{db.prepare('DELETE FROM attachments WHERE id=?').run(file.id);}
+      catch(e){
+        db.exec('ROLLBACK TO attachment_cleanup; RELEASE attachment_cleanup');
+        if(e.code==='ERR_SQLITE_ERROR'&&e.errcode===787)continue;
+        throw e;
+      }
+      try{unlinkSync(join(uploads,file.id));}
+      catch(e){if(e.code!=='ENOENT'){db.exec('ROLLBACK TO attachment_cleanup; RELEASE attachment_cleanup');continue;}}
+      db.exec('RELEASE attachment_cleanup');
+    }
   };
-  cleanupUnused();
   let uploadCount=0;
   const pendingTranscriptions=new Map();let activeTranscriptions=0;
-  return async(req,res,url,uid)=>{
+  const handle=async(req,res,url,uid)=>{
     const path=url.pathname,method=req.method;
     if(path==='/api/search/messages'&&method==='GET'){
       const q=(url.searchParams.get('q')||'').trim().slice(0,200),before=Number(url.searchParams.get('before')||Number.MAX_SAFE_INTEGER);
@@ -266,4 +281,6 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     }
     return false;
   };
+  handle.cleanupUnused=cleanupUnused;
+  return handle;
 }
