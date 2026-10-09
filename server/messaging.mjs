@@ -1,3 +1,4 @@
+import {interactivePayload} from '../shared/interactive.mjs';
 import {isEmoji} from '../shared/emoji-text.mjs';
 import {mkdirSync, writeFileSync, readFileSync, unlinkSync} from 'node:fs';
 import {join} from 'node:path';
@@ -11,7 +12,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   db.exec('BEGIN IMMEDIATE');
   try {
     const columns=new Set(db.prepare('PRAGMA table_info(messages)').all().map(x=>x.name));
-    for(const [name,type] of Object.entries({expression_id:'TEXT',album_id:'TEXT',attachment_id:'TEXT',reply_to:'INTEGER',edited_at:'TEXT',deleted_at:'TEXT',forwarded_name:'TEXT',forward_source:'INTEGER',transcript:'TEXT'}))
+    for(const [name,type] of Object.entries({interactive:'TEXT',expression_id:'TEXT',album_id:'TEXT',attachment_id:'TEXT',reply_to:'INTEGER',edited_at:'TEXT',deleted_at:'TEXT',forwarded_name:'TEXT',forward_source:'INTEGER',transcript:'TEXT'}))
       if(!columns.has(name))db.exec(`ALTER TABLE messages ADD COLUMN ${name} ${type}`);
     db.exec(`CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,mime TEXT NOT NULL,size INTEGER NOT NULL,created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS reactions(message_id INTEGER NOT NULL REFERENCES messages(id),user_id INTEGER NOT NULL REFERENCES users(id),emoji TEXT NOT NULL,PRIMARY KEY(message_id,user_id,emoji));
@@ -32,9 +33,9 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   const hydrate=row=>{
     if(!row)return null;
     const topic=db.prepare("SELECT c.parent_id,c.title,(SELECT title FROM chats WHERE id=c.parent_id) AS group_title FROM chats c WHERE c.id=?").get(row.chat_id);row={...row,group_id:topic?.parent_id||row.chat_id,topic_id:topic?.parent_id?row.chat_id:null,topic_name:topic?.parent_id?topic.title:null,group_name:topic?.parent_id?topic.group_title:topic?.title||null};
-    if(row.deleted_at)return {...row,text:'',attachment_id:null,expression_id:null,emoji_entities:[],reply_to:null,forwarded_name:null,attachment:null,reply:null,reactions:[],pinned:false};
+    if(row.deleted_at)return {...row,text:'',attachment_id:null,expression_id:null,emoji_entities:[],reply_to:null,forwarded_name:null,attachment:null,reply:null,reactions:[],pinned:false,poll:null,checklist:null,interactive:null};
     const reply=row.reply_to?get(row.reply_to):null;
-    return {...row,emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_name:userById(row.sender_id)?.name||'Пользователь',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
+    return {...row,...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_name:userById(row.sender_id)?.name||'Пользователь',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
       reply:reply?{id:reply.id,sender_id:reply.sender_id,name:userById(reply.sender_id)?.name,text:reply.deleted_at?'Сообщение удалено':reply.text||'Вложение',deleted:!!reply.deleted_at}:null,
       reactions:db.prepare('SELECT r.emoji,r.user_id,u.name FROM reactions r JOIN users u ON u.id=r.user_id WHERE r.message_id=? ORDER BY r.emoji,r.user_id').all(row.id),
       pinned:!!db.prepare('SELECT 1 FROM pins WHERE message_id=?').get(row.id)};
@@ -44,7 +45,8 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   const clientId=value=>{if(typeof value!=='string'||!/^[a-zA-Z0-9-]{16,64}$/.test(value))throw error(400,'Некорректный идентификатор сообщения');return value;};
   function insert(chat,uid,data){
     canPublish(chat,uid);
-    const cid=clientId(data.client_id),rawText=String(data.text||''),text=rawText.trim(),reply=data.reply_to||null,source=data.forward_source||null;
+    const interactive=interactivePayload(data);if(interactive&&(data.attachment_id||data.expression_id))throw error(400,'Опрос или список отправляется отдельно от вложения');
+    const cid=clientId(data.client_id),rawText=String(data.text||interactive?.poll?.question||interactive?.checklist?.title||''),text=rawText.trim(),reply=data.reply_to||null,source=data.forward_source||null;
     if(data.expression_id&&(typeof data.expression_id!=='string'||!/^[a-f0-9]{32}$/.test(data.expression_id)))throw error(400,'Некорректный элемент набора');
     const expression=data.expression_id?expressions()?.getItem(data.expression_id,uid):null;
     if(expression?.kind==='emoji')throw error(400,'Пользовательский эмодзи вставляется в текст');
@@ -55,7 +57,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(attachment&&(typeof attachment!=='string'||!/^[a-f0-9]{48}$/.test(attachment)))throw error(400,'Некорректный файл');
     if(reply&&(!Number.isSafeInteger(reply)||reply<1))throw error(400,'Некорректный ответ');
     const existing=db.prepare('SELECT * FROM messages WHERE sender_id=? AND client_id=?').get(uid,cid);
-    if(existing){if(existing.chat_id!==chat||existing.forward_source!==source||(!source&&(existing.text!==text||existing.attachment_id!==attachment||existing.reply_to!==reply||existing.expression_id!==(expression?.id||null)||JSON.stringify(expressions()?.hydrateEntities(existing.id)||[])!==JSON.stringify(entities))))throw error(409,'Идентификатор уже использован');return {row:existing,created:false};}
+    if(existing){if(JSON.stringify(interactivePayload(existing.interactive?JSON.parse(existing.interactive):{}))!==JSON.stringify(interactive))throw error(409,'Идентификатор уже использован');if(existing.chat_id!==chat||existing.forward_source!==source||(!source&&(existing.text!==text||existing.attachment_id!==attachment||existing.reply_to!==reply||existing.expression_id!==(expression?.id||null)||JSON.stringify(expressions()?.hydrateEntities(existing.id)||[])!==JSON.stringify(entities))))throw error(409,'Идентификатор уже использован');return {row:existing,created:false};}
     if(text.length>4000||(!text&&!attachment))throw error(400,'Введите текст до 4000 символов или прикрепите файл');
     if(reply){const quoted=get(reply);if(!quoted||quoted.chat_id!==chat||quoted.deleted_at)throw error(400,'Сообщение для ответа недоступно');}
     if(attachment){const file=db.prepare('SELECT * FROM attachments WHERE id=?').get(attachment);
@@ -64,6 +66,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     }
     const result=db.prepare('INSERT INTO messages(chat_id,sender_id,text,client_id,created_at,attachment_id,reply_to,forwarded_name,forward_source,expression_id) VALUES(?,?,?,?,?,?,?,?,?,?)').run(chat,uid,text,cid,new Date().toISOString(),attachment,reply,data.forwarded_name||null,source,expression?.id||data.forward_expression_id||null);
     const messageId=Number(result.lastInsertRowid);
+    if(interactive)db.prepare('UPDATE messages SET interactive=? WHERE id=?').run(JSON.stringify(interactive),messageId);
     expressions()?.recordEntities(messageId,entities);
     if(expression)expressions()?.usage(uid,expression.id,true);
     if(!source)for(const id of new Set(entities.map(e=>e.id)))expressions()?.usage(uid,id,true);
@@ -207,11 +210,11 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
         json(res,200,rows.map(hydrate));return true;
       }
       if(action==='messages'&&method==='POST'){
-        const data=await body(req);const result=insert(chat,uid,{text:data.text,client_id:data.client_id,attachment_id:data.attachment_id,reply_to:data.reply_to,expression_id:data.expression_id,emoji_entities:data.emoji_entities});
+        const data=await body(req);const result=insert(chat,uid,{text:data.text,client_id:data.client_id,attachment_id:data.attachment_id,reply_to:data.reply_to,expression_id:data.expression_id,emoji_entities:data.emoji_entities,poll:data.poll,checklist:data.checklist});
         const message=hydrate(result.row);if(result.created)broadcast(chat,{type:'message',message});json(res,result.created?201:200,message);return true;
       }
     }
-    const messageMatch=path.match(/^\/api\/messages\/(\d+)(?:\/(edit|delete|react|pin|forward|transcribe))?$/);
+    const messageMatch=path.match(/^\/api\/messages\/(\d+)(?:\/(edit|delete|react|pin|forward|transcribe|vote|check))?$/);
     if(messageMatch){
       let row=authorized(Number(messageMatch[1]),uid);const action=messageMatch[2];
       if(method==='GET'&&!action){json(res,200,hydrate(row));return true;}
@@ -244,7 +247,21 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       row=authorized(Number(messageMatch[1]),uid);
       if(row.deleted_at){if(action==='delete'&&(row.sender_id===uid||canModerate(row.chat_id,uid))){json(res,200,hydrate(row));return true;}throw error(410,'Сообщение удалено');}
       let reactionEvent;
-      if(action==='edit'){
+      if(action==='vote'||action==='check'){
+        const interactive=row.interactive?JSON.parse(row.interactive):null;
+        if(action==='vote'){
+          const poll=interactive?.poll;if(!poll)throw error(400,'В сообщении нет опроса');
+          if(!(data.option===null||Number.isSafeInteger(data.option)&&data.option>=0&&data.option<poll.options.length))throw error(400,'Неверный вариант ответа');
+          for(const o of poll.options)o.voters=o.voters.filter(id=>id!==uid);
+          if(data.option!==null)poll.options[data.option].voters.push(uid);
+        }else{
+          canPublish(row.chat_id,uid);const checklist=interactive?.checklist;if(!checklist)throw error(400,'В сообщении нет списка');
+          if(!Number.isSafeInteger(data.item)||data.item<0||data.item>=checklist.items.length||typeof data.done!=='boolean')throw error(400,'Неверный пункт списка');
+          checklist.items[data.item].done=data.done;
+        }
+        db.prepare('UPDATE messages SET interactive=? WHERE id=?').run(JSON.stringify(interactive),row.id);
+      }else if(action==='edit'){
+        if(row.interactive)throw error(400,'Опросы и списки нельзя изменять как текст');
         canPublish(row.chat_id,uid);
         if(row.sender_id!==uid)throw error(403,'Можно изменять только свои сообщения');
         const text=String(data.text||'').trim();if(text.length>4000||(!text&&!row.attachment_id))throw error(400,'Введите текст до 4000 символов');
@@ -274,7 +291,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
         else db.prepare('DELETE FROM pins WHERE message_id=?').run(row.id);
       }else if(action==='forward'){
         const chat=Number(data.chat_id);member(chat,uid);
-        const result=insert(chat,uid,{text:row.text,attachment_id:row.attachment_id,forwarded_name:row.forwarded_name||userById(row.sender_id).name,forward_source:row.id,client_id:data.client_id,emoji_entities:expressions()?.hydrateEntities(row.id),forward_expression_id:row.expression_id});
+        const result=insert(chat,uid,{text:row.text,attachment_id:row.attachment_id,forwarded_name:row.forwarded_name||userById(row.sender_id).name,forward_source:row.id,client_id:data.client_id,emoji_entities:expressions()?.hydrateEntities(row.id),forward_expression_id:row.expression_id,...(row.interactive?JSON.parse(row.interactive):{})});
         const message=hydrate(result.row);if(result.created)broadcast(chat,{type:'message',message});json(res,result.created?201:200,message);return true;
       }else return false;
       const updated=get(row.id);changed(updated,reactionEvent?{reaction:reactionEvent}:{});json(res,200,hydrate(updated));return true;

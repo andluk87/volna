@@ -1,0 +1,4 @@
+.composer .attach-menu .app-menu-content{width:200px;min-width:200px;border-radius:16px;padding:4px 0;bottom:calc(100% + 8px);left:0;top:auto;background:var(--panel);box-shadow:0 4px 20px #0004}
+.composer .attach-menu .app-menu-content>button{min-height:32px;padding:6px 16px;gap:16px;border-radius:0;font-size:14px;font-weight:500}
+.composer .attach-menu .app-menu-content svg{width:20px;height:20px}
+.checklist-message{width:280px;max-width:100%;padding:6px}.checklist-message>strong{display:block;font-size:16px;margin-bottom:10px}.checklist-message label{display:flex;align-items:center;gap:10px;padding:6px 0;cursor:pointer}.checklist-message input{width:20px;height:20px;accent-color:var(--accent);flex:0 0 20px}.checklist-message .completed span{text-decoration:line-through;opacity:.65}.checklist-message small{display:block;margin-top:10px;color:var(--muted);font-size:12px}

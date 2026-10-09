@@ -1,3 +1,12 @@
-/* Reserve space inside the conversation instead of covering its messages. */
-.conversation>.emoji-panel{position:relative;inset:auto;align-self:center;flex:0 0 auto;width:min(var(--chat-content),100%);height:min(320px,40dvh);max-height:40dvh;min-height:0;margin:8px 0 0;transform:none;box-sizing:border-box;animation:none}
-@media(max-width:600px){.conversation>.emoji-panel{width:100%;height:min(300px,38dvh);max-height:38dvh;margin-top:6px;border-radius:16px}}
+/* Anchor the popup to the composer so it cannot drift into the sidebar. */
+.composer>.emoji-panel{position:absolute;left:auto;right:0;top:auto;bottom:calc(100% + 8px);align-self:auto;width:min(382px,100%);height:min(420px,calc(var(--app-height,100dvh) - 190px));max-height:calc(var(--app-height,100dvh) - 190px);min-height:0;margin:0;transform:none;box-sizing:border-box;border-radius:20px;animation:none;box-shadow:0 4px 20px #0003;z-index:100}
+.composer>.emoji-panel .emoji-categories{border:0;min-height:44px}
+.composer>.emoji-panel>header{margin:4px 8px 0;border-radius:20px}
+.composer>.emoji-panel .emoji-section-heading{justify-content:center;text-align:center;padding:10px 12px 6px}
+.composer>.emoji-panel:not(.emoji-editing) .emoji-tone{display:none}
+.composer>.emoji-panel .expression-tabs{border:0}
+@media(max-width:600px){.composer>.emoji-panel{width:min(382px,100%);max-height:calc(var(--app-height,100dvh) - 180px);height:min(420px,calc(var(--app-height,100dvh) - 180px))}}
+
+.composer>.emoji-panel .expression-tabs button[role=tab]{display:grid;place-items:center;border:0;color:var(--muted)}
+.composer>.emoji-panel .expression-tabs [aria-selected=true]{color:var(--text)}
+.emoji-custom-tab{font-size:24px;font-weight:700}.emoji-gif-tab{font-size:10px;font-weight:700;border:2px solid currentColor;border-radius:5px;padding:2px}
