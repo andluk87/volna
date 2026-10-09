@@ -33,7 +33,7 @@ elif 'ps' in args and '-q' in args:print('turn-fixture')
   const ok=run();assert.equal(ok.status,0);assert.match(ok.log,/-f compose.yaml -f compose.https.yaml/);assert.match(ok.log,/build server web transcription/);assert.match(ok.log,/up -d --wait --wait-timeout 600 server web transcription gateway/);assert.match(ok.log,/exec -T web sh -ec/);assert.ok(ok.log.indexOf('BACKUP')<ok.log.indexOf('up -d'));
   const configured=run({TEST_CALLS:'1'});assert.equal(configured.status,0);assert.match(configured.log,/up -d --wait --wait-timeout 600 server web transcription turn gateway/,'resolved container environment, including exported values, determines TURN startup');
   for(const env of [{FAIL_BUILD:'1'},{FAIL_BACKUP:'1'}]){const fail=run(env);assert.notEqual(fail.status,0);assert.doesNotMatch(fail.log,/up -d/);}
-  const failedUp=run({FAIL_UP:'1'});assert.notEqual(failedUp.status,0);assert.match(failedUp.log,/logs --no-color --tail=80 transcription/);
+  const failedUp=run({FAIL_UP:'1'});assert.notEqual(failedUp.status,0);assert.match(failedUp.log,/logs --no-color --tail=80 server web transcription/);
   const host=run({VOLNA_BUILD_NETWORK:'host'});assert.equal(host.status,0);assert.match(host.log,/-f compose.yaml -f compose.https.yaml -f compose.build-host.yaml --profile calls build/);
  }finally{rmSync(root,{recursive:true,force:true});}
 });

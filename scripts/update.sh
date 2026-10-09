@@ -43,7 +43,7 @@ if [ "$https" -eq 1 ]; then set -- "$@" gateway; fi
 if ! compose up -d --wait --wait-timeout 600 "$@"; then
   echo 'Update did not become ready. The data backup is in backups/.' >&2
   compose ps -a
-  compose logs --no-color --tail=80 transcription >&2 || true
+  compose logs --no-color --tail=80 server web transcription >&2 || true
   exit 1
 fi
 if ! compose exec -T web sh -ec 'grep -R -F -q "$1" /usr/share/nginx/html/assets' sh "$version"; then
