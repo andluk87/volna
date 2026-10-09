@@ -19,14 +19,17 @@ test('pin jumps directly to a visible highlighted message without opening a pane
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
-test('multiple pins cycle and closing the strip does not unpin messages',async({page})=>{
+test('multiple pins cycle and unpinning requires confirmation',async({page})=>{
  await page.evaluate(async()=>{const {demoRequest}=await import(performance.getEntriesByType('resource').filter(e=>new URL(e.name).pathname==='/src/demo-api.mjs').at(-1).name);await demoRequest('/messages/104/pin',{pinned:true},'POST');});
  await openChat(page);const banner=page.getByRole('region',{name:'Закреплённое сообщение',exact:true});await expect(banner).toContainText('Голосовое сообщение');await expect(banner).toContainText('#2');
  await banner.getByRole('button',{name:'Перейти к закреплённому сообщению',exact:true}).click();await expect(page.locator('#message-104')).toHaveClass(/message-jump-highlight/);await expect(banner).toContainText('#1');
  await banner.getByRole('button',{name:'Перейти к закреплённому сообщению',exact:true}).click();await expect(page.locator('#message-101')).toHaveClass(/message-jump-highlight/);await expect(banner).toContainText('#2');
- await banner.getByRole('button',{name:'Скрыть закреплённое сообщение',exact:true}).click();await expect(banner).toHaveCount(0);
+ page.once('dialog',dialog=>dialog.dismiss());
+ await banner.getByRole('button',{name:'Открепить сообщение',exact:true}).click();await expect(banner).toBeVisible();
  expect(await page.evaluate(async()=>{const {demoRequest}=await import(performance.getEntriesByType('resource').filter(e=>new URL(e.name).pathname==='/src/demo-api.mjs').at(-1).name);return (await demoRequest('/chats/1/pins')).length;})).toBe(2);
- await back(page);await openChat(page,'Дизайн Волны');await back(page);await openChat(page);await expect(banner).toBeVisible();
+ page.once('dialog',async dialog=>{expect(dialog.message()).toBe('Открепить сообщение?');await dialog.accept();});
+ await banner.getByRole('button',{name:'Открепить сообщение',exact:true}).click();await expect(banner).not.toContainText('#2');
+ expect(await page.evaluate(async()=>{const {demoRequest}=await import(performance.getEntriesByType('resource').filter(e=>new URL(e.name).pathname==='/src/demo-api.mjs').at(-1).name);return (await demoRequest('/chats/1/pins')).length;})).toBe(1);
 });
 
 test('older pins load into the conversation instead of opening a message dialog',async({page})=>{
@@ -40,7 +43,7 @@ test('the pin link supports keyboard activation',async({page})=>{
  await openChat(page);const button=page.getByRole('button',{name:'Перейти к закреплённому сообщению',exact:true});await button.focus();await page.keyboard.press('Enter');await expect(page.locator('#message-101')).toHaveClass(/message-jump-highlight/);
 });
 
-test('repinning restores a hidden banner immediately and composer stays ready',async({page})=>{
+test('repinning restores the banner immediately and composer stays ready',async({page})=>{
  await openChat(page);
  const editor=page.getByRole('textbox',{name:'Сообщение',exact:true});await expect(editor).toBeFocused();
  const attachment=page.getByLabel('Прикрепить вложение',{exact:true}),emoji=page.getByRole('button',{name:'Эмодзи',exact:true});
@@ -48,12 +51,28 @@ test('repinning restores a hidden banner immediately and composer stays ready',a
  expect((await emoji.boundingBox()).x).toBeGreaterThan((await editor.boundingBox()).x);
  await page.locator('#message-104').scrollIntoViewIfNeeded();
  const transcribe=page.locator('.transcribe-button').first();await expect(transcribe).toBeVisible();const box=await transcribe.boundingBox();expect(box.width).toBe(box.height);
- await page.getByRole('button',{name:'Скрыть закреплённое сообщение',exact:true}).click();await expect(editor).toBeFocused();
+ page.once('dialog',dialog=>dialog.accept());
+ await page.getByRole('button',{name:'Открепить сообщение',exact:true}).click();await expect(page.getByRole('region',{name:'Закреплённое сообщение',exact:true})).toHaveCount(0);await expect(editor).toBeFocused();
  const message=page.locator('#message-101');
  await message.scrollIntoViewIfNeeded();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
- await message.locator('summary').first().click();await message.getByRole('button',{name:'Открепить',exact:true}).click();
  await expect(message.getByRole('button',{name:'Закрепить',exact:true,includeHidden:true})).toHaveCount(1);
  await message.locator('summary').first().click();await message.getByRole('button',{name:'Закрепить',exact:true}).click();
  await expect(page.getByRole('region',{name:'Закреплённое сообщение',exact:true})).toBeVisible();await expect(editor).toBeFocused();
  await editor.fill('Проверка фокуса');await page.getByRole('button',{name:'Отправить сообщение',exact:true}).click();await expect(editor).toBeFocused();await expect(editor).toHaveText('');
+});
+
+test('emoji picker stays inside the conversation without covering messages or composer',async({page})=>{
+ await openChat(page);
+ const history=page.locator('.messages'),composer=page.locator('.composer'),panel=page.getByRole('region',{name:'Выбор эмодзи',exact:true}),editor=page.getByRole('textbox',{name:'Сообщение',exact:true});
+ const initialHeight=(await history.boundingBox()).height;
+ await page.getByRole('button',{name:'Эмодзи',exact:true}).click();await expect(panel).toBeVisible();
+ const pickerBox=await panel.boundingBox(),chatBox=await page.locator('.conversation').boundingBox(),historyBox=await history.boundingBox(),inputBox=await composer.boundingBox();
+ expect(pickerBox.x).toBeGreaterThanOrEqual(chatBox.x);expect(pickerBox.x+pickerBox.width).toBeLessThanOrEqual(chatBox.x+chatBox.width+1);
+ expect(pickerBox.y).toBeGreaterThanOrEqual(inputBox.y+inputBox.height);expect(historyBox.y+historyBox.height).toBeLessThanOrEqual(inputBox.y+1);
+ expect(pickerBox.y+pickerBox.height).toBeLessThanOrEqual(chatBox.y+chatBox.height+1);expect(historyBox.height).toBeGreaterThan(80);
+ await expect(page.locator('#message-112')).toBeInViewport();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ const search=page.getByRole('textbox',{name:'Найти эмодзи',exact:true});await search.fill('улыб');await expect(search).toBeFocused();await search.fill('');
+ await panel.locator('.unicode-choice').first().click();await expect(editor).not.toHaveText('');await expect(panel).toBeVisible();
+ await page.getByRole('button',{name:'Закрыть эмодзи',exact:true}).click();await expect(panel).toHaveCount(0);await expect(editor).toBeFocused();
+ expect((await history.boundingBox()).height).toBe(initialHeight);
 });

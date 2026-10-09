@@ -1,0 +1,3 @@
+/* Reserve space inside the conversation instead of covering its messages. */
+.conversation>.emoji-panel{position:relative;inset:auto;align-self:center;flex:0 0 auto;width:min(var(--chat-content),100%);height:min(320px,40dvh);max-height:40dvh;min-height:0;margin:8px 0 0;transform:none;box-sizing:border-box;animation:none}
+@media(max-width:600px){.conversation>.emoji-panel{width:100%;height:min(300px,38dvh);max-height:38dvh;margin-top:6px;border-radius:16px}}
