@@ -39,3 +39,21 @@ test('older pins load into the conversation instead of opening a message dialog'
 test('the pin link supports keyboard activation',async({page})=>{
  await openChat(page);const button=page.getByRole('button',{name:'Перейти к закреплённому сообщению',exact:true});await button.focus();await page.keyboard.press('Enter');await expect(page.locator('#message-101')).toHaveClass(/message-jump-highlight/);
 });
+
+test('repinning restores a hidden banner immediately and composer stays ready',async({page})=>{
+ await openChat(page);
+ const editor=page.getByRole('textbox',{name:'Сообщение',exact:true});await expect(editor).toBeFocused();
+ const attachment=page.getByLabel('Прикрепить вложение',{exact:true}),emoji=page.getByRole('button',{name:'Эмодзи',exact:true});
+ expect((await attachment.boundingBox()).x).toBeLessThan((await editor.boundingBox()).x);
+ expect((await emoji.boundingBox()).x).toBeGreaterThan((await editor.boundingBox()).x);
+ await page.locator('#message-104').scrollIntoViewIfNeeded();
+ const transcribe=page.locator('.transcribe-button').first();await expect(transcribe).toBeVisible();const box=await transcribe.boundingBox();expect(box.width).toBe(box.height);
+ await page.getByRole('button',{name:'Скрыть закреплённое сообщение',exact:true}).click();await expect(editor).toBeFocused();
+ const message=page.locator('#message-101');
+ await message.scrollIntoViewIfNeeded();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await message.locator('summary').first().click();await message.getByRole('button',{name:'Открепить',exact:true}).click();
+ await expect(message.getByRole('button',{name:'Закрепить',exact:true,includeHidden:true})).toHaveCount(1);
+ await message.locator('summary').first().click();await message.getByRole('button',{name:'Закрепить',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Закреплённое сообщение',exact:true})).toBeVisible();await expect(editor).toBeFocused();
+ await editor.fill('Проверка фокуса');await page.getByRole('button',{name:'Отправить сообщение',exact:true}).click();await expect(editor).toBeFocused();await expect(editor).toHaveText('');
+});

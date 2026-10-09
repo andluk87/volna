@@ -9,8 +9,8 @@ val apiUrl = (project.findProperty("volnaApiUrl") as String?)
     ?: ""
 require(apiUrl.startsWith("https://")) { "Set ANDROID_API_URL to your Volna HTTPS base URL" }
 val safeApiUrl = apiUrl.trimEnd('/')
-val volnaVersionCode = 12_006
-val volnaVersionName = "0.12.6"
+val volnaVersionCode = 12_007
+val volnaVersionName = "0.12.7"
 val volnaWebRtcVersion = "150.7871.01"
 
 android {
