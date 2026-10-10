@@ -58,8 +58,8 @@ data class NativeAppearance(
     companion object {
         fun load(prefs: SharedPreferences) = NativeAppearance(
             theme = prefs.getString("theme", "system").takeIf { it in listOf("system", "light", "dark", "schedule") } ?: "system",
-            textScale = prefs.getFloat("textScale", 1f).takeIf { it.isFinite() }?.coerceIn(0.85f, 1.35f) ?: 1f,
-            font = prefs.getString("font", "system").takeIf { it in listOf("system", "neutral", "mono") } ?: "system",
+            textScale = prefs.getFloat("textScale", 1f).takeIf { it.isFinite() }?.coerceIn(0.75f, 1.60f) ?: 1f,
+            font = prefs.getString("font", "system").takeIf { it in listOf("system", "neutral", "serif", "condensed", "mono") } ?: "system",
             density = prefs.getString("density", "standard").takeIf { it in listOf("minimal", "compact", "standard", "large") } ?: "standard",
             radius = prefs.getInt("radius", 16).coerceIn(0, 30), accent = prefs.getLong("accent", 0xFF58B7E8),
             avatars = prefs.getBoolean("avatars", false), timeOnTap = prefs.getBoolean("timeOnTap", false),
@@ -131,10 +131,12 @@ fun VolnaTheme(appearance: NativeAppearance, updateSystemBars: Boolean = true, c
     else lightColorScheme(primary = palette.accent, onPrimary = nativeReadableText(listOf(palette.accent)), background = palette.ink, onBackground = palette.text,
         surface = palette.panel, onSurface = palette.text, secondary = palette.accent,
         surfaceVariant = palette.input, onSurfaceVariant = palette.muted, secondaryContainer = palette.hover, onSecondaryContainer = palette.text)
-    val family = when (appearance.font) { "neutral" -> FontFamily.SansSerif; "mono" -> FontFamily.Monospace; else -> FontFamily.Default }
+    val family = remember(appearance.font) { nativeAppearanceFont(appearance.font) }
     val typography = Typography().let { it.copy(
         bodyLarge = it.bodyLarge.copy(fontFamily = family), bodyMedium = it.bodyMedium.copy(fontFamily = family), bodySmall = it.bodySmall.copy(fontFamily = family),
         titleLarge = it.titleLarge.copy(fontFamily = family), titleMedium = it.titleMedium.copy(fontFamily = family), titleSmall = it.titleSmall.copy(fontFamily = family),
+        displayLarge = it.displayLarge.copy(fontFamily = family), displayMedium = it.displayMedium.copy(fontFamily = family), displaySmall = it.displaySmall.copy(fontFamily = family),
+        headlineLarge = it.headlineLarge.copy(fontFamily = family), headlineMedium = it.headlineMedium.copy(fontFamily = family), headlineSmall = it.headlineSmall.copy(fontFamily = family),
         labelLarge = it.labelLarge.copy(fontFamily = family), labelMedium = it.labelMedium.copy(fontFamily = family), labelSmall = it.labelSmall.copy(fontFamily = family)) }
     val density = LocalNativeBaseDensity.current ?: LocalDensity.current
     val activity = LocalContext.current as? android.app.Activity
@@ -195,4 +197,12 @@ internal fun AppearanceChoices(title: String, values: List<Pair<String, String>>
                 .clickable { onSelect(key) }.padding(horizontal = 4.dp, vertical = 10.dp), color = if (key == selected) Accent else TextMain, fontSize = 11.sp)
         }
     }
+}
+
+internal fun nativeAppearanceFont(key: String): FontFamily = when (key) {
+    "serif" -> FontFamily.Serif
+    "condensed" -> FontFamily(android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.NORMAL))
+    "mono" -> FontFamily.Monospace
+    "neutral" -> FontFamily.SansSerif
+    else -> FontFamily.Default
 }

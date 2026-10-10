@@ -62,6 +62,7 @@ internal fun ChatListScreen(
     var settings by remember { mutableStateOf("") }
     var accountsOpen by remember { mutableStateOf(false) }
     var folders by remember(user?.id) { mutableStateOf(NativeFolders.load(context, user?.id ?: 0)) }
+    LaunchedEffect(folders) { if (filter == "all" || filter.startsWith("folder:") && folders.none { "folder:${it.id}" == filter }) filter = folders.firstOrNull()?.let { "folder:${it.id}" } ?: "all" }
     val appearance = LocalNativeAppearance.current
     val motion = LocalMotionEnabled.current
     val pageState = rememberSaveableStateHolder()
@@ -72,7 +73,7 @@ internal fun ChatListScreen(
     Box(Modifier.fillMaxSize()) {
     NativeWallpaperView(if (appearance.design != null) LocalThemeVariant.current.wallpaper else NativeWallpaper(colors = listOf(Panel.toArgb().toLong() and 0xFFFFFFFFL)), Modifier.matchParentSize().hazeSource(backdrop))
     Column(Modifier.fillMaxSize().padding(bottom = 72.dp)) {
-        NativeGlassSurface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), radius = 28.dp) { Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        NativeGlassSurface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), radius = 28.dp, floating = true) { Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { if (tab == "chats") drawerOpen = true else tab = "chats" }) { if (tab == "chats") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 34.dp) else Icon(Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
             Column(Modifier.weight(1f)) {
                 NativeText(when (tab) { "contacts" -> "Контакты"; "calls" -> "Звонки"; "profile" -> "Настройки"; else -> "Волна" }, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = TextMain)
@@ -104,11 +105,11 @@ internal fun ChatListScreen(
                 "profile" -> NativeSettingsScreen(user, token, appearance, onOpenProfile, onAppearance, onScanQr, onSavedMessages, { settings = it }, { accountsOpen = true }, onAppearanceChange, { tab = "contacts" })
                 else -> Column(Modifier.fillMaxSize()) {
                     NativeSearchField(query, onQuery, "Поиск чатов", compact = true)
-                    if (query.isBlank()) LazyRow(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(CircleShape).background(Panel), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        items(listOf("all" to "Все чаты", "direct" to "Личные", "group" to "Группы", "channel" to "Каналы", "unread" to "Непрочитанные", "archived" to "Архив") + folders.map { "folder:${it.id}" to it.name }) { (key, label) ->
+                    if (query.isBlank()) LazyRow(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(CircleShape).background(Panel.copy(alpha = .64f)), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        items(folders.map { "folder:${it.id}" to it.name }) { (key, label) ->
                             Row(Modifier.clip(CircleShape).background(if (filter == key) Hover else Color.Transparent).clickable { filter = key }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 NativeText(label, color = if (filter == key) Accent else Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                val unread = chats.count { it.unread > 0 && if (key.startsWith("folder:")) it.id in folders.firstOrNull { f -> "folder:${f.id}" == key }?.chats.orEmpty() else nativeChatFilter(it, key) }
+                                val unread = chats.count { it.unread > 0 && if (key.startsWith("folder:")) folders.firstOrNull { f -> "folder:${f.id}" == key }?.let { f -> nativeFolderMatches(f, it) } == true else nativeChatFilter(it, key) }
                                 if (unread > 0) NativeText(unread.toString(), Modifier.padding(start = 5.dp).clip(CircleShape).background(if (filter == key) Accent else Muted).padding(horizontal = 5.dp, vertical = 1.dp), color = Panel, fontSize = 11.sp)
                             }
                         }
@@ -116,10 +117,10 @@ internal fun ChatListScreen(
                     if (query.trim().length >= 2) NativeGlobalSearch(query, token, api, chats, people, onSelect, onStartChat, onSearchMessage)
                     else Box(Modifier.weight(1f)) {
                         val folder = folders.firstOrNull { "folder:${it.id}" == filter }
-                        val visible = chats.filter { if (folder != null) it.id in folder.chats else nativeChatFilter(it, filter) }
+                        val visible = chats.filter { if (folder != null) nativeFolderMatches(folder, it) else nativeChatFilter(it, filter) }
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
                             val archivedCount = chats.count { it.archived }
-                            if (filter == "all" && archivedCount > 0) item(key = "archive") {
+                            if ((filter == "all" || folder?.rule == "all") && archivedCount > 0) item(key = "archive") {
                                 Row(Modifier.fillMaxWidth().clickable { filter = "archived" }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Box(Modifier.size(54.dp).clip(CircleShape).background(Panel), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Archive, "Архив", tint = TextMain, modifier = Modifier.size(28.dp)) }
                                     Column(Modifier.padding(start = 12.dp)) { NativeText("Архив чатов", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); NativeText("Чатов: $archivedCount", color = Muted, fontSize = 14.sp) }
@@ -135,7 +136,7 @@ internal fun ChatListScreen(
         }
         }
     }
-        NativeGlassSurface(Modifier.align(Alignment.BottomCenter).padding(horizontal = 28.dp, vertical = 8.dp).fillMaxWidth(), radius = 32.dp) {
+        NativeGlassSurface(Modifier.align(Alignment.BottomCenter).padding(horizontal = 28.dp, vertical = 8.dp).fillMaxWidth(), radius = 32.dp, floating = true) {
             Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 listOf(Triple("chats", "Чаты", Icons.Outlined.ChatBubbleOutline), Triple("contacts", "Контакты", Icons.Outlined.AccountCircle), Triple("profile", "Настройки", Icons.Outlined.Settings), Triple("account", "Профиль", Icons.Outlined.PersonOutline)).forEach { (key, label, icon) ->
                     Column(Modifier.weight(1f).clip(CircleShape).background(if (tab == key) Hover else Color.Transparent).clickable { if (key == "account") user?.id?.let(onOpenProfile) else { tab = key; onQuery("") } }.padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -213,7 +214,7 @@ internal fun ChatListScreen(
 @Composable
 internal fun NativeSearchField(value: String, onChange: (String) -> Unit, hint: String, modifier: Modifier = Modifier, compact: Boolean = false) {
     if (compact) {
-        Row(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clip(CircleShape).background(Input).height(42.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clip(CircleShape).background(Input.copy(alpha = .64f)).heightIn(min = 42.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Search, null, tint = Muted, modifier = Modifier.size(20.dp))
             BasicTextField(value, onChange, Modifier.weight(1f).padding(horizontal = 10.dp), singleLine = true,
                 textStyle = nativeEmojiTextStyle(LocalTextStyle.current.copy(color = TextMain, fontSize = 15.sp)),

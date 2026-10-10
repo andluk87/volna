@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -139,18 +140,19 @@ internal val LocalThemeVariant = staticCompositionLocalOf { NativeThemeVariant()
 internal val LocalNativeBackdrop = staticCompositionLocalOf<HazeState?> { null }
 
 @Composable
-internal fun NativeGlassSurface(modifier: Modifier = Modifier, radius: Dp = 22.dp, backgroundOnly: Boolean = false, content: @Composable () -> Unit) {
+internal fun NativeGlassSurface(modifier: Modifier = Modifier, radius: Dp = 22.dp, backgroundOnly: Boolean = false, floating: Boolean = false, content: @Composable () -> Unit) {
     val settings = LocalNativeAppearance.current; val state = LocalNativeBackdrop.current
     val blur = settings.glass && settings.blurMode != "off" && settings.quality != "economy" && !settings.powerSaving && LocalMotionEnabled.current && android.os.Build.VERSION.SDK_INT >= 31 && state != null
     val shape = RoundedCornerShape(radius)
     val color = Panel
-    val style = HazeStyle(backgroundColor = color, tints = listOf(HazeTint(color.copy(alpha = settings.glassOpacity))),
+    val opacity = if (floating) .64f else settings.glassOpacity
+    val style = HazeStyle(backgroundColor = if (floating) Color.Transparent else color, tints = listOf(HazeTint(color.copy(alpha = opacity))),
         blurRadius = (if (settings.blurMode == "simple" || settings.quality == "balanced") settings.blurIntensity.coerceAtMost(12) else settings.blurIntensity).dp,
-        noiseFactor = 0f, fallbackTint = HazeTint(color.copy(alpha = .94f)))
-    Box(modifier.shadow(if (settings.glass) 4.dp else 0.dp, shape).clip(shape)
+        noiseFactor = 0f, fallbackTint = HazeTint(color.copy(alpha = if (floating) opacity else .94f)))
+    Box(modifier.shadow(if (settings.glass && !floating) 4.dp else 0.dp, shape).graphicsLayer { this.shape = shape; clip = true; compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }.clip(shape)
         .then(if (blur) Modifier.hazeEffect(state = state!!, style = style) {
             if (backgroundOnly) canDrawArea = { area -> area.key != "home-content" }
-        } else Modifier.background(if (settings.glass && settings.quality != "economy") color.copy(alpha = settings.glassOpacity.coerceAtLeast(.88f)) else color))
+        } else Modifier.background(if (floating) color.copy(alpha = opacity) else if (settings.glass && settings.quality != "economy") color.copy(alpha = settings.glassOpacity.coerceAtLeast(.88f)) else color))
         .border(1.dp, TextMain.copy(alpha = if (settings.glass) .09f else .03f), shape)) { content() }
 }
 

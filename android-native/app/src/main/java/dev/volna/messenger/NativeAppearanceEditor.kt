@@ -62,6 +62,10 @@ internal fun NativeAppearanceEditor(value: NativeAppearance, onChange: (NativeAp
     NativeFullScreen(if (chat == null) "Оформление" else "Оформление чата", onDismiss) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             NativeThemePreview(value.copy(design = design, theme = if (night) "dark" else "light"))
+            NativeSettingsCard { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                NativeTypographyControls(value, onChange)
+                if (chat != null) NativeText("Шрифт и размер применяются ко всему приложению; цвета и фон — к этому чату.", color = Muted, fontSize = 12.sp)
+            } }
             if (status.isNotBlank()) NativeText(status, color = Accent, fontSize = 13.sp)
             if (chat == null) {
                 AppearanceChoices("Тема интерфейса", listOf("system" to "В системе", "light" to "Светлая", "dark" to "Тёмная", "schedule" to "По времени"), value.theme) { onChange(value.copy(theme = it)) }
@@ -120,8 +124,6 @@ internal fun NativeAppearanceEditor(value: NativeAppearance, onChange: (NativeAp
                     NativeText("Эффекты также учитывают энергосбережение Android и системное отключение анимаций.", color = Muted, fontSize = 12.sp)
                 } }
                 NativeSettingsCard { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NativeText("Размер текста · ${(15 * value.textScale).toInt()} sp", color = Muted); Slider(value.textScale, { onChange(value.copy(textScale = it)) }, valueRange = .85f..1.35f)
-                    AppearanceChoices("Шрифт", listOf("system" to "Системный", "neutral" to "Нейтральный", "mono" to "Моно"), value.font) { onChange(value.copy(font = it)) }
                     AppearanceChoices("Плотность", listOf("minimal" to "Минимум", "compact" to "Компактно", "standard" to "Стандарт", "large" to "Крупно"), value.density) { onChange(value.copy(density = it)) }
                     NativeText("Размер интерфейса · ${(value.uiScale * 100).toInt()}%", color = Muted); Slider(value.uiScale, { onChange(value.copy(uiScale = it)) }, valueRange = .9f..1.15f)
                     Row(verticalAlignment = Alignment.CenterVertically) { NativeText("Аватары в сообщениях", Modifier.weight(1f)); Switch(value.avatars, { onChange(value.copy(avatars = it)) }) }
@@ -224,4 +226,25 @@ internal fun NativeThemePreview(appearance: NativeAppearance) {
             }
         }
     }
+}
+
+@Composable
+private fun NativeTypographyControls(value: NativeAppearance, onChange: (NativeAppearance) -> Unit) {
+    var fontOpen by remember { mutableStateOf(false) }
+    val fonts = listOf("system" to "Системный", "neutral" to "Без засечек", "serif" to "С засечками", "condensed" to "Узкий", "mono" to "Моноширинный")
+    var percent by remember { mutableStateOf((value.textScale * 100).roundToInt().toString()) }
+    LaunchedEffect(value.textScale) { percent = (value.textScale * 100).roundToInt().toString() }
+    NativeText("Размер текста · ${(value.textScale * 100).roundToInt()}%", color = Muted)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = { onChange(value.copy(textScale = (value.textScale - .05f).coerceAtLeast(.75f))) }, enabled = value.textScale > .75f) { Icon(Icons.Outlined.Remove, "Уменьшить текст") }
+        Slider(value.textScale, { onChange(value.copy(textScale = it)) }, valueRange = .75f..1.6f, steps = 16, modifier = Modifier.weight(1f))
+        IconButton(onClick = { onChange(value.copy(textScale = (value.textScale + .05f).coerceAtMost(1.6f))) }, enabled = value.textScale < 1.6f) { Icon(Icons.Outlined.Add, "Увеличить текст") }
+    }
+    NativeOutlinedTextField(percent, { input -> percent = input.filter(Char::isDigit).take(3); percent.toIntOrNull()?.takeIf { it in 75..160 }?.let { onChange(value.copy(textScale = it / 100f)) } }, label = { NativeText("Размер в процентах · 75–160") }, singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+    Box {
+        OutlinedButton(onClick = { fontOpen = true }) { NativeText("Шрифт: ${fonts.firstOrNull { it.first == value.font }?.second ?: "Системный"}") }
+        DropdownMenu(fontOpen, { fontOpen = false }) { fonts.forEach { (key, label) -> DropdownMenuItem(text = { NativeText("${if (value.font == key) "✓ " else ""}$label · Абв 123", fontFamily = nativeAppearanceFont(key)) }, onClick = { onChange(value.copy(font = key)); fontOpen = false }) } }
+    }
+    NativeText("Изменения сохраняются сразу. Системный размер текста Android тоже учитывается; размер интерфейса меняется отдельно.", color = Muted, fontSize = 12.sp)
+    TextButton(onClick = { onChange(value.copy(font = "system", textScale = 1f, uiScale = 1f)) }) { NativeText("Сбросить шрифт и масштаб") }
 }

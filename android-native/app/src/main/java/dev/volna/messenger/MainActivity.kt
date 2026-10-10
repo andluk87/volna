@@ -792,7 +792,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             if (appearanceOpen) {
                 val individual = appearanceChat?.let { remember(it, themeRevision, appearanceAccount) { themeStore.chat(it) } }
                 AppearanceDialog(if (individual == null) appearance else appearance.copy(design = individual, radius = individual.radius),
-                    { updated -> if (appearanceChat == null) { appearance = updated; updated.save(appearancePrefs) } else { themeStore.setChat(appearanceChat!!, updated.design); themeRevision++ } },
+                    { updated -> if (appearanceChat == null) { appearance = updated; updated.save(appearancePrefs) } else { appearance = appearance.copy(font = updated.font, textScale = updated.textScale, uiScale = updated.uiScale, density = updated.density); appearance.save(appearancePrefs); themeStore.setChat(appearanceChat!!, updated.design); themeRevision++ } },
                     { appearanceOpen = false }, appearanceAccount, appearanceChat,
                     if (appearanceChat == null) null else ({ themeStore.setChat(appearanceChat!!, null); themeRevision++ }))
             }

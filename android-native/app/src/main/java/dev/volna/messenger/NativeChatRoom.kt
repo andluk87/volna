@@ -189,7 +189,7 @@ internal fun ChatRoomScreen(
         NativeWallpaperView(if (LocalNativeAppearance.current.design != null) LocalThemeVariant.current.wallpaper else NativeWallpaper(colors = listOf(ChatBackground.toArgb().toLong() and 0xFFFFFFFFL)), Modifier.matchParentSize().hazeSource(backdrop), listState.firstVisibleItemScrollOffset.toFloat())
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { if (selection.isNotEmpty()) selection = emptySet() else onBack() }, modifier = Modifier.size(48.dp).clip(CircleShape).background(Panel)) { Icon(if (selection.isNotEmpty()) Icons.Outlined.Close else Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
+            IconButton(onClick = { if (selection.isNotEmpty()) selection = emptySet() else onBack() }, modifier = Modifier.size(48.dp).clip(CircleShape).background(Panel.copy(alpha = .64f))) { Icon(if (selection.isNotEmpty()) Icons.Outlined.Close else Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
             if (selection.isNotEmpty()) {
                 NativeText("Выбрано: ${selection.size}", Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Box {
@@ -202,12 +202,12 @@ internal fun ChatRoomScreen(
                 IconButton(onClick = { onForwardMany(selected.filter { !it.deleted }); selection = emptySet() }) { Icon(Icons.Outlined.ArrowForward, "Переслать выбранные", tint = Accent) }
                 if (selected.isNotEmpty() && selected.all { !it.deleted && (it.senderId == user?.id || canModerate) }) IconButton(onClick = { deleteSelected = true }) { Icon(Icons.Outlined.DeleteOutline, "Удалить выбранные", tint = MaterialTheme.colorScheme.error) }
             } else {
-                Row(Modifier.weight(1f).padding(horizontal = 5.dp).clip(CircleShape).background(androidx.compose.ui.graphics.lerp(Panel, Outgoing, .55f)).heightIn(min = 48.dp).padding(horizontal = 4.dp).clickable(enabled = !recorder.recording) { if (chat.kind in listOf("group", "channel")) onCommunity() else if (!chat.saved) onOpenProfile(chat.peerId) }, verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1f).padding(horizontal = 5.dp).clip(CircleShape).background(androidx.compose.ui.graphics.lerp(Panel, Outgoing, .55f).copy(alpha = .64f)).heightIn(min = 48.dp).padding(horizontal = 4.dp).clickable(enabled = !recorder.recording) { if (chat.kind in listOf("group", "channel")) onCommunity() else if (!chat.saved) onOpenProfile(chat.peerId) }, verticalAlignment = Alignment.CenterVertically) {
                     if (chat.saved) Box(Modifier.size(40.dp).clip(CircleShape).background(Accent), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.BookmarkBorder, "Избранное", tint = Color.White, modifier = Modifier.size(27.dp)) } else Avatar(chat.name, chat.peerId, chat.avatarUrl, token, size = 40.dp)
                     Column(Modifier.weight(1f).padding(start = 10.dp)) { NativeText(chat.name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); if (!chat.saved) NativeText(if (chat.parentId!=0L) "Подтема · ${chat.memberCount} участников" else if (chat.kind in listOf("group", "channel")) "${chat.memberCount} участников" else if (chat.peerOnline) "в сети" else "@${chat.username}", color = if (chat.peerOnline) Accent else Muted, fontSize = 12.sp, maxLines = 1) }
                 }
                 if (chat.kind == "direct" && !chat.saved) IconButton(onClick = { onCall(chat) }, enabled = !recorder.recording) { Icon(Icons.Outlined.Call, "Позвонить", tint = Accent) }
-                Row(Modifier.clip(CircleShape).background(Panel), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.clip(CircleShape).background(Panel.copy(alpha = .64f)), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { searchOpen = !searchOpen; showPins = false; if (!searchOpen) onSearch("") }, modifier = Modifier.size(40.dp)) { Icon(Icons.Outlined.Search, "Поиск в чате", tint = Muted) }
                     Box {
                     IconButton(onClick = { menu = true }, enabled = !recorder.recording, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.MoreVert, "Действия чата", tint = Muted) }
@@ -228,7 +228,7 @@ internal fun ChatRoomScreen(
         }
         if (pinnedMessages.isNotEmpty() && !showPins && selection.isEmpty()) {
             val pin = pinnedMessages.last()
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp).clip(RoundedCornerShape(14.dp)).background(Panel).clickable { jump(pin.id) }.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp).clip(RoundedCornerShape(14.dp)).background(Panel.copy(alpha = .64f)).clickable { jump(pin.id) }.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) { repeat(3) { Box(Modifier.width(3.dp).height(9.dp).clip(CircleShape).background(Accent)) } }
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 7.dp)) { NativeText("Закреплённое сообщение", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); NativeText(pin.text.ifBlank { pin.attachmentName ?: "Вложение" }, color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 IconButton(onClick = { showPins = true; searchOpen = false; onSearch("") }) { Icon(Icons.Outlined.PushPin, "Все закреплённые сообщения", tint = Muted) }
@@ -244,7 +244,7 @@ internal fun ChatRoomScreen(
                 itemsIndexed(timeline, key = { _, entry -> "${chat.id}-${entry.key}" }) { index, entry ->
                     val group = entry.messages
                     val previousEntry = timeline.getOrNull(index - 1)
-                    if (nativeDay(entry.createdIso) != previousEntry?.let { nativeDay(it.createdIso) }) Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) { NativeText(nativeDay(entry.createdIso), Modifier.clip(CircleShape).background(Panel).padding(horizontal = 12.dp, vertical = 5.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextMain) }
+                    if (nativeDay(entry.createdIso) != previousEntry?.let { nativeDay(it.createdIso) }) Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) { NativeText(nativeDay(entry.createdIso), Modifier.clip(CircleShape).background(Panel.copy(alpha = .64f)).padding(horizontal = 12.dp, vertical = 5.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextMain) }
                     if (entry.call != null) {
                         NativeChatCallCard(entry.call, enabled = !callActive) { if (entry.call.video) onVideo(chat) else onCall(chat) }
                     } else {
@@ -270,7 +270,7 @@ internal fun ChatRoomScreen(
             IconButton(onClick = { if (editTarget != null) { input = drafts.input(chat.id); entities = drafts.entities(chat.id) }; replyTo = null; editTarget = null }) { Icon(Icons.Outlined.Close, "Отменить ответ или редактирование", tint = Muted) }
         }
         if (!chat.canSend) NativeText(if(chat.topicClosed) "Подтема закрыта. История доступна для чтения." else "Публиковать могут только администраторы", Modifier.fillMaxWidth().background(Panel).padding(16.dp), color = Muted, fontSize = 13.sp)
-        else NativeGlassSurface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp).onSizeChanged { composerHeight = it.height / density.density }, radius = 28.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        else NativeGlassSurface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp).onSizeChanged { composerHeight = it.height / density.density }, radius = 28.dp, floating = true) { Row(Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { if (editTarget != null) panel.tab = "emoji"; togglePanel() }) { Icon(if (panel.open) Icons.Outlined.Keyboard else Icons.Outlined.EmojiEmotions, if (panel.open) "Переключиться на клавиатуру" else "Эмодзи, стикеры и GIF", tint = Muted) }
             if (recorder.recording) {
                 IconButton(onClick = recorder::cancel) { Icon(Icons.Outlined.DeleteOutline, "Отменить запись", tint = MaterialTheme.colorScheme.error) }

@@ -72,13 +72,16 @@ internal fun NativeDialogSystemBars() {
     } }
 }
 
-internal data class NativeFolder(val id: String, val name: String, val chats: Set<Long>)
+internal data class NativeFolder(val id: String, val name: String, val chats: Set<Long>, val rule: String = "", val excluded: Set<Long> = emptySet())
+internal fun nativeFolderMatches(folder: NativeFolder, chat: VolnaChat) = (chat.id in folder.chats || folder.rule.isNotBlank() && nativeChatFilter(chat, folder.rule)) && chat.id !in folder.excluded
+internal fun nativeDefaultFolders() = listOf("all" to "Все чаты", "direct" to "Личные", "group" to "Группы", "channel" to "Каналы", "unread" to "Непрочитанные", "archived" to "Архив").map { (key, name) -> NativeFolder("builtin_$key", name, emptySet(), key) }
 internal object NativeFolders {
     fun load(context: Context, account: Long): List<NativeFolder> = runCatching {
-        val array = JSONArray(context.getSharedPreferences("volna-folders-$account", 0).getString("folders", "[]"))
-        (0 until array.length()).map { i -> array.getJSONObject(i).let { row -> val ids = row.getJSONArray("chats"); NativeFolder(row.getString("id"), row.getString("name"), (0 until ids.length()).map { ids.getLong(it) }.toSet()) } }
-    }.getOrDefault(emptyList())
-    fun save(context: Context, account: Long, folders: List<NativeFolder>) { context.getSharedPreferences("volna-folders-$account", 0).edit().putString("folders", JSONArray(folders.take(10).map { JSONObject().put("id", it.id).put("name", it.name).put("chats", JSONArray(it.chats.toList())) }).toString()).apply() }
+        val prefs = context.getSharedPreferences("volna-folders-$account", 0)
+        val array = JSONArray(prefs.getString("folders", "[]"))
+        (0 until array.length()).map { i -> array.getJSONObject(i).let { row -> val ids = row.getJSONArray("chats"); val excluded = row.optJSONArray("excluded") ?: JSONArray(); NativeFolder(row.getString("id"), row.getString("name"), (0 until ids.length()).map { ids.getLong(it) }.toSet(), row.optString("rule"), (0 until excluded.length()).map { excluded.getLong(it) }.toSet()) } }.let { if (prefs.getBoolean("builtins_imported", false)) it else (nativeDefaultFolders() + it).also { migrated -> save(context, account, migrated) } }
+    }.getOrDefault(nativeDefaultFolders())
+    fun save(context: Context, account: Long, folders: List<NativeFolder>) { context.getSharedPreferences("volna-folders-$account", 0).edit().putBoolean("builtins_imported", true).putString("folders", JSONArray(folders.take(16).map { JSONObject().put("id", it.id).put("name", it.name).put("chats", JSONArray(it.chats.toList())).put("rule", it.rule).put("excluded", JSONArray(it.excluded.toList())) }).toString()).apply() }
 }
 
 @Composable
@@ -86,15 +89,21 @@ internal fun NativeFoldersDialog(account: Long, chats: List<VolnaChat>, folders:
     var editing by remember(account) { mutableStateOf<NativeFolder?>(null) }
     var name by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(emptySet<Long>()) }
-    fun edit(folder: NativeFolder) { editing = folder; name = folder.name; selected = folder.chats }
+    fun edit(folder: NativeFolder) { editing = folder; name = folder.name; selected = chats.filter { nativeFolderMatches(folder, it) }.map { it.id }.toSet() }
     NativeFullScreen("Папки с чатами", onDismiss) {
         NativeText("Папки сохраняются на этом устройстве отдельно для каждого аккаунта.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(16.dp))
         if (editing == null) {
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(folders, key = { it.id }) { folder -> NativeSettingsCard {
-                    NativeSettingRow(Icons.Outlined.FolderOpen, folder.name, "${folder.chats.size} чатов") { edit(folder) }
+                    NativeSettingRow(Icons.Outlined.FolderOpen, folder.name, "${chats.count { nativeFolderMatches(folder, it) }} чатов") { edit(folder) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        val index = folders.indexOf(folder)
+                        IconButton(onClick = { val next = folders.toMutableList(); java.util.Collections.swap(next, index, index - 1); onSave(next) }, enabled = index > 0) { Icon(Icons.Outlined.ArrowUpward, "Переместить папку вверх") }
+                        IconButton(onClick = { val next = folders.toMutableList(); java.util.Collections.swap(next, index, index + 1); onSave(next) }, enabled = index < folders.lastIndex) { Icon(Icons.Outlined.ArrowDownward, "Переместить папку вниз") }
+                        IconButton(onClick = { onSave(folders + folder.copy(id = UUID.randomUUID().toString(), name = (folder.name + " · копия").take(32))) }, enabled = folders.size < 16) { Icon(Icons.Outlined.ContentCopy, "Создать копию папки") }
+                    }
                 } }
-                item { TextButton(onClick = { edit(NativeFolder(UUID.randomUUID().toString(), "", emptySet())) }, enabled = folders.size < 10) { Icon(Icons.Outlined.Add, null); NativeText("Создать папку") } }
+                item { TextButton(onClick = { edit(NativeFolder(UUID.randomUUID().toString(), "", emptySet())) }, enabled = folders.size < 16) { Icon(Icons.Outlined.Add, null); NativeText("Создать папку") } }
             }
         } else {
             NativeOutlinedTextField(name, { name = it.take(32) }, label = { NativeText("Название папки") }, modifier = Modifier.fillMaxWidth().padding(12.dp), singleLine = true, shape = RoundedCornerShape(16.dp))
@@ -105,7 +114,7 @@ internal fun NativeFoldersDialog(account: Long, chats: List<VolnaChat>, folders:
             }
             Row(Modifier.fillMaxWidth().imePadding().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = { val id = editing!!.id; onSave(folders.filter { it.id != id }); editing = null }) { NativeText(if (folders.any { it.id == editing?.id }) "Удалить" else "Отмена", color = MaterialTheme.colorScheme.error) }
-                Button(onClick = { val next = editing!!.copy(name = name.trim(), chats = selected); onSave(folders.filter { it.id != next.id } + next); editing = null }, enabled = name.isNotBlank()) { NativeText("Сохранить") }
+                Button(onClick = { val base = chats.filter { nativeChatFilter(it, editing!!.rule) }.map { it.id }.toSet().takeIf { editing!!.rule.isNotBlank() } ?: emptySet(); val currentIds = chats.map { it.id }.toSet(); val next = editing!!.copy(name = name.trim(), chats = (editing!!.chats - currentIds) + (selected - base), excluded = (editing!!.excluded - currentIds) + (base - selected)); onSave(if (folders.any { it.id == next.id }) folders.map { if (it.id == next.id) next else it } else folders + next); editing = null }, enabled = name.isNotBlank()) { NativeText("Сохранить") }
             }
         }
     }
