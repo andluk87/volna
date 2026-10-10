@@ -4,6 +4,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "8998:8998"
     environment:
       CHAT_DOMAIN: ${CHAT_DOMAIN:?Set CHAT_DOMAIN in .env}
     volumes:

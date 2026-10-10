@@ -4,3 +4,10 @@
     flush_interval -1
   }
 }
+
+{$CHAT_DOMAIN}:8998 {
+  encode zstd gzip
+  reverse_proxy server:8998 {
+    header_up X-Real-IP {remote_host}
+  }
+}

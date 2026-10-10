@@ -1,3 +1,4 @@
+import {readAdminSettings} from './admin-config.mjs';
 import {availablePhoneUsername} from './usernames.mjs';
 import {randomBytes, randomInt, createHash, createHmac, timingSafeEqual} from 'node:crypto';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
@@ -25,7 +26,7 @@ export function notificoreSender({key=process.env.NOTIFICORE_API_KEY||'',origina
 }
 export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=notificoreSender(),clock=Date.now,
   codeGenerator=()=>String(randomInt(0,1000000)).padStart(6,'0'),trustProxy=process.env.AUTH_TRUST_PROXY==='1',
-  logger=event=>console.info('[sms]',JSON.stringify(event)),
+  loginCheck=()=>{},logger=event=>console.info('[sms]',JSON.stringify(event)),
   referenceStart=Number(process.env.SMS_REFERENCE_START||0),smsReady=!!(process.env.NOTIFICORE_API_KEY&&process.env.NOTIFICORE_ORIGINATOR)}){
   db.exec(`CREATE TABLE IF NOT EXISTS auth_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sms_challenges(id TEXT PRIMARY KEY,phone TEXT NOT NULL,code_hash TEXT NOT NULL,
@@ -51,6 +52,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=n
   const agent=req=>String(req.headers['user-agent']||'Волна').replace(/[\x00-\x1f\x7f]/g,'').slice(0,160);
   const transaction=callback=>{db.exec('BEGIN IMMEDIATE');try{const result=callback();db.exec('COMMIT');return result;}catch(e){db.exec('ROLLBACK');throw e;}};
   const issue=(uid,platform,req)=>{
+    loginCheck(uid);
     const token=secret(),refresh=secret(),id=secret(),now=clock(),expires=now+3600000;
     db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(tokenHash(token),uid,expires);
     db.prepare('INSERT INTO refresh_sessions VALUES(?,?,?,?,?,?,?)').run(id,tokenHash(refresh),tokenHash(token),uid,platform,now,now+90*86400000);
@@ -80,13 +82,15 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=n
     if(path==='/api/auth/sms/request'&&post){
       if(!smsReady)throw fail(503,'Отправка SMS пока не настроена');
       const data=await body(req),phone=normalizePhone(data.phone),now=clock(),address=ip(req);
+      const existingUser=db.prepare('SELECT id FROM users WHERE phone=?').get(phone);loginCheck(existingUser?.id);
+      const settings=readAdminSettings(db);
       const challenge=transaction(()=>{
         const recent=db.prepare('SELECT * FROM sms_challenges WHERE phone=? ORDER BY created DESC LIMIT 1').get(phone);
         if(recent&&now-recent.created<60000)throw fail(429,'Отправить код повторно можно через 60 секунд');
         const hour=now-3600000;
-        if(db.prepare('SELECT COUNT(*) n FROM sms_challenges WHERE phone=? AND created>?').get(phone,hour).n>=5||
-          db.prepare('SELECT COUNT(*) n FROM sms_challenges WHERE ip=? AND created>?').get(address,hour).n>=20||
-          db.prepare('SELECT COUNT(*) n FROM sms_challenges WHERE created>?').get(now-86400000).n>=300)throw fail(429,'Лимит SMS исчерпан. Попробуйте позже');
+        if(db.prepare('SELECT COUNT(*) n FROM sms_challenges WHERE phone=? AND created>?').get(phone,hour).n+db.prepare('SELECT COUNT(*) n FROM admin_sms WHERE phone=? AND created>?').get(phone,hour).n>=settings.sms_phone_hour||
+          db.prepare('SELECT COUNT(*) n FROM sms_challenges WHERE ip=? AND created>?').get(address,hour).n+db.prepare('SELECT COUNT(*) n FROM admin_sms WHERE ip=? AND created>?').get(address,hour).n>=settings.sms_ip_hour||
+          db.prepare('SELECT COUNT(*) n FROM sms_challenges WHERE created>?').get(now-86400000).n+db.prepare('SELECT COUNT(*) n FROM admin_sms WHERE created>?').get(now-86400000).n>=settings.sms_day)throw fail(429,'Лимит SMS исчерпан. Попробуйте позже');
         const id=secret();let code;
         for(let i=0;i<100;i++){code=codeGenerator();if(!/^\d{6}$/.test(code))throw Error('Invalid SMS generator');if(!recent||hmac(phone,code,recent.id)!==recent.code_hash)break;if(i===99)throw Error('SMS generator repeated previous code');}
         const counter=Number(db.prepare("SELECT value FROM auth_settings WHERE key='sms-reference'").get().value)+1;
@@ -117,6 +121,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=n
           audit('sms-invalid',req);return {error:fail(400,'Неверный код. Проверьте код из SMS и попробуйте еще раз.')};
         }
         let user=db.prepare('SELECT id FROM users WHERE phone=?').get(row.phone);
+        loginCheck(user?.id);
         if(!user){const inserted=db.prepare('INSERT INTO users(username,name,phone) VALUES(?,?,?)').run(availablePhoneUsername(db,row.phone),'Новый пользователь',row.phone);user={id:Number(inserted.lastInsertRowid)};}
         db.prepare("UPDATE sms_challenges SET status='verified',used=? WHERE id=?").run(clock(),row.id);
         return issue(user.id,'android',req);
@@ -128,7 +133,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=n
       if(typeof data.refresh_token!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(data.refresh_token))throw fail(401,'Войдите заново');
       const result=transaction(()=>{
         const row=db.prepare('SELECT * FROM refresh_sessions WHERE refresh_hash=? AND expires>?').get(tokenHash(data.refresh_token),clock());
-        if(!row)throw fail(401,'Сеанс завершён. Войдите заново');
+        if(!row)throw fail(401,'Сеанс завершён. Войдите заново');loginCheck(row.user_id);
         const oldToken=row.access_id,token=secret(),refresh=secret(),expires=clock()+3600000;
         const details=db.prepare('SELECT * FROM session_details WHERE token=?').get(oldToken);
         db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(tokenHash(token),row.user_id,expires);

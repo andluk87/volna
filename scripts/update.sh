@@ -52,6 +52,12 @@ if ! compose exec -T web sh -ec 'grep -R -F -q "$1" /usr/share/nginx/html/assets
   exit 1
 fi
 echo "Verified web assets: Volna $version."
+if [ "$https" -eq 1 ]; then
+  compose exec -T gateway caddy reload --config /etc/caddy/Caddyfile
+fi
+compose exec -T server node -e "fetch('http://127.0.0.1:8998/admin/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+echo 'Verified administration service on port 8998.'
+
 # Catch a TURN process that exits just after Compose reports it running.
 if [ "$calls" -eq 1 ]; then
   container=$(compose ps -a -q turn)

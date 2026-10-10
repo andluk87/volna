@@ -1,12 +1,13 @@
 {
   "name": "volna-messenger",
-  "version": "0.12.11",
+  "version": "0.12.12",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server/index.mjs",
     "test": "node --test tests/*.test.mjs",
-    "test:render": "node tests/render-ui.mjs"
+    "test:render": "node tests/render-ui.mjs",
+    "test:admin-ui": "node tests/admin-ui.mjs"
   },
   "engines": {
     "node": ">=24"

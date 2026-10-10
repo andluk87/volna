@@ -29,7 +29,7 @@ export function profiles({db,uploads,auth,publish,userById,json,body}){
    if(data.avatar_hidden!==undefined&&typeof data.avatar_hidden!=='boolean')throw fail(400,'Некорректное состояние фото профиля');
    if(data.avatar_id){
     const file=db.prepare('SELECT * FROM attachments WHERE id=? AND owner_id=?').get(data.avatar_id,uid);
-    if(!file||!['image/png','image/jpeg','image/webp'].includes(file.mime)||file.size>5*1024*1024)throw fail(400,'Фото профиля: PNG, JPEG или WebP, до 5 МБ');
+    if(!file||file.admin_blocked||!['image/png','image/jpeg','image/webp'].includes(file.mime)||file.size>5*1024*1024)throw fail(400,'Фото профиля: PNG, JPEG или WebP, до 5 МБ');
     let bytes;try{bytes=readFileSync(join(uploads,file.id));}catch{throw fail(404,'Фото отсутствует в хранилище');}
     const valid=file.mime==='image/png'?bytes.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex')):file.mime==='image/jpeg'?bytes[0]===255&&bytes[1]===216&&bytes[2]===255:bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP';
     if(!valid)throw fail(400,'Файл не является изображением указанного типа');

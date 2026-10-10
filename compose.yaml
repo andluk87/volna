@@ -10,6 +10,10 @@ services:
       EMOJI_REACTION_TYPES: ${EMOJI_REACTION_TYPES:-20}
       EMOJI_MODERATOR_USER_IDS: ${EMOJI_MODERATOR_USER_IDS:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-https://volna.lknet.ru}
+      ADMIN_PORT: 8998
+      ADMIN_PHONE: ${ADMIN_PHONE:-+79681411241}
+      ADMIN_PUBLIC_URL: ${ADMIN_PUBLIC_URL:-}
+      CHAT_DOMAIN: ${CHAT_DOMAIN:-}
       WHISPER_URL: http://transcription:8000/transcribe
       NOTIFICORE_API_KEY: ${NOTIFICORE_API_KEY:-}
       NOTIFICORE_ORIGINATOR: ${NOTIFICORE_ORIGINATOR:-}
@@ -32,7 +36,7 @@ services:
     restart: unless-stopped
     init: true
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "Promise.all([fetch('http://127.0.0.1:3000/api/health'),fetch('http://127.0.0.1:8998/admin/api/health')]).then(rs=>process.exit(rs.every(r=>r.ok)?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 3s
       retries: 5

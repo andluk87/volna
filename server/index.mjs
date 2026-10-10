@@ -1,4 +1,6 @@
 import http from 'node:http';
+import {initAdminSchema,readAdminSettings} from './admin-config.mjs';
+import {createAdminServer} from './admin.mjs';
 import { messaging } from './messaging.mjs';
 import { notifications } from './push.mjs';
 import { calls } from './calls.mjs';
@@ -17,7 +19,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => Object.assign(new Error(message), { status });
-export function createApp({ pushSender, phoneAuthOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', uploads = process.env.UPLOAD_PATH || join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads'), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
+export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', uploads = process.env.UPLOAD_PATH || join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads'), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
   if (database !== ':memory:') mkdirSync(dirname(database), { recursive: true });
   const db = new DatabaseSync(database);
   const legacy = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
@@ -35,6 +37,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, transcriber=createT
     CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires);`);
   // New IDs cannot accidentally reuse legacy Android cache/account IDs.
   if (!db.prepare("SELECT 1 FROM sqlite_sequence WHERE name='users'").get()) db.prepare("INSERT INTO sqlite_sequence(name,seq) VALUES('users',?)").run(randomInt(1000000000,2000000000));
+  initAdminSchema(db);
   const streams = new Map(), limits = new Map();
   const userById = (id,own=false) => {
     const row=db.prepare('SELECT id,username,name,bio,avatar_id,avatar_hidden,phone FROM users WHERE id=?').get(id);
@@ -50,10 +53,13 @@ export function createApp({ pushSender, phoneAuthOptions={}, transcriber=createT
     const token = String(req.headers.authorization || '').replace(/^Bearer /, '');
     const session = db.prepare('SELECT * FROM sessions WHERE token=? AND expires>?').get(digest(token), Date.now());
     if (!session) throw fail(401, 'Войдите в аккаунт заново');
+    if(db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(session.user_id)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');
     mobileService?.touch(req,session);
     return session;
   };
   const member = (chat, user) => {
+    if(db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(user)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');
+    if(db.prepare('SELECT admin_deleted FROM chats WHERE id=?').get(chat)?.admin_deleted)throw fail(404,'Чат удалён администратором');
     if (!db.prepare('SELECT 1 FROM members WHERE chat_id=? AND user_id=?').get(chat, user)) throw fail(404, 'Чат не найден');
   };
   const publish = (users, event) => {
@@ -75,7 +81,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, transcriber=createT
     if (++item.count > max) throw fail(429, 'Слишком много запросов. Подождите минуту');
   };
   const disconnect=(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();};
-  const phoneService=phoneAuth({db,json,body,userById,auth,disconnect,...phoneAuthOptions});
+  const phoneService=phoneAuth({db,json,body,userById,auth,disconnect,loginCheck:(uid)=>{if(uid&&db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(uid)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');if(!uid&&!readAdminSettings(db).registration_enabled)throw fail(403,'Регистрация новых пользователей временно закрыта');},...phoneAuthOptions});
   const handleProfiles = profiles({db,uploads,auth,publish,userById,json,body});
   usernameService=usernames({db,body,json,userById,publish,uploads});
   let expressionService;
@@ -88,9 +94,10 @@ export function createApp({ pushSender, phoneAuthOptions={}, transcriber=createT
   const callService = calls({db,auth,body,json,userById,onRing:pushService.call,onEnd:pushService.endCall});
   mobileService=mobile({db,auth,body,json,userById,online:id=>!!streams.get(id)?.size,
     disconnect:(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();}});
+  const adminService=createAdminServer({db,uploads,json,body,publish,broadcast,hydrate:handleMessaging.hydrate,userById,disconnectUser:uid=>{for(const stream of streams.get(uid)||[])stream.end();},cleanupFiles:handleMessaging.cleanupUnused,callService,...adminOptions});
   const cleanup = setInterval(() => {
     const now = Date.now(); for (const [key, entry] of limits) if (entry.until < now) limits.delete(key);
-    phoneService.cleanup();
+    phoneService.cleanup(); adminService.cleanup();
     for (const list of streams.values()) for (const res of list) if (res.sessionExpires < now) res.end();
   }, 30000); cleanup.unref();
   const server = http.createServer(async (req, res) => {
@@ -108,6 +115,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, transcriber=createT
       if (path.startsWith('/api/auth/')) { if(await phoneService.handle(req,res,url))return; }
       if (url.pathname.startsWith("/api/public/users/")) { limit("public:"+req.socket.remoteAddress,120); if(await usernameService.publicHandle(req,res,url))return; }
       const session = auth(req), uid = session.user_id;
+      adminService.guard(req,url,session);
       if (path === '/api/me' && method === 'GET') {
         const user=userById(uid,true);
         return json(res, 200, user);
@@ -192,9 +200,10 @@ export function createApp({ pushSender, phoneAuthOptions={}, transcriber=createT
     } catch(e) { if (!e.status) console.error(e); if (!res.headersSent) json(res, e.status || 500, { error: e.status ? e.message : 'Ошибка сервера', ...(e.status&&e.suggestions?{suggestions:e.suggestions}:{}) }); else res.end(); }
   });
   server.requestTimeout = 120000; server.headersTimeout = 15000;
-  return { server, db, push:pushService, close: async () => { callService.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close(); } };
+  return { server, adminServer:adminService.server, db, push:pushService, close: async () => { await adminService.close();callService.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close(); } };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const app = createApp(); app.server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => console.log('Volna API listening on :'+(process.env.PORT || 3000)));
+  app.adminServer.listen(Number(process.env.ADMIN_PORT||8998),'0.0.0.0',()=>console.log('Volna admin listening on :'+(process.env.ADMIN_PORT||8998)));
   for (const signal of ['SIGTERM','SIGINT']) process.on(signal, async () => { await app.close(); process.exit(0); });
 }

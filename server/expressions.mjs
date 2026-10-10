@@ -35,7 +35,7 @@ export function expressions({db,uploads,body,json,member,publish}) {
      for(const item of items.filter(i=>i.kind===kind)) {
       const bytes=readFileSync(join(root,item.file)),fileId=randomBytes(24).toString('hex');
       writeFileSync(join(uploads,fileId),bytes,{flag:'wx',mode:0o600});written.push(fileId);
-      db.prepare('INSERT INTO attachments VALUES(?,?,?,?,?,?)').run(fileId,uid,item.file,item.mime,bytes.length,Date.now());
+      db.prepare('INSERT INTO attachments(id,owner_id,name,mime,size,created_at) VALUES(?,?,?,?,?,?)').run(fileId,uid,item.file,item.mime,bytes.length,Date.now());
       db.prepare('INSERT INTO expression_items VALUES(?,?,?,?,?,?,?)').run(randomBytes(16).toString('hex'),packId,fileId,item.label,item.keywords.join('|'),'✨',position++);
      }
     }

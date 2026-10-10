@@ -14,7 +14,7 @@ test('startup and subsequent uploads retain old pack, avatar, message and foreig
   app=createApp({database,uploads});await listen(app);
   app.db.prepare('INSERT INTO users(id,username,name,phone) VALUES(1,?,?,?)').run('cleanup','Cleanup','+79001234567');
   const old=Date.now()-2*86400000,ids={};let counter=1;
-  function attachment(name,created=old){const id=(counter++).toString(16).padStart(48,'0');ids[name]=id;const bytes=Buffer.from('original '+name);writeFileSync(join(uploads,id),bytes);app.db.prepare('INSERT INTO attachments VALUES(?,?,?,?,?,?)').run(id,1,name,'image/png',bytes.length,created);return id;}
+  function attachment(name,created=old){const id=(counter++).toString(16).padStart(48,'0');ids[name]=id;const bytes=Buffer.from('original '+name);writeFileSync(join(uploads,id),bytes);app.db.prepare('INSERT INTO attachments(id,owner_id,name,mime,size,created_at) VALUES(?,?,?,?,?,?)').run(id,1,name,'image/png',bytes.length,created);return id;}
   for(const [index,kind] of ['emoji','sticker','gif'].entries()){
    const pack=(index+1).toString(16).padStart(32,'0'),item=(index+10).toString(16).padStart(32,'0');
    app.db.prepare('INSERT INTO expression_packs(id,owner_id,title,kind,public,created) VALUES(?,1,?,?,1,?)').run(pack,kind,kind,old);

@@ -33,7 +33,7 @@ export function usernames({db,body,json,userById,publish,uploads,publicBase=proc
  }
  async function publicHandle(req,res,url){const m=url.pathname.match(/^\/api\/public\/users\/([a-zA-Z0-9_]{4,32})(\/avatar)?$/);if(!m||req.method!=='GET')return false;
  const row=db.prepare('SELECT id,avatar_id,avatar_hidden FROM users WHERE username_normalized=?').get(m[1].toLowerCase());if(!row)throw fail(404,'Профиль не найден');
- if(m[2]){if(row.avatar_hidden||!row.avatar_id)throw fail(404,'Фото не найдено');const file=db.prepare('SELECT mime FROM attachments WHERE id=?').get(row.avatar_id);if(!file||!['image/png','image/jpeg','image/webp'].includes(file.mime))throw fail(404,'Фото не найдено');const data=readFileSync(join(uploads,row.avatar_id));res.writeHead(200,{'Content-Type':file.mime,'Content-Length':data.length});res.end(data);}
+ if(m[2]){if(row.avatar_hidden||!row.avatar_id)throw fail(404,'Фото не найдено');const file=db.prepare('SELECT mime,admin_blocked FROM attachments WHERE id=?').get(row.avatar_id);if(!file||file.admin_blocked||!['image/png','image/jpeg','image/webp'].includes(file.mime))throw fail(404,'Фото не найдено');const data=readFileSync(join(uploads,row.avatar_id));res.writeHead(200,{'Content-Type':file.mime,'Content-Length':data.length});res.end(data);}
  else{const user=decorate(userById(row.id));user.avatar_url=row.avatar_hidden||!row.avatar_id?null:`/api/public/users/${user.username}/avatar`;delete user.online;json(res,200,user);}return true;
  }
  async function handle(req,res,url,uid){const path=url.pathname;

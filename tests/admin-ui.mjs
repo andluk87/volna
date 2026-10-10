@@ -1,0 +1,29 @@
+import assert from 'node:assert/strict';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createServer} from 'node:net';
+import {chromium} from '../client/node_modules/playwright/index.mjs';
+import {createApp} from '../server/index.mjs';
+const reservation=createServer();await new Promise(r=>reservation.listen(0,'127.0.0.1',r));const port=reservation.address().port;await new Promise(r=>reservation.close(r));
+const dir=mkdtempSync(join(tmpdir(),'volna-admin-ui-')),errors=[],origin='http://127.0.0.1:'+port;
+const app=createApp({database:join(dir,'volna.db'),adminOptions:{origin,cookieSecure:false,smsReady:true,codeGenerator:()=> '123456',sender:async()=>({id:'test-only'}),serviceStatus:async()=>({available:true,ready:true,state:'ready',model:'base'})}});
+const user=Number(app.db.prepare('INSERT INTO users(username,name,phone) VALUES(?,?,?)').run('qa_user','Проверочный пользователь','+79000000001').lastInsertRowid);
+const chat=Number(app.db.prepare("INSERT INTO chats(pair,kind,title,created_by) VALUES('qa:admin','group','Команда Волны',?)").run(user).lastInsertRowid);app.db.prepare("INSERT INTO members(chat_id,user_id,role) VALUES(?,?,'owner')").run(chat,user);
+app.db.prepare('INSERT INTO messages(chat_id,sender_id,text,client_id,created_at) VALUES(?,?,?,?,?)').run(chat,user,'<img src=x onerror="window.xss=true">','qa-admin-message-0001',new Date().toISOString());
+await new Promise(r=>app.server.listen(0,'127.0.0.1',r));await new Promise(r=>app.adminServer.listen(port,'127.0.0.1',r));
+const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});
+try{
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error'&&/Content Security Policy|Refused to/.test(m.text()))errors.push(m.text());});page.on('dialog',()=>errors.push('Native browser confirmation opened'));
+ await page.goto(origin);await page.locator('#phone').fill('89681411241');await page.getByRole('button',{name:'Получить SMS',exact:true}).click();await page.locator('#code').fill('123456');await page.getByRole('button',{name:'Войти',exact:true}).click();await page.getByRole('heading',{name:'Обзор',exact:true}).waitFor();await page.locator('.metrics').waitFor();
+ await page.screenshot({path:'/tmp/volna-admin-overview.png',fullPage:true});
+ await page.getByRole('button',{name:'Пользователи',exact:true}).click();await page.getByRole('button',{name:'Блокировать',exact:true}).click();assert.equal(await page.locator('dialog[open]').count(),1);await page.locator('dialog textarea[name=reason]').fill('Проверка интерфейса');await page.locator('dialog').getByRole('button',{name:'Подтвердить',exact:true}).click();await page.getByRole('button',{name:'Разблокировать',exact:true}).waitFor();assert.equal(app.db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(user).admin_blocked,1);
+ await page.getByRole('button',{name:'Профиль',exact:true}).click();await page.locator('dialog input[name=name]').fill('Новое имя');await page.locator('dialog textarea[name=reason]').fill('Редактирование');await page.locator('dialog').getByRole('button',{name:'Сохранить',exact:true}).click();await page.getByText('Новое имя',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Разблокировать',exact:true}).click();await page.locator('dialog textarea').fill('Разблокировка');await page.locator('dialog').getByRole('button',{name:'Подтвердить',exact:true}).click();await page.getByRole('button',{name:'Блокировать',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Чаты и участники',exact:true}).click();await page.getByRole('button',{name:'Подробнее',exact:true}).click();await page.locator('dialog input[name=title]').fill('Новое название');await page.locator('dialog textarea[name=reason]').fill('Переименование');await page.locator('dialog').getByRole('button',{name:'Сохранить',exact:true}).click();await page.getByText('Новое название',{exact:true}).waitFor();
+ for(const title of ['Сообщения','Файлы','Эмодзи и стикеры','SMS и вход','Устройства','Звонки','Настройки','Объявление','Резервные копии','Журнал действий','Сеансы администратора']){await page.getByRole('navigation').getByRole('button',{name:title,exact:true}).click();await page.getByRole('heading',{name:title,exact:true}).waitFor();await page.locator('#content .loading').waitFor({state:'detached'});assert.equal(await page.locator('#content > .error').count(),0,title);}
+ assert.equal(await page.evaluate(()=>!!window.xss),false);
+ await page.getByRole('button',{name:'Настройки',exact:true}).click();await page.locator('#settings-form').waitFor();await page.locator('input[name=registration_enabled]').uncheck();await page.getByRole('button',{name:'Сохранить настройки',exact:true}).click();await page.locator('dialog textarea').fill('Отключаем регистрацию');await page.locator('dialog').getByRole('button',{name:'Подтвердить',exact:true}).click();await page.locator('dialog').waitFor({state:'hidden'});assert.equal(JSON.parse(app.db.prepare('SELECT value FROM admin_config').get().value).registration_enabled,false);
+ await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Обзор',exact:true}).click();await page.locator('.metrics').waitFor();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:'/tmp/volna-admin-mobile.png',fullPage:true});
+ assert.deepEqual(errors,[]);await page.getByRole('button',{name:'Выйти',exact:true}).click();await page.locator('#login-form').waitFor();console.log('Admin UI: SMS login, own confirmations, block/edit user, edit chat, all sections, settings, XSS escaping, mobile layout, logout passed.');
+}finally{await browser.close();await app.close();rmSync(dir,{recursive:true,force:true});}

@@ -1,0 +1,8 @@
+# Local access without the HTTPS gateway. Use an SSH tunnel for remote access.
+services:
+  server:
+    ports:
+      - "127.0.0.1:8998:8998"
+    environment:
+      ADMIN_PUBLIC_URL: http://localhost:8998
+      AUTH_TRUST_PROXY: "0"

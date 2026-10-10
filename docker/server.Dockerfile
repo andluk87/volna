@@ -7,5 +7,5 @@ COPY --chown=node:node server ./server
 COPY --chown=node:node shared ./shared
 RUN mkdir -p /data && chown node:node /data
 USER node
-EXPOSE 3000
+EXPOSE 3000 8998
 CMD ["node", "server/index.mjs"]

@@ -47,9 +47,9 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
    const rate=attempts.get(uid)||{start:clock(),count:0};attempts.set(uid,rate);if(++rate.count>10)throw fail(429,'Не более 10 попыток звонка в минуту');
    if(!Number.isSafeInteger(data.chat_id)||data.chat_id<1)throw fail(400,'Некорректный чат');
    if(data.video!==undefined&&typeof data.video!=='boolean')throw fail(400,'Некорректный тип звонка');
-   const chat=db.prepare("SELECT c.id FROM chats c JOIN members m ON c.id=m.chat_id WHERE c.id=? AND c.kind='direct' AND m.user_id=?").get(Number(data.chat_id),uid);
+   const chat=db.prepare("SELECT c.id FROM chats c JOIN members m ON c.id=m.chat_id WHERE c.id=? AND c.kind='direct' AND c.admin_deleted=0 AND c.admin_locked=0 AND m.user_id=?").get(Number(data.chat_id),uid);
    if(!chat)throw fail(404,'Личный чат не найден');
-   const peer=db.prepare('SELECT user_id FROM members WHERE chat_id=? AND user_id<>?').get(chat.id,uid)?.user_id;if(!peer)throw fail(404,'Собеседник не найден');
+   const peer=db.prepare('SELECT user_id FROM members WHERE chat_id=? AND user_id<>?').get(chat.id,uid)?.user_id;if(!peer||db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(peer)?.admin_blocked)throw fail(404,'Собеседник недоступен');
    if([...active.values()].some(c=>[c.caller,c.callee].some(id=>id===uid||id===peer)))throw fail(409,'Вы или собеседник уже участвуете в звонке');
    if(active.size>=100)throw fail(503,'Сервер звонков занят');
    const c={id:randomBytes(16).toString('hex'),caller:uid,callee:peer,chat:chat.id,callerDevice:d,calleeDevice:null,status:'preparing',video:!!data.video,created:clock(),callerSeen:clock(),calleeSeen:clock()};
@@ -81,5 +81,5 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   db.prepare('UPDATE call_history SET status=? WHERE id=?').run(c.status,c.id);
   json(res,200,view(c,uid,d));return true;
  }
- return {handle,close:()=>{clearInterval(timer);for(const c of active.values())finish(c,'interrupted');}};
+ return {handle,list:()=>[...active.values()].map(c=>({id:c.id,chat_id:c.chat,caller:c.caller,callee:c.callee,status:c.status,created:c.created,video:!!c.video})),terminate:id=>{const c=active.get(id);if(!c)throw fail(404,'Активный звонок не найден');finish(c,'interrupted');},close:()=>{clearInterval(timer);for(const c of active.values())finish(c,'interrupted');}};
 }

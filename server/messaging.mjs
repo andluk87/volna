@@ -1,11 +1,11 @@
 import {interactivePayload} from '../shared/interactive.mjs';
+import {readAdminSettings} from './admin-config.mjs';
 import {isEmoji} from '../shared/emoji-text.mjs';
 import {mkdirSync, writeFileSync, readFileSync, unlinkSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 const error=(status,message)=>Object.assign(new Error(message),{status});
 const emojis=['👍','❤️','😂','🔥','🎉','😢','👏','😍','🤔','😮','🙏','💯','👎','🥰','🤣','😎','😭','🤝','💪','👋','✨','💙','😡','🤗'];
-const maxFile=20*1024*1024, quota=200*1024*1024;
 export function messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions=()=>null}) {
   mkdirSync(uploads,{recursive:true});
   // Additive migration: safe for the original 0.1 database and repeated starts.
@@ -25,9 +25,9 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   db.function('casefold',{deterministic:true},value=>String(value||'').toLocaleLowerCase('ru-RU'));
   const permission=(chat,uid)=>{
     member(chat,uid);
-    return db.prepare('SELECT c.kind,c.posting_policy,c.topic_closed,m.role FROM chats c JOIN members m ON m.chat_id=c.id WHERE c.id=? AND m.user_id=?').get(chat,uid);
+    return db.prepare('SELECT c.kind,c.posting_policy,c.topic_closed,c.admin_locked,COALESCE((SELECT admin_locked FROM chats WHERE id=c.parent_id),0) AS parent_locked,m.role FROM chats c JOIN members m ON m.chat_id=c.id WHERE c.id=? AND m.user_id=?').get(chat,uid);
   };
-  const canPublish=(chat,uid)=>{const c=permission(chat,uid);if(c.topic_closed)throw error(403,'Подтема закрыта');if((c.kind==='channel'||c.kind==='group'&&c.posting_policy==='admins')&&!['admin','owner'].includes(c.role))throw error(403,'Публиковать могут только администраторы');return c;};
+  const canPublish=(chat,uid)=>{const c=permission(chat,uid);if(c.admin_locked||c.parent_locked)throw error(403,'Отправка сообщений в этом чате ограничена администратором');if(c.topic_closed)throw error(403,'Подтема закрыта');if((c.kind==='channel'||c.kind==='group'&&c.posting_policy==='admins')&&!['admin','owner'].includes(c.role))throw error(403,'Публиковать могут только администраторы');return c;};
   const canModerate=(chat,uid)=>{const c=permission(chat,uid);return ['group','channel'].includes(c.kind)&&['admin','owner'].includes(c.role);};
   const get=id=>db.prepare('SELECT * FROM messages WHERE id=?').get(id);
   const hydrate=row=>{
@@ -61,7 +61,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(text.length>4000||(!text&&!attachment))throw error(400,'Введите текст до 4000 символов или прикрепите файл');
     if(reply){const quoted=get(reply);if(!quoted||quoted.chat_id!==chat||quoted.deleted_at)throw error(400,'Сообщение для ответа недоступно');}
     if(attachment){const file=db.prepare('SELECT * FROM attachments WHERE id=?').get(attachment);
-      if(!file)throw error(404,'Файл не найден');
+      if(!file||file.admin_blocked)throw error(404,'Файл не найден');
       if(!source&&!expression&&(file.owner_id!==uid||db.prepare('SELECT 1 FROM messages WHERE attachment_id=?').get(attachment)))throw error(403,'Файл уже отправлен или принадлежит другому пользователю');
     }
     const result=db.prepare('INSERT INTO messages(chat_id,sender_id,text,client_id,created_at,attachment_id,reply_to,forwarded_name,forward_source,expression_id) VALUES(?,?,?,?,?,?,?,?,?,?)').run(chat,uid,text,cid,new Date().toISOString(),attachment,reply,data.forwarded_name||null,source,expression?.id||data.forward_expression_id||null);
@@ -106,7 +106,8 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     }
     if(path==='/api/uploads'&&method==='POST'){
       if(uploadCount>=4)throw error(429,'Загрузки заняты, попробуйте ещё раз');
-      const size=Number(req.headers['content-length']);if(size>maxFile)throw error(413,'Максимальный размер файла — 20 МБ');
+      const settings=readAdminSettings(db),maxFile=settings.upload_max_mb*1024*1024;
+      const size=Number(req.headers['content-length']);if(size>maxFile)throw error(413,`Максимальный размер файла — ${settings.upload_max_mb} МБ`);
       let name;try{name=decodeURIComponent(String(req.headers['x-file-name']||'file'));}catch{throw error(400,'Некорректное имя файла');}
       name=name.replace(/[\x00-\x1f\x7f/\\]/g,'_').slice(0,180)||'file';
       const given=String(req.headers['content-type']||'').split(';')[0];
@@ -114,13 +115,15 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       uploadCount++;
       try{
         let total=0;const chunks=[];
-        for await(const chunk of req){total+=chunk.length;if(total>maxFile)throw error(413,'Максимальный размер файла — 20 МБ');chunks.push(chunk);}
+        for await(const chunk of req){total+=chunk.length;if(total>maxFile)throw error(413,`Максимальный размер файла — ${settings.upload_max_mb} МБ`);chunks.push(chunk);}
         if(!total)throw error(400,'Файл пуст');
         cleanupUnused();
+        if(db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(uid)?.admin_blocked)throw error(403,'Аккаунт заблокирован администратором');
+        const currentSettings=readAdminSettings(db);if(currentSettings.maintenance)throw error(503,currentSettings.maintenance_message);if(total>currentSettings.upload_max_mb*1024*1024)throw error(413,'Превышен новый лимит размера файла');
         const used=db.prepare('SELECT COALESCE(SUM(size),0) AS size FROM attachments WHERE owner_id=?').get(uid).size;
-        if(used+total>quota)throw error(413,'Лимит хранилища аккаунта — 200 МБ');
+        if(used+total>currentSettings.user_storage_mb*1024*1024)throw error(413,`Лимит хранилища аккаунта — ${settings.user_storage_mb} МБ`);
         const id=randomBytes(24).toString('hex');writeFileSync(join(uploads,id),Buffer.concat(chunks),{flag:'wx',mode:0o600});
-        try{db.prepare('INSERT INTO attachments VALUES(?,?,?,?,?,?)').run(id,uid,name,mime,total,Date.now());}
+        try{db.prepare('INSERT INTO attachments(id,owner_id,name,mime,size,created_at) VALUES(?,?,?,?,?,?)').run(id,uid,name,mime,total,Date.now());}
         catch(e){unlinkSync(join(uploads,id));throw e;}
         json(res,201,{id,name,mime,size:total});return true;
       }finally{uploadCount--;}
@@ -128,7 +131,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     const discard=path.match(/^\/api\/uploads\/([a-f0-9]{48})\/discard$/);
     if(discard&&method==='POST'){
       const file=db.prepare('SELECT * FROM attachments WHERE id=? AND owner_id=?').get(discard[1],uid);
-      if(!file)throw error(404,'Файл не найден');
+      if(!file||file.admin_blocked)throw error(404,'Файл не найден');
       if(db.prepare('SELECT 1 FROM messages WHERE attachment_id=?').get(file.id)||db.prepare('SELECT 1 FROM users WHERE avatar_id=?').get(file.id)||expressions()?.fileUsed(file.id))throw error(409,'Файл уже используется');
       try{unlinkSync(join(uploads,file.id));}catch(e){if(e.code!=='ENOENT')throw e;}
       db.prepare('DELETE FROM attachments WHERE id=?').run(file.id);json(res,200,{ok:true});return true;
@@ -298,6 +301,6 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     }
     return false;
   };
-  handle.cleanupUnused=cleanupUnused;
+  handle.cleanupUnused=cleanupUnused;handle.hydrate=hydrate;
   return handle;
 }
