@@ -56,6 +56,23 @@ manifest = {
 }
 Path('client/public/download/volna-android-version.json').write_text(json.dumps(manifest, separators=(',', ':')) + '\n')
 PY
+# Whitelist the verified hash of the APK built with this installation's signing key.
+# Preserve older signing certificates until their installed APKs are retired.
+python3 - <<'PYHASH'
+import re
+from pathlib import Path
+value = Path('artifacts/Volna-sms-app-hash.txt').read_text().strip()
+if not re.fullmatch(r'[A-Za-z0-9+/]{11}', value):
+    raise SystemExit('Missing or invalid verified SMS Retriever hash.')
+p = Path('.env')
+s = p.read_text()
+entries = re.findall(r'^ANDROID_SMS_APP_HASHES=(.*)$', s, re.M)
+hashes = [h.strip() for entry in entries for h in entry.strip().strip('"').strip("'").split(',') if re.fullmatch(r'[A-Za-z0-9+/]{11}', h.strip())]
+if value not in hashes:
+    hashes.append(value)
+s = re.sub(r'^ANDROID_SMS_APP_HASHES=.*\n?', '', s, flags=re.M)
+p.write_text(s.rstrip() + '\nANDROID_SMS_APP_HASHES=' + ','.join(dict.fromkeys(hashes)) + '\n')
+PYHASH
 install -m 0644 "$apk" client/public/download/volna-android.apk
 if [ "${VOLNA_BUILD_PUBLISH_ONLY:-0}" = 1 ]; then exit 0; fi
 sh scripts/update.sh

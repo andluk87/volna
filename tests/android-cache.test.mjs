@@ -16,6 +16,11 @@ test('Android builder reuses SDK, tries cached dependencies, and only retries mi
   const versionName=source.match(/volnaVersionName\s*=\s*"([^"]+)"/)[1],versionCode=Number(source.match(/volnaVersionCode\s*=\s*([0-9_]+)/)[1].replaceAll('_',''));
   file(join(dir,'app/build.gradle.kts'),source);
   file(join(dir,'scripts/check-apk-version.py'),readFileSync('android-native/scripts/check-apk-version.py','utf8'));
+  file(join(dir,'scripts/sms-app-hash.py'),readFileSync('android-native/scripts/sms-app-hash.py','utf8'));
+  file(join(sdk,'build-tools/36.0.0/apksigner'),`#!/bin/sh
+if [ "$TEST_RESULT" = bad-signature ]; then exit 1; fi
+printf '%s\\n' '-----BEGIN CERTIFICATE-----' 'AQID' '-----END CERTIFICATE-----'
+`,0o755);
   file(join(sdk,'build-tools/36.0.0/aapt2'),`#!/bin/sh
 test "$1" = dump && test -s "$3" || exit 90
 if [ "$2" = badging ]; then
@@ -58,6 +63,7 @@ printf 'apk-fixture' > app/build/outputs/apk/debug/app-debug.apk
   const script=resolve('client/scripts/docker-android-build.sh');
   function run(mode,result){writeFileSync(log,'');return spawnSync('sh',[script],{cwd:dir,encoding:'utf8',env:{...process.env,PATH:bin+':'+process.env.PATH,ANDROID_HOME:sdk,ANDROID_BUILD_OFFLINE:mode,ANDROID_DOWNLOAD_CACHE:join(dir,'downloads'),ANDROID_OUTPUT_DIR:join(dir,'out'),TMPDIR:join(dir,'tmp'),TEST_RESULT:result,TEST_COMMANDS:log}});}
   let result=run('auto','cached');assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/no SDK Manager network request/);assert.match(result.stdout,/completed offline/);assert.equal(readFileSync(log,'utf8').trim().split('\n').length,1);assert.match(readFileSync(log,'utf8'),/--offline/);assert.equal(readFileSync(join(dir,'out/Volna-debug.apk'),'utf8'),'apk-fixture');
+  assert.match(readFileSync(join(dir,'out/Volna-sms-app-hash.txt'),'utf8'),/^[A-Za-z0-9+/]{11}\n$/);
   assert.match(readFileSync(log,'utf8'),/:app:testDebugUnitTest :app:assembleDebug/);
   result=run('auto','missing');assert.equal(result.status,0,result.stderr);let commands=readFileSync(log,'utf8').trim().split('\n');assert.equal(commands.length,2);assert.match(commands[0],/--offline/);assert.doesNotMatch(commands[1],/--offline/);
   result=run('auto','plugin');assert.equal(result.status,0,result.stderr);commands=readFileSync(log,'utf8').trim().split('\n');assert.equal(commands.length,2);assert.match(commands[0],/--offline/);assert.doesNotMatch(commands[1],/--offline/);assert.match(result.stdout,/including Gradle plugin resolution/);
@@ -69,7 +75,7 @@ printf 'apk-fixture' > app/build/outputs/apk/debug/app-debug.apk
   result=run('0','cached');assert.equal(result.status,0);assert.doesNotMatch(readFileSync(log,'utf8'),/--offline/);
   assert.match(result.stdout,/Verified Android network permissions in compiled APK/);
   assert.match(result.stdout,/Verified compiled Android version: Volna/);
-  for(const failure of ['no-network','no-internet','declared-only','network-prefix','no-full-screen','apk-error','no-emoji','stale-apk','wrong-package','badging-error']){
+  for(const failure of ['no-network','no-internet','declared-only','network-prefix','no-full-screen','apk-error','no-emoji','stale-apk','wrong-package','badging-error','bad-signature']){
     rmSync(join(dir,'out'),{recursive:true,force:true});result=run('auto',failure);assert.notEqual(result.status,0,failure);assert.equal(readFileSync(log,'utf8').trim().split('\n').length,1);assert.throws(()=>readFileSync(join(dir,'out/Volna-debug.apk')));
     if(['no-network','no-internet','declared-only','network-prefix','no-full-screen'].includes(failure))assert.match(result.stderr,/missing required permission/);
     if(['stale-apk','wrong-package'].includes(failure))assert.match(result.stderr,/does not match the sources/);

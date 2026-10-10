@@ -13,5 +13,6 @@ class NativeSmsPhoneTest {
     }
     @Test(expected = IllegalArgumentException::class) fun duplicatePrefixIsRejected() { nativeSmsPhone("+7", "779001234567") }
     @Test(expected = IllegalArgumentException::class) fun shortPhoneIsRejected() { nativeSmsPhone("+7", "123456") }
+    @Test(expected = IllegalArgumentException::class) fun invalidCountryLengthIsRejected() { nativeSmsPhone("+1", "202555012345") }
     @Test(expected = IllegalArgumentException::class) fun misplacedPlusIsRejected() { nativeSmsPhone("+7", "900+1234567") }
 }

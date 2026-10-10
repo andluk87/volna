@@ -112,7 +112,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
       const url = new URL(req.url, 'http://local'); const path = url.pathname; const method = req.method;
       if (path === '/api/health' && method === 'GET') return json(res, 200, { ok: true });
       if (['/api/register','/api/login','/api/password'].includes(path) || path.startsWith('/api/auth/telegram/')) throw fail(404,'Этот способ входа удалён');
-      if (path.startsWith('/api/auth/')) { if(await phoneService.handle(req,res,url))return; }
+      if (path.startsWith('/api/auth/') || path.startsWith('/api/v1/auth/otp/')) { if(await phoneService.handle(req,res,url))return; }
       if (url.pathname.startsWith("/api/public/users/")) { limit("public:"+req.socket.remoteAddress,120); if(await usernameService.publicHandle(req,res,url))return; }
       const session = auth(req), uid = session.user_id;
       adminService.guard(req,url,session);
@@ -197,7 +197,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
         }
       }
       throw fail(404, 'Не найдено');
-    } catch(e) { if (!e.status) console.error(e); if (!res.headersSent) json(res, e.status || 500, { error: e.status ? e.message : 'Ошибка сервера', ...(e.status&&e.suggestions?{suggestions:e.suggestions}:{}) }); else res.end(); }
+    } catch(e) { if (!e.status) console.error(e); if (!res.headersSent) json(res, e.status || 500, { error: e.status ? e.message : 'Ошибка сервера', ...(e.status&&e.code?{code:e.code}:{}),...(e.status&&e.retry_at?{retry_at:e.retry_at,server_time:Date.now()}:{}),...(e.status&&e.suggestions?{suggestions:e.suggestions}:{}) }); else res.end(); }
   });
   server.requestTimeout = 120000; server.headersTimeout = 15000;
   return { server, adminServer:adminService.server, db, push:pushService, close: async () => { await adminService.close();callService.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close(); } };

@@ -13,5 +13,7 @@ internal fun nativeSmsPhone(country: String, raw: String): String {
     }
     require(number.matches(Regex("\\+[1-9][0-9]{7,14}"))) { "Укажите полный номер телефона с кодом страны" }
     require(!number.startsWith("+7") || number.length == 12) { "Для +7 укажите 10 цифр номера после кода страны" }
+    val util = com.google.i18n.phonenumbers.PhoneNumberUtil.getInstance()
+    require(runCatching { util.isPossibleNumberWithReason(util.parse(number, null)) == com.google.i18n.phonenumbers.PhoneNumberUtil.ValidationResult.IS_POSSIBLE }.getOrDefault(false)) { "Проверьте длину номера для выбранной страны" }
     return number
 }

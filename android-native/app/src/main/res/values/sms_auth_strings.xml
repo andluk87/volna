@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sms_auth_change_number">Изменить номер</string>
+    <string name="sms_auth_phone_title">Ваш номер телефона</string>
+    <string name="sms_auth_code_title">Проверка телефона</string>
+    <string name="sms_auth_phone_description">Выберите страну и введите номер телефона</string>
+    <string name="sms_auth_sent_description">Мы отправили SMS с кодом подтверждения на номер %1$s</string>
+    <string name="sms_auth_country">Страна</string>
+    <string name="sms_auth_select_country">Выбрать страну</string>
+    <string name="sms_auth_dial_code">Код</string>
+    <string name="sms_auth_phone_number">Номер телефона</string>
+    <string name="sms_auth_continue">Продолжить</string>
+    <string name="sms_auth_retry_seconds">Повтор через %1$d с</string>
+    <string name="sms_auth_otp_accessibility">Код подтверждения, шесть цифр</string>
+    <string name="sms_auth_verifying">Проверяем код…</string>
+    <string name="sms_auth_received">Код получен</string>
+    <string name="sms_auth_request_new">Запросите новый код</string>
+    <string name="sms_auth_waiting">Ожидаем SMS с кодом…</string>
+    <string name="sms_auth_manual">Введите код из SMS</string>
+    <string name="sms_auth_consent_description">Android предложит разрешить получение одного SMS. Также можно ввести код вручную.</string>
+    <string name="sms_auth_retry_verify">Повторить проверку</string>
+    <string name="sms_auth_resend_seconds">Отправить повторно через %1$d с</string>
+    <string name="sms_auth_resend">Отправить код повторно</string>
+    <string name="sms_auth_privacy">Входя в Волну, вы подтверждаете свой номер телефона. SMS-код никому не сообщайте.</string>
+    <string name="sms_auth_choose_country">Выберите страну</string>
+    <string name="sms_auth_country_search">Поиск страны или кода</string>
+    <string name="sms_auth_close">Закрыть</string>
+    <string name="sms_auth_expired">Код истёк. Запросите новый.</string>
+    <string name="sms_auth_offline">Нет подключения к интернету. Проверьте сеть и повторите.</string>
+    <string name="sms_auth_rate_limited">Слишком много попыток. Попробуйте позже.</string>
+    <string name="sms_auth_request_failed">Не удалось выполнить запрос. Повторите позже.</string>
+</resources>

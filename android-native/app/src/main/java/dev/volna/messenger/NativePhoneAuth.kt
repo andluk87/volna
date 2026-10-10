@@ -34,62 +34,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 @Composable
-internal fun NativeSmsLogin(api: NativeApi, update: VolnaUpdate?, updateBusy: Boolean, updateStatus: String,
-    onUpdate: () -> Unit, onSignedIn: (VolnaSession) -> Unit) {
-    var country by remember { mutableStateOf("+7") }; var phone by remember { mutableStateOf("") }
-    var requestedPhone by remember { mutableStateOf("") }
-    var challenge by remember { mutableStateOf("") }; var code by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }
-    var resendAt by remember { mutableStateOf(0L) }; var expiresAt by remember { mutableStateOf(0L) }
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }; var countries by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(challenge) { while (challenge.isNotBlank()) { now = System.currentTimeMillis(); delay(1000) } }
-    fun send() {
-        if (busy) return
-        scope.launch {
-            busy = true; error = ""
-            try {
-                val number = nativeSmsPhone(country, phone)
-                val value = withContext(Dispatchers.IO) { api.smsRequest(number) }
-                requestedPhone = number
-                challenge = value.getString("sms_session_id"); code = ""
-                now = System.currentTimeMillis(); resendAt = now + value.getLong("resend_after") * 1000; expiresAt = now + value.getLong("expires_in") * 1000
-            } catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось получить SMS" }
-            finally { busy = false }
-        }
-    }
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime).verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(24.dp)); NativeText("Волна", fontSize = 32.sp, color = Accent)
-        NativeText(if (challenge.isBlank()) "Вход по номеру телефона" else "Код из SMS", fontSize = 22.sp)
-        if (challenge.isBlank()) {
-            NativeText("Первый вход и регистрация — в Android. Web и Windows подключаются по QR с этого телефона.", color = Muted)
-            Box { TextButton(onClick = { countries = true }, enabled = !busy) { NativeText("Код страны: $country") }
-                DropdownMenu(countries, { countries = false }) {
-                    listOf("+7" to "Россия / Казахстан", "+375" to "Беларусь", "+380" to "Украина", "+998" to "Узбекистан", "+374" to "Армения", "+995" to "Грузия", "+49" to "Германия", "+1" to "США / Канада").forEach { (prefix,label) -> DropdownMenuItem(text = { NativeText("$prefix · $label") }, onClick = { country = prefix; countries = false }) }
-                }
-            }
-            NativeOutlinedTextField(country, { input -> country = "+" + input.filter { it.isDigit() }.take(3) }, label = { NativeText("Код страны") }, singleLine = true, enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
-            NativeOutlinedTextField(phone, { phone = it.filter { c -> c in "+0123456789 ()-" }.take(40) }, Modifier.fillMaxWidth(), label = { NativeText("Номер телефона") }, singleLine = true, enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
-            Button(onClick = ::send, enabled = !busy && phone.length >= 6 && country.length > 1, modifier = Modifier.fillMaxWidth()) { NativeText(if (busy) "Отправляем…" else "Получить код") }
-        } else {
-            NativeText("Код запрошен для $requestedPhone. Доставка SMS может занять некоторое время.", color = Muted)
-            NativeOutlinedTextField(code, { code = it.filter { c -> c.isDigit() || c == '-' }.take(7) }, Modifier.fillMaxWidth(), label = { NativeText("123-456") }, singleLine = true, enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-            Button(enabled = !busy && code.filter { it.isDigit() }.length == 6 && now < expiresAt, modifier = Modifier.fillMaxWidth(), onClick = { scope.launch {
-                busy = true; error = ""
-                try { val session = withContext(Dispatchers.IO) { api.smsVerify(challenge, code) }; NativeCredentials.store(session); onSignedIn(session) }
-                catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось войти" }
-                finally { busy = false }
-            } }) { NativeText(if (busy) "Проверяем…" else "Войти") }
-            if (now >= expiresAt) NativeText("Код истёк. Запросите новый.", color = Muted)
-            TextButton(onClick = ::send, enabled = !busy && now >= resendAt) { NativeText(if (now >= resendAt) "Отправить код повторно" else "Повтор через ${(resendAt-now+999)/1000} с") }
-            TextButton(onClick = { if (!busy) { challenge = ""; code = ""; error = "" } }) { NativeText("Изменить номер") }
-        }
-        if (error.isNotBlank()) NativeText(error, color = MaterialTheme.colorScheme.error)
-        if (update != null) UpdateBanner(update, updateBusy, updateStatus, onUpdate)
-    }
-}
-
-@Composable
 @androidx.annotation.OptIn(markerClass = [androidx.camera.core.ExperimentalGetImage::class])
 internal fun NativeQrScanner(token: String, api: NativeApi, initialQr: String = "", onDismiss: () -> Unit) {
     val context = LocalContext.current; val owner = context as? LifecycleOwner; val scope = rememberCoroutineScope()

@@ -60,7 +60,7 @@ data class VolnaMessage(
     val emojiEntities: List<NativeEmojiEntity> = emptyList()
 )
 data class VolnaSession(val token: String, val user: VolnaUser, val refreshToken: String = "")
-internal class NativeApiException(val status: Int, message: String) : IllegalStateException(message)
+internal class NativeApiException(val status: Int, message: String, val errorCode: String = "", val retryAt: Long = 0, val serverTime: Long = 0) : IllegalStateException(message)
 
 class NativeApi(baseUrl: String) {
     private val base = baseUrl.trimEnd('/')
@@ -105,11 +105,17 @@ class NativeApi(baseUrl: String) {
         response.use {
             val text = it.body?.string().orEmpty()
             val value = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
-            if (!it.isSuccessful) throw NativeApiException(it.code, value.optString("error").ifBlank { "Ошибка сервера (${it.code})" })
+            if (!it.isSuccessful) throw NativeApiException(it.code, value.optString("error").ifBlank { "Ошибка сервера (${it.code})" }, value.optString("code"), value.optLong("retry_at"), value.optLong("server_time"))
             return value
         }
     }
 
+    fun otpConfig(): JSONObject = call("/auth/config")
+    fun otpStart(phone: String, requestId: String, appHash: String): JSONObject = call("/v1/auth/otp/start", "POST", data = JSONObject().put("phone_e164",phone).put("platform","android").put("locale","ru").put("request_id",requestId).put("app_hash",appHash))
+    fun otpResend(id: String, requestId: String): JSONObject = call("/v1/auth/otp/resend", "POST", data = JSONObject().put("challenge_id",id).put("request_id",requestId))
+    fun otpStatus(id: String): JSONObject = call("/v1/auth/otp/status", "POST", data = JSONObject().put("challenge_id",id))
+    fun otpCancel(id: String) { call("/v1/auth/otp/cancel", "POST", data = JSONObject().put("challenge_id",id)) }
+    fun otpVerify(id: String, code: String): VolnaSession = credentials(call("/v1/auth/otp/verify", "POST", data = JSONObject().put("challenge_id",id).put("code",code)))
     fun smsRequest(phone: String): JSONObject = call("/auth/sms/request", "POST", data = JSONObject().put("phone", phone))
     fun smsVerify(id: String, code: String): VolnaSession = credentials(call("/auth/sms/verify", "POST", data = JSONObject().put("sms_session_id", id).put("code", code)))
     fun qrScan(token: String, qr: String): JSONObject = call("/auth/qr/scan", "POST", token, JSONObject().put("qr_text", qr))

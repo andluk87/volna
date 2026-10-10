@@ -67,4 +67,9 @@ echo 'Verified Android network permissions in compiled APK.'
 python3 scripts/check-apk-version.py "$ANDROID_HOME/build-tools/36.0.0/aapt2" "$apk" app/build.gradle.kts
 unzip -l "$apk" | grep -Fq 'assets/emoji/NotoColorEmoji.ttf' || { echo 'APK is missing bundled emoji graphics.' >&2; exit 1; }
 unzip -l "$apk" | grep -Fq 'assets/emoji/catalog.json' || { echo 'APK is missing the emoji catalog.' >&2; exit 1; }
+
+# Derive the Retriever hash from the signature of the APK we actually export.
+sms_hash=$(python3 scripts/sms-app-hash.py --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner" "$apk")
 install -D -m 0644 "$apk" "${ANDROID_OUTPUT_DIR:-/out}/Volna-debug.apk"
+printf '%s\n' "$sms_hash" > "${ANDROID_OUTPUT_DIR:-/out}/Volna-sms-app-hash.txt"
+echo 'Verified APK SMS Retriever signing hash.'

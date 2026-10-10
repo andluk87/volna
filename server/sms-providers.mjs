@@ -1,13 +1,15 @@
+import {smsMessage} from './sms-message.mjs';
 import http from 'node:http';
 import https from 'node:https';
 import {readAdminSettings} from './admin-config.mjs';
 const fail=(status,message)=>Object.assign(Error(message),{status});
 export function notificoreSender({key=process.env.NOTIFICORE_API_KEY||'',originator=process.env.NOTIFICORE_ORIGINATOR||'',fetcher=fetch}={}){
-  return async ({phone,code,reference})=>{
+  return async (challenge)=>{
+    const {phone,code,reference}=challenge;
     if(!key||!originator)throw fail(503,'Отправка SMS пока не настроена');
     const response=await fetcher('https://api.notificore.ru/v1.0/sms/create',{
       method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'X-API-KEY':key,'Content-Type':'application/json'},
-      body:JSON.stringify({destination:'phone',originator,body:`${code.slice(0,3)}-${code.slice(3)} твоя волна`,msisdn:phone.slice(1),reference})});
+      body:JSON.stringify({destination:'phone',originator,body:smsMessage(challenge),msisdn:phone.slice(1),reference})});
     const text=await response.text();if(text.length>32000)throw fail(503,'SMS-провайдер временно недоступен');
     let data;try{data=JSON.parse(text);}catch{throw fail(503,'SMS-провайдер временно недоступен');}
     const result=data.result||data;
@@ -32,12 +34,13 @@ export function gatewayHttpRequest(url,{signal,headers}={}){
 }
 export function gatewayPhone(phone){if(typeof phone!=='string'||!/^\+7\d{10}$/.test(phone))throw fail(400,'SMS-шлюз поддерживает номера +7 и отправляет их в формате 89997776655');return '8'+phone.slice(2);}
 export function gatewaySender({url=process.env.SMS_GATEWAY_URL||'http://188.128.67.14:3825/default/en_US/send.html',user=process.env.SMS_GATEWAY_USER||'',password=process.env.SMS_GATEWAY_PASSWORD||'',line=process.env.SMS_GATEWAY_LINE||'4',fetcher=fetch}={}){
- return async({phone,code})=>{
+ return async(challenge)=>{
+  const {phone,code}=challenge;
   if(!user.trim()||!password||!/^\d{1,3}$/.test(String(line)))throw fail(503,'SMS-шлюз не настроен');
   let endpoint;try{endpoint=new URL(url);if(!['http:','https:'].includes(endpoint.protocol)||endpoint.username||endpoint.password||endpoint.search||endpoint.hash)throw Error();}catch{throw fail(503,'Некорректный адрес SMS-шлюза');}
   if(!/^\d{6}$/.test(code))throw fail(400,'Некорректный код SMS');
   const destination=gatewayPhone(phone);
-  endpoint.search=new URLSearchParams({u:user,p:password,l:String(line),n:destination,m:`${code.slice(0,3)}-${code.slice(3)} твоя волна`}).toString().replace(/\+/g,'%20');
+  endpoint.search=new URLSearchParams({u:user,p:password,l:String(line),n:destination,m:smsMessage(challenge)}).toString().replace(/\+/g,'%20');
   // No redirects or automatic retries: the GET request sends a real SMS and includes credentials.
   const response=await (fetcher===fetch?gatewayHttpRequest:fetcher)(endpoint.href,{method:'GET',redirect:'error',signal:AbortSignal.timeout(15000),headers:{Accept:'text/plain, text/html, application/json','Cache-Control':'no-store',Pragma:'no-cache'}});
   const raw=await response.text();if(raw.length>32000)throw fail(503,'SMS-шлюз вернул некорректный ответ');
