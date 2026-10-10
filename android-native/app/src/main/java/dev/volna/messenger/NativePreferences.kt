@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -40,24 +41,28 @@ import java.io.File
 import java.time.Instant
 import java.util.UUID
 
+internal val LocalNativeScreenTopInset = staticCompositionLocalOf { 0.dp }
+
 @Composable
-internal fun NativeFullScreen(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+internal fun NativeFullScreen(title: String, onDismiss: () -> Unit, overlayContent: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         NativeDialogSystemBars()
         val backdrop = remember { HazeState() }
-        CompositionLocalProvider(LocalNativeBackdrop provides backdrop) {
-        Surface(Modifier.fillMaxSize().background(Ink).windowInsetsPadding(WindowInsets.safeDrawing), color = Ink) {
-            Box(Modifier.fillMaxSize()) {
-            NativeWallpaperView(LocalThemeVariant.current.wallpaper, Modifier.matchParentSize().hazeSource(backdrop))
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().background(Panel).heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
-                    NativeText(title, color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        var headerHeight by remember { mutableStateOf(64.dp) }
+        CompositionLocalProvider(LocalNativeBackdrop provides backdrop, LocalNativeScreenTopInset provides if (overlayContent) headerHeight else 0.dp) {
+            Surface(Modifier.fillMaxSize().background(Ink).windowInsetsPadding(WindowInsets.safeDrawing), color = Ink) {
+                Box(Modifier.fillMaxSize()) {
+                    NativeWallpaperView(LocalThemeVariant.current.wallpaper, Modifier.matchParentSize().hazeSource(backdrop))
+                    Column(Modifier.fillMaxSize().padding(top = if (overlayContent) 0.dp else headerHeight).hazeSource(backdrop, zIndex = 1f, key = "home-content")) { content() }
+                    NativeGlassSurface(Modifier.align(Alignment.TopCenter).fillMaxWidth().onSizeChanged { headerHeight = with(density) { it.height.toDp() } }.padding(horizontal = 8.dp, vertical = 4.dp), radius = 28.dp, floating = true) {
+                        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = onDismiss) { Icon(Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
+                            NativeText(title, Modifier.weight(1f).padding(end = 12.dp), color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
-                content()
             }
-            }
-        }
         }
     }
 }

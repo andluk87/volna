@@ -145,7 +145,7 @@ internal fun NativeGlassSurface(modifier: Modifier = Modifier, radius: Dp = 22.d
     val blur = settings.glass && settings.blurMode != "off" && settings.quality != "economy" && !settings.powerSaving && LocalMotionEnabled.current && android.os.Build.VERSION.SDK_INT >= 31 && state != null
     val shape = RoundedCornerShape(radius)
     val color = Panel
-    val opacity = if (floating) .64f else settings.glassOpacity
+    val opacity = if (floating) .42f else settings.glassOpacity
     val style = HazeStyle(backgroundColor = if (floating) Color.Transparent else color, tints = listOf(HazeTint(color.copy(alpha = opacity))),
         blurRadius = (if (settings.blurMode == "simple" || settings.quality == "balanced") settings.blurIntensity.coerceAtMost(12) else settings.blurIntensity).dp,
         noiseFactor = 0f, fallbackTint = HazeTint(color.copy(alpha = if (floating) opacity else .94f)))

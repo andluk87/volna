@@ -24,6 +24,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -69,31 +71,13 @@ internal fun ChatListScreen(
     val drafts = remember(user?.id) { NativeDrafts(context, user?.id ?: 0) }
     BackHandler(tab != "chats") { tab = "chats" }
     val backdrop = remember { HazeState() }
+    val chromeDensity = LocalDensity.current
+    var headerHeight by remember { mutableStateOf(64.dp) }
+    var navigationHeight by remember { mutableStateOf(74.dp) }
     CompositionLocalProvider(LocalNativeBackdrop provides backdrop) {
     Box(Modifier.fillMaxSize()) {
     NativeWallpaperView(if (appearance.design != null) LocalThemeVariant.current.wallpaper else NativeWallpaper(colors = listOf(Panel.toArgb().toLong() and 0xFFFFFFFFL)), Modifier.matchParentSize().hazeSource(backdrop))
-    Column(Modifier.fillMaxSize()) {
-        NativeGlassSurface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), radius = 28.dp, floating = true) { Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { if (tab == "chats") drawerOpen = true else tab = "chats" }) { if (tab == "chats") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 34.dp) else Icon(Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
-            Column(Modifier.weight(1f)) {
-                NativeText(when (tab) { "contacts" -> "Контакты"; "calls" -> "Звонки"; "profile" -> "Настройки"; else -> "Волна" }, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = TextMain)
-                if (tab == "chats" && error.isNotBlank()) NativeText("Ожидание сети…", fontSize = 12.sp, color = Muted)
-            }
-            if (tab == "profile") IconButton(onClick = { user?.id?.let(onOpenProfile) }, enabled = user != null) { Icon(Icons.Outlined.Edit, "Редактировать профиль", tint = Accent) }
-            Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Действия", tint = Muted) }
-                DropdownMenu(menu, { menu = false }) {
-                    DropdownMenuItem(text = { NativeText("Новый чат") }, leadingIcon = { Icon(Icons.Outlined.ChatBubbleOutline, null) }, onClick = { menu = false; tab = "contacts" })
-                    DropdownMenuItem(text = { NativeText("Создать группу") }, leadingIcon = { Icon(Icons.Outlined.Groups, null) }, onClick = { menu = false; onCommunityEntry("create-group") })
-                    DropdownMenuItem(text = { NativeText("Создать канал") }, leadingIcon = { Icon(Icons.Outlined.Campaign, null) }, onClick = { menu = false; onCommunityEntry("create-channel") })
-                    DropdownMenuItem(text = { NativeText("Войти по приглашению") }, onClick = { menu = false; onCommunityEntry("join") })
-                    DropdownMenuItem(text = { NativeText("Избранное") }, leadingIcon = { Icon(Icons.Outlined.BookmarkBorder, null) }, onClick = { menu = false; onSavedMessages() })
-                    DropdownMenuItem(text = { NativeText("Архив") }, onClick = { menu = false; filter = "archived"; tab = "chats" })
-                    DropdownMenuItem(text = { NativeText("Аккаунты") }, onClick = { menu = false; accountsOpen = true })
-                }
-            }
-        }
-        }
+    Column(Modifier.fillMaxSize().padding(top = if (tab == "profile") 0.dp else headerHeight)) {
         CallAlertsSettings(automatic = true)
         if (update != null) UpdateBanner(update, updateBusy, updateStatus, onUpdate, Modifier.fillMaxWidth().padding(8.dp))
         if (error.isNotBlank()) NativeConnectionNotice(error, onRetry)
@@ -102,7 +86,7 @@ internal fun ChatListScreen(
             when (page) {
                 "contacts" -> NativeAccountContactsScreen(user?.id ?: 0, token, api, onStartChat, onOpenProfile, onCall, onVideo)
                 "calls" -> NativeCallHistoryScreen(user?.id ?: 0, token, api, cache, chats, onCall, onVideo, { tab = "contacts" })
-                "profile" -> NativeSettingsScreen(user, token, appearance, onOpenProfile, onAppearance, onScanQr, onSavedMessages, { settings = it }, { accountsOpen = true }, onAppearanceChange, { tab = "contacts" })
+                "profile" -> NativeSettingsScreen(user, token, appearance, headerHeight, onOpenProfile, onAppearance, onScanQr, onSavedMessages, { settings = it }, { accountsOpen = true }, onAppearanceChange, { tab = "contacts" })
                 else -> Column(Modifier.fillMaxSize()) {
                     NativeSearchField(query, onQuery, "Поиск чатов", compact = true)
                     if (query.isBlank()) LazyRow(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(CircleShape).background(Panel.copy(alpha = .64f)), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -129,17 +113,38 @@ internal fun ChatListScreen(
                             if (visible.isEmpty()) item { NativeEmptyState(Icons.Outlined.ChatBubbleOutline, if (chats.isEmpty()) "Чатов пока нет" else "Здесь пока пусто", "Найдите человека или создайте группу") }
                             items(visible, key = { it.id }) { chat -> NativeChatRow(chat, user?.id, token, drafts.get(chat.id), { onSelect(chat) }, { key, value -> onChatPreference(chat, key, value) }) }
                         }
-                        FloatingActionButton(onClick = { tab = "contacts" }, modifier = Modifier.align(Alignment.BottomEnd).padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp), containerColor = Accent, contentColor = AccentText) { Icon(Icons.Outlined.Edit, "Новый чат") }
+                        FloatingActionButton(onClick = { tab = "contacts" }, modifier = Modifier.align(Alignment.BottomEnd).padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = navigationHeight + 16.dp), containerColor = Accent, contentColor = AccentText) { Icon(Icons.Outlined.Edit, "Новый чат") }
                     }
                 }
             }
         }
         }
     }
-        NativeGlassSurface(Modifier.align(Alignment.BottomCenter).padding(horizontal = 28.dp, vertical = 8.dp).fillMaxWidth(), radius = 32.dp, floating = true) {
+        NativeGlassSurface(Modifier.align(Alignment.TopCenter).fillMaxWidth().onSizeChanged { headerHeight = with(chromeDensity) { it.height.toDp() } }.padding(horizontal = 8.dp, vertical = 4.dp), radius = 28.dp, floating = true) { Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { if (tab == "chats") drawerOpen = true else tab = "chats" }) { if (tab == "chats") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 34.dp) else Icon(Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
+            Column(Modifier.weight(1f)) {
+                NativeText(when (tab) { "contacts" -> "Контакты"; "calls" -> "Звонки"; "profile" -> "Настройки"; else -> "Волна" }, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = TextMain)
+                if (tab == "chats" && error.isNotBlank()) NativeText("Ожидание сети…", fontSize = 12.sp, color = Muted)
+            }
+            if (tab == "profile") IconButton(onClick = { user?.id?.let(onOpenProfile) }, enabled = user != null) { Icon(Icons.Outlined.Edit, "Редактировать профиль", tint = Accent) }
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Действия", tint = Muted) }
+                DropdownMenu(menu, { menu = false }) {
+                    DropdownMenuItem(text = { NativeText("Новый чат") }, leadingIcon = { Icon(Icons.Outlined.ChatBubbleOutline, null) }, onClick = { menu = false; tab = "contacts" })
+                    DropdownMenuItem(text = { NativeText("Создать группу") }, leadingIcon = { Icon(Icons.Outlined.Groups, null) }, onClick = { menu = false; onCommunityEntry("create-group") })
+                    DropdownMenuItem(text = { NativeText("Создать канал") }, leadingIcon = { Icon(Icons.Outlined.Campaign, null) }, onClick = { menu = false; onCommunityEntry("create-channel") })
+                    DropdownMenuItem(text = { NativeText("Войти по приглашению") }, onClick = { menu = false; onCommunityEntry("join") })
+                    DropdownMenuItem(text = { NativeText("Избранное") }, leadingIcon = { Icon(Icons.Outlined.BookmarkBorder, null) }, onClick = { menu = false; onSavedMessages() })
+                    DropdownMenuItem(text = { NativeText("Архив") }, onClick = { menu = false; filter = "archived"; tab = "chats" })
+                    DropdownMenuItem(text = { NativeText("Аккаунты") }, onClick = { menu = false; accountsOpen = true })
+                }
+            }
+        }
+        }
+        NativeGlassSurface(Modifier.align(Alignment.BottomCenter).onSizeChanged { navigationHeight = with(chromeDensity) { it.height.toDp() } }.padding(horizontal = 28.dp, vertical = 8.dp).fillMaxWidth(), radius = 32.dp, floating = true) {
             Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 listOf(Triple("chats", "Чаты", Icons.Outlined.ChatBubbleOutline), Triple("contacts", "Контакты", Icons.Outlined.AccountCircle), Triple("profile", "Настройки", Icons.Outlined.Settings), Triple("account", "Профиль", Icons.Outlined.PersonOutline)).forEach { (key, label, icon) ->
-                    Column(Modifier.weight(1f).clip(CircleShape).background(if (tab == key) Hover else Color.Transparent).clickable { if (key == "account") user?.id?.let(onOpenProfile) else { tab = key; onQuery("") } }.padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(Modifier.weight(1f).clip(CircleShape).background(if (tab == key) Hover.copy(alpha = .55f) else Color.Transparent).clickable { if (key == "account") user?.id?.let(onOpenProfile) else { tab = key; onQuery("") } }.padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         BadgedBox(badge = { if (key == "chats" && chats.any { !it.archived && it.unread > 0 }) Badge(containerColor = Accent) { NativeText(chats.count { !it.archived && it.unread > 0 }.toString(), color = Panel, fontSize = 10.sp) } }) {
                             if (key == "account") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 23.dp) else Icon(icon, label, tint = if (tab == key) Accent else TextMain, modifier = Modifier.size(23.dp))
                         }
@@ -403,8 +408,8 @@ private fun NativeCallHistoryScreen(account: Long, token: String, api: NativeApi
 }
 
 @Composable
-private fun NativeSettingsScreen(user: VolnaUser?, token: String, appearance: NativeAppearance, onProfile: (Long) -> Unit, onAppearance: () -> Unit, onScanQr: () -> Unit, onSaved: () -> Unit, onSection: (String) -> Unit, onAccounts: () -> Unit, onAppearanceChange: (NativeAppearance) -> Unit, onContacts: () -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 90.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+private fun NativeSettingsScreen(user: VolnaUser?, token: String, appearance: NativeAppearance, topInset: androidx.compose.ui.unit.Dp, onProfile: (Long) -> Unit, onAppearance: () -> Unit, onScanQr: () -> Unit, onSaved: () -> Unit, onSection: (String) -> Unit, onAccounts: () -> Unit, onAppearanceChange: (NativeAppearance) -> Unit, onContacts: () -> Unit) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 12.dp, top = topInset + 12.dp, end = 12.dp, bottom = 90.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Surface(color = Panel, shape = RoundedCornerShape(24.dp)) { Column(Modifier.fillMaxWidth().clickable { user?.id?.let(onProfile) }.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Avatar(user?.name ?: "Волна", user?.id ?: 0, user?.avatarUrl, token, size = 88.dp); NativeText(user?.name ?: "Подключение…", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, modifier = Modifier.padding(top = 12.dp)); NativeText("@${user?.username.orEmpty()}", color = Accent, fontSize = 14.sp); user?.phone?.takeIf { it.isNotBlank() }?.let { NativeText(it, color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) } } } }
         item { NativeSettingsCard {
             NativeSettingRow(Icons.Outlined.PersonOutline, "Аккаунт", "Имя, фото и описание") { user?.id?.let(onProfile) }

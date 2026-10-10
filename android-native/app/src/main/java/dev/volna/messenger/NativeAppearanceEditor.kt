@@ -59,8 +59,8 @@ internal fun NativeAppearanceEditor(value: NativeAppearance, onChange: (NativeAp
     val importTheme = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch { try { importing = withContext(Dispatchers.IO) { val bytes = context.contentResolver.openInputStream(uri)?.use { input -> val output = java.io.ByteArrayOutputStream(); val buffer = ByteArray(16384); while (true) { val count = input.read(buffer); if (count < 0) break; require(output.size() + count <= 12 * 1024 * 1024) { "Файл темы больше 12 МБ" }; output.write(buffer, 0, count) }; output.toString("UTF-8") } ?: throw IllegalStateException("Файл недоступен"); store.importTheme(bytes) } } catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { status = problem.message ?: "Не удалось импортировать тему" } }
     }
-    NativeFullScreen(if (chat == null) "Оформление" else "Оформление чата", onDismiss) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    NativeFullScreen(if (chat == null) "Оформление" else "Оформление чата", onDismiss, overlayContent = true) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = LocalNativeScreenTopInset.current + 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             NativeThemePreview(value.copy(design = design, theme = if (night) "dark" else "light"))
             NativeSettingsCard { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 NativeTypographyControls(value, onChange)
