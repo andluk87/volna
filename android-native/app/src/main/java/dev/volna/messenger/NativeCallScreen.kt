@@ -11,6 +11,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.border
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,11 +45,11 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
     val call = state.call ?: return
     var routesOpen by remember { mutableStateOf(false) }
     var routes by remember { mutableStateOf(emptyList<NativeAudioRoute>()) }
-    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (it) NativeCalls.accept() }
-    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (it) NativeCalls.setCamera(true) }
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted -> if (granted[Manifest.permission.RECORD_AUDIO] == true && NativeCalls.state.value.call?.id == call.id) NativeCalls.accept(video = call.video && granted[Manifest.permission.CAMERA] == true) }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (it && NativeCalls.state.value.call?.id == call.id) NativeCalls.setCamera(true) }
     val bluetoothPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { routes = NativeCalls.routes(); routesOpen = true }
     val screenPermission = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) result.data?.let(NativeCalls::startScreenSharing)
+        if (result.resultCode == Activity.RESULT_OK) result.data?.takeIf { NativeCalls.state.value.call?.id == call.id }?.let(NativeCalls::startScreenSharing)
     }
     val minimize = { if (onMinimize != null) onMinimize() else NativeCalls.minimize(true) }
     BackHandler(enabled = !state.minimized || standalone) { minimize() }
@@ -57,56 +65,74 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
         return
     }
     val content: @Composable () -> Unit = {
-    Column(Modifier.fillMaxSize().background(Ink).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)) {
+    Column(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF745FEA), Color(0xFF4284E8), Color(0xFF20ACC3)))).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            NativeText(if (call.incoming && call.status == "ringing") if (call.video) "Входящий видеозвонок" else "Входящий звонок" else if (call.video || state.cameraEnabled || state.remoteVideo) "Видеозвонок" else "Аудиозвонок", color = Muted, modifier = Modifier.weight(1f))
-            TextButton(onClick = { minimize() }) { Icon(Icons.Outlined.ExpandMore, null); NativeText("Свернуть") }
+            IconButton(onClick = { minimize() }) { Icon(Icons.Outlined.CloseFullscreen, "Свернуть звонок", tint = Color.White) }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = {
+                if (state.sharing) NativeCalls.stopScreenSharing()
+                else screenPermission.launch((context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager).createScreenCaptureIntent())
+            }, enabled = state.sharing || state.connected && state.screenReady) { Icon(if (state.sharing) Icons.Outlined.StopScreenShare else Icons.Outlined.ScreenShare, if (state.sharing) "Остановить показ экрана" else "Показать экран", tint = Color.White.copy(alpha = if (state.sharing || state.connected && state.screenReady) 1f else .5f)) }
         }
         if (state.remoteSharing || state.remoteVideo || state.cameraEnabled) {
             NativeText(if (state.remoteSharing) "Собеседник показывает экран" else call.peer?.name ?: "Видеозвонок", color = Accent, fontSize = 12.sp)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 if (state.remoteSharing || state.remoteVideo) RemoteScreenVideo(Modifier.fillMaxSize())
                 else NativeText(state.phase, Modifier.align(Alignment.Center), color = Muted)
-                if (state.cameraEnabled) RemoteScreenVideo(Modifier.align(Alignment.BottomEnd).size(width = 110.dp, height = 148.dp), local = true)
+                if (state.cameraEnabled) {
+                    val density = LocalDensity.current
+                    val previewWidth = 110.dp.coerceAtMost(maxWidth)
+                    val previewHeight = 148.dp.coerceAtMost(maxHeight)
+                    val maxX = with(density) { (maxWidth - previewWidth).toPx() }
+                    val maxY = with(density) { (maxHeight - previewHeight).toPx() }
+                    var position by remember(call.id) { mutableStateOf<Offset?>(null) }
+                    val x = nativePreviewCoordinate(position?.x ?: maxX, maxX)
+                    val y = nativePreviewCoordinate(position?.y ?: maxY, maxY)
+                    RemoteScreenVideo(Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }.size(previewWidth, previewHeight).pointerInput(maxX, maxY) {
+                        detectDragGestures { change, drag ->
+                            change.consume()
+                            val current = position ?: Offset(maxX, maxY)
+                            position = Offset(nativePreviewCoordinate(current.x + drag.x, maxX), nativePreviewCoordinate(current.y + drag.y, maxY))
+                        }
+                    }, local = true)
+                }
             }
             if (state.cameraEnabled) TextButton(onClick = NativeCalls::switchCamera, modifier = Modifier.align(Alignment.End)) { Icon(Icons.Outlined.Cameraswitch, null); NativeText("Сменить камеру", fontSize = 12.sp) }
         } else {
-            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Avatar(call.peer?.name ?: "В", call.peer?.id ?: 0, call.peer?.avatarUrl, token)
-                NativeText(call.peer?.name ?: "Собеседник", fontSize = 26.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 20.dp))
-                NativeText(state.phase, color = Muted, modifier = Modifier.padding(top = 8.dp))
-                if (state.connected) NativeText(callDuration(state.elapsed), color = Accent, fontSize = 22.sp, modifier = Modifier.padding(top = 12.dp))
+            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Top, horizontalAlignment = Alignment.CenterHorizontally) {
+                Spacer(Modifier.weight(.25f))
+                Box(Modifier.size(166.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).border(8.dp, Color.White.copy(alpha = .07f), CircleShape), contentAlignment = Alignment.Center) { Avatar(call.peer?.name ?: "В", call.peer?.id ?: 0, call.peer?.avatarUrl, token, size = 142.dp) }
+                NativeText(call.peer?.name ?: "Собеседник", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Normal, modifier = Modifier.padding(top = 20.dp))
+                NativeText(state.phase, color = Color.White.copy(alpha = .9f), fontSize = 16.sp, modifier = Modifier.padding(top = 8.dp))
+                if (state.connected) NativeText(callDuration(state.elapsed), color = Color.White, fontSize = 22.sp, modifier = Modifier.padding(top = 12.dp))
                 if (state.sharing) NativeText("Ваш экран виден собеседнику", color = Accent, modifier = Modifier.padding(top = 12.dp))
-                if (!state.relay) NativeText("TURN не настроен: связь через разные сети может быть недоступна", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 14.dp))
+                Spacer(Modifier.weight(1f))
             }
         }
         if (state.error.isNotBlank()) ErrorBanner(state.error)
         if (call.incoming && call.status == "ringing") Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            CallControl(Icons.Outlined.CallEnd, "Отклонить", Color(0xFFE26771)) { NativeCalls.end() }
+            CallControl(Icons.Outlined.CallEnd, "Отклонить", Color(0xFFF32638)) { NativeCalls.end() }
             CallControl(Icons.Outlined.Call, "Ответить", Color(0xFF54BC91), enabled = !state.busy) {
-                if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) NativeCalls.accept()
-                else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED && (!call.video || context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)) NativeCalls.accept(video = call.video)
+                else micPermission.launch(if (call.video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO))
             }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                CallControl(if (state.muted) Icons.Outlined.MicOff else Icons.Outlined.Mic, if (state.muted) "Включить" else "Микрофон", if (state.muted) Accent else Hover) { NativeCalls.toggleMute() }
-                CallControl(if (state.cameraEnabled) Icons.Outlined.VideocamOff else Icons.Outlined.Videocam, "Камера", if (state.cameraEnabled) Accent else Hover, enabled = state.connected && state.screenReady) {
+                CallControl(Icons.Outlined.VolumeUp, "Динамик", Color.White.copy(alpha = .18f)) {
+                    if (Build.VERSION.SDK_INT >= 31 && context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                    else { routes = NativeCalls.routes(); routesOpen = true }
+                }
+                CallControl(if (state.cameraEnabled) Icons.Outlined.VideocamOff else Icons.Outlined.Videocam, if (state.cameraEnabled) "Выкл. видео" else "Вкл. видео", Color.White.copy(alpha = if (state.cameraEnabled) .35f else .18f), enabled = state.connected && state.screenReady) {
                     if (state.cameraEnabled) NativeCalls.setCamera(false)
                     else if (context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) NativeCalls.setCamera(true)
                     else cameraPermission.launch(Manifest.permission.CAMERA)
                 }
-                CallControl(if (state.sharing) Icons.Outlined.StopScreenShare else Icons.Outlined.ScreenShare, if (state.sharing) "Стоп экран" else "Экран", if (state.sharing) Accent else Hover, enabled = state.sharing || state.connected && state.screenReady) {
-                    if (state.sharing) NativeCalls.stopScreenSharing()
-                    else screenPermission.launch((context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager).createScreenCaptureIntent())
-                }
-                CallControl(Icons.Outlined.CallEnd, "Завершить", Color(0xFFE26771)) { NativeCalls.end() }
+                CallControl(if (state.muted) Icons.Outlined.MicOff else Icons.Outlined.Mic, if (state.muted) "Вкл. звук" else "Выкл. звук", Color.White.copy(alpha = if (state.muted) .35f else .18f)) { NativeCalls.toggleMute() }
+                CallControl(Icons.Outlined.CallEnd, "Завершить", Color(0xFFF32638)) { NativeCalls.end() }
             }
-            TextButton(modifier = Modifier.align(Alignment.CenterHorizontally), onClick = {
-                if (Build.VERSION.SDK_INT >= 31 && context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                else { routes = NativeCalls.routes(); routesOpen = true }
-            }) { Icon(Icons.Outlined.VolumeUp, null); NativeText("  ${state.route}") }
+
         }
-        NativeText(if (state.sharing) "При блокировке Android может остановить показ экрана. Голосовой звонок продолжится." else "Звонок остаётся активным при сворачивании и выключении экрана", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
+        NativeText(if (state.sharing) "При блокировке Android может остановить показ экрана. Голосовой звонок продолжится." else "Звонок остаётся активным при сворачивании и выключении экрана", color = Color.White.copy(alpha = .7f), fontSize = 10.sp, modifier = Modifier.padding(top = 18.dp, bottom = 16.dp))
     }
     }
     if (standalone) content() else Dialog(onDismissRequest = { minimize() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { NativeDialogSystemBars(); content() }
@@ -118,10 +144,10 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
 @Composable
 private fun CallControl(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, color: Color, enabled: Boolean = true, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        IconButton(onClick, enabled = enabled, modifier = Modifier.size(60.dp).clip(CircleShape).background(if (enabled) color else Input)) {
-            Icon(icon, label, tint = if (enabled) TextMain else Muted)
+        IconButton(onClick, enabled = enabled, modifier = Modifier.size(60.dp).clip(CircleShape).background(if (enabled) color else Color.White.copy(alpha = .12f))) {
+            Icon(icon, label, tint = Color.White.copy(alpha = if (enabled) 1f else .45f), modifier = Modifier.size(28.dp))
         }
-        NativeText(label, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 7.dp))
+        NativeText(label, color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(top = 7.dp))
     }
 }
 
@@ -144,3 +170,5 @@ private fun RemoteScreenVideo(modifier: Modifier, local: Boolean = false) {
     AndroidView(factory = { renderer }, modifier = modifier.clip(RoundedCornerShape(12.dp)))
 }
 private fun callDuration(seconds: Int) = "%d:%02d".format(seconds / 60, seconds % 60)
+
+internal fun nativePreviewCoordinate(value: Float, limit: Float) = value.coerceIn(0f, limit.coerceAtLeast(0f))

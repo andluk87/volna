@@ -8,6 +8,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -57,7 +58,6 @@ internal fun ChatListScreen(
     var filter by rememberSaveable(user?.id) { mutableStateOf("all") }
     var menu by remember { mutableStateOf(false) }
     var drawerOpen by rememberSaveable { mutableStateOf(false) }
-    var searchOpen by rememberSaveable { mutableStateOf(false) }
     BackHandler(drawerOpen) { drawerOpen = false }
     var settings by remember { mutableStateOf("") }
     var accountsOpen by remember { mutableStateOf(false) }
@@ -70,15 +70,14 @@ internal fun ChatListScreen(
     val backdrop = remember { HazeState() }
     CompositionLocalProvider(LocalNativeBackdrop provides backdrop) {
     Box(Modifier.fillMaxSize()) {
-    NativeWallpaperView(if (appearance.design != null) LocalThemeVariant.current.wallpaper else NativeWallpaper(colors = listOf(Ink.toArgb().toLong() and 0xFFFFFFFFL)), Modifier.matchParentSize().hazeSource(backdrop))
-    Column(Modifier.fillMaxSize()) {
-        NativeGlassSurface(Modifier.fillMaxWidth(), radius = 0.dp) { Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { if (tab == "chats") drawerOpen = true else tab = "chats" }) { Icon(if (tab == "chats") Icons.Outlined.Menu else Icons.Outlined.ArrowBack, "Меню или назад", tint = TextMain) }
+    NativeWallpaperView(if (appearance.design != null) LocalThemeVariant.current.wallpaper else NativeWallpaper(colors = listOf(Panel.toArgb().toLong() and 0xFFFFFFFFL)), Modifier.matchParentSize().hazeSource(backdrop))
+    Column(Modifier.fillMaxSize().padding(bottom = 72.dp)) {
+        NativeGlassSurface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), radius = 28.dp) { Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { if (tab == "chats") drawerOpen = true else tab = "chats" }) { if (tab == "chats") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 34.dp) else Icon(Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
             Column(Modifier.weight(1f)) {
-                NativeText(when (tab) { "contacts" -> "Контакты"; "calls" -> "Звонки"; "profile" -> "Профиль"; else -> "Волна" }, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = TextMain)
+                NativeText(when (tab) { "contacts" -> "Контакты"; "calls" -> "Звонки"; "profile" -> "Настройки"; else -> "Волна" }, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = TextMain)
                 if (tab == "chats" && error.isNotBlank()) NativeText("Ожидание сети…", fontSize = 12.sp, color = Muted)
             }
-            if (tab == "chats") IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) onQuery("") }) { Icon(Icons.Outlined.Search, "Поиск", tint = TextMain) }
             if (tab == "profile") IconButton(onClick = { user?.id?.let(onOpenProfile) }, enabled = user != null) { Icon(Icons.Outlined.Edit, "Редактировать профиль", tint = Accent) }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Действия", tint = Muted) }
@@ -94,6 +93,7 @@ internal fun ChatListScreen(
             }
         }
         }
+        CallAlertsSettings(automatic = true)
         if (update != null) UpdateBanner(update, updateBusy, updateStatus, onUpdate, Modifier.fillMaxWidth().padding(8.dp))
         if (error.isNotBlank()) NativeConnectionNotice(error, onRetry)
         Crossfade(tab, animationSpec = tween(if (motion) 180 else 0), label = "main-section", modifier = Modifier.weight(1f).hazeSource(backdrop, zIndex = 1f, key = "home-content")) { page ->
@@ -103,10 +103,14 @@ internal fun ChatListScreen(
                 "calls" -> NativeCallHistoryScreen(user?.id ?: 0, token, api, cache, chats, onCall, onVideo, { tab = "contacts" })
                 "profile" -> NativeSettingsScreen(user, token, appearance, onOpenProfile, onAppearance, onScanQr, onSavedMessages, { settings = it }, { accountsOpen = true }, onAppearanceChange)
                 else -> Column(Modifier.fillMaxSize()) {
-                    if (searchOpen || query.isNotBlank()) NativeSearchField(query, onQuery, "Поиск")
-                    if (query.isBlank()) LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(listOf("all" to "Все", "direct" to "Личные", "group" to "Группы", "channel" to "Каналы", "unread" to "Непрочитанные", "archived" to "Архив") + folders.map { "folder:${it.id}" to it.name }) { (key, label) ->
-                            FilterChip(selected = filter == key, onClick = { filter = key }, label = { NativeText(label, fontSize = 13.sp) })
+                    NativeSearchField(query, onQuery, "Поиск чатов", compact = true)
+                    if (query.isBlank()) LazyRow(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(CircleShape).background(Panel), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        items(listOf("all" to "Все чаты", "direct" to "Личные", "group" to "Группы", "channel" to "Каналы", "unread" to "Непрочитанные", "archived" to "Архив") + folders.map { "folder:${it.id}" to it.name }) { (key, label) ->
+                            Row(Modifier.clip(CircleShape).background(if (filter == key) Hover else Color.Transparent).clickable { filter = key }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                NativeText(label, color = if (filter == key) Accent else Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                val unread = chats.count { it.unread > 0 && if (key.startsWith("folder:")) it.id in folders.firstOrNull { f -> "folder:${f.id}" == key }?.chats.orEmpty() else nativeChatFilter(it, key) }
+                                if (unread > 0) NativeText(unread.toString(), Modifier.padding(start = 5.dp).clip(CircleShape).background(if (filter == key) Accent else Muted).padding(horizontal = 5.dp, vertical = 1.dp), color = Panel, fontSize = 11.sp)
+                            }
                         }
                     }
                     if (query.trim().length >= 2) NativeGlobalSearch(query, token, api, chats, people, onSelect, onStartChat, onSearchMessage)
@@ -114,6 +118,13 @@ internal fun ChatListScreen(
                         val folder = folders.firstOrNull { "folder:${it.id}" == filter }
                         val visible = chats.filter { if (folder != null) it.id in folder.chats else nativeChatFilter(it, filter) }
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
+                            val archivedCount = chats.count { it.archived }
+                            if (filter == "all" && archivedCount > 0) item(key = "archive") {
+                                Row(Modifier.fillMaxWidth().clickable { filter = "archived" }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.size(54.dp).clip(CircleShape).background(Panel), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Archive, "Архив", tint = TextMain, modifier = Modifier.size(28.dp)) }
+                                    Column(Modifier.padding(start = 12.dp)) { NativeText("Архив чатов", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); NativeText("Чатов: $archivedCount", color = Muted, fontSize = 14.sp) }
+                                }
+                            }
                             if (visible.isEmpty()) item { NativeEmptyState(Icons.Outlined.ChatBubbleOutline, if (chats.isEmpty()) "Чатов пока нет" else "Здесь пока пусто", "Найдите человека или создайте группу") }
                             items(visible, key = { it.id }) { chat -> NativeChatRow(chat, user?.id, token, drafts.get(chat.id), { onSelect(chat) }, { key, value -> onChatPreference(chat, key, value) }) }
                         }
@@ -124,6 +135,18 @@ internal fun ChatListScreen(
         }
         }
     }
+        NativeGlassSurface(Modifier.align(Alignment.BottomCenter).padding(horizontal = 28.dp, vertical = 8.dp).fillMaxWidth(), radius = 32.dp) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                listOf(Triple("chats", "Чаты", Icons.Outlined.ChatBubbleOutline), Triple("contacts", "Контакты", Icons.Outlined.AccountCircle), Triple("profile", "Настройки", Icons.Outlined.Settings), Triple("account", "Профиль", Icons.Outlined.PersonOutline)).forEach { (key, label, icon) ->
+                    Column(Modifier.weight(1f).clip(CircleShape).background(if (tab == key) Hover else Color.Transparent).clickable { if (key == "account") user?.id?.let(onOpenProfile) else { tab = key; onQuery("") } }.padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        BadgedBox(badge = { if (key == "chats" && chats.any { !it.archived && it.unread > 0 }) Badge(containerColor = Accent) { NativeText(chats.count { !it.archived && it.unread > 0 }.toString(), color = Panel, fontSize = 10.sp) } }) {
+                            if (key == "account") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 23.dp) else Icon(icon, label, tint = if (tab == key) Accent else TextMain, modifier = Modifier.size(23.dp))
+                        }
+                        NativeText(label, color = if (tab == key) Accent else TextMain, fontSize = 10.sp, modifier = Modifier.padding(top = 3.dp))
+                    }
+                }
+            }
+        }
         if (drawerOpen) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .45f)).clickable { drawerOpen = false })
             Column(Modifier.fillMaxHeight().widthIn(max = 304.dp).fillMaxWidth(.85f).background(Panel)) {
@@ -188,7 +211,18 @@ internal fun ChatListScreen(
 }
 
 @Composable
-internal fun NativeSearchField(value: String, onChange: (String) -> Unit, hint: String, modifier: Modifier = Modifier) {
+internal fun NativeSearchField(value: String, onChange: (String) -> Unit, hint: String, modifier: Modifier = Modifier, compact: Boolean = false) {
+    if (compact) {
+        Row(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clip(CircleShape).background(Input).height(42.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Search, null, tint = Muted, modifier = Modifier.size(20.dp))
+            BasicTextField(value, onChange, Modifier.weight(1f).padding(horizontal = 10.dp), singleLine = true,
+                textStyle = nativeEmojiTextStyle(LocalTextStyle.current.copy(color = TextMain, fontSize = 15.sp)),
+                visualTransformation = NativeEmojiTransformation(LocalEmojiCatalog.current, LocalEmojiFont.current), cursorBrush = androidx.compose.ui.graphics.SolidColor(Accent),
+                decorationBox = { field -> Box { if (value.isEmpty()) NativeText(hint, color = Muted, fontSize = 15.sp); field() } })
+            if (value.isNotEmpty()) IconButton(onClick = { onChange("") }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.Close, "Очистить поиск", tint = Muted) }
+        }
+        return
+    }
     NativeOutlinedTextField(value, onChange, modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), placeholder = { NativeText(hint, color = Muted) },
         singleLine = true, shape = RoundedCornerShape(24.dp), leadingIcon = { Icon(Icons.Outlined.Search, null, tint = Muted) },
         trailingIcon = { if (value.isNotEmpty()) IconButton(onClick = { onChange("") }) { Icon(Icons.Outlined.Close, "Очистить поиск", tint = Muted) } },
@@ -250,18 +284,18 @@ private fun NativeGlobalSearch(query: String, token: String, api: NativeApi, cha
 internal fun NativeChatRow(chat: VolnaChat, me: Long?, token: String, draft: String, onSelect: () -> Unit, onPreference: ((String, Boolean) -> Unit)?) {
     var menu by remember(chat.id) { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().combinedClickable(onClick = onSelect, onLongClick = { if (onPreference != null) menu = true }).padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-        Avatar(chat.name, chat.peerId, chat.avatarUrl, token, size = 52.dp)
+        if (chat.saved) Box(Modifier.size(54.dp).clip(CircleShape).background(Accent), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.BookmarkBorder, "Избранное", tint = Color.White, modifier = Modifier.size(32.dp)) } else Avatar(chat.name, chat.peerId, chat.avatarUrl, token, size = 54.dp)
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 NativeText(chat.name, Modifier.weight(1f), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (chat.muted) Icon(Icons.Outlined.NotificationsOff, "Уведомления отключены", tint = Muted, modifier = Modifier.padding(start = 4.dp).size(14.dp))
                 if (chat.lastSenderId == me && chat.lastId > 0) Icon(if (chat.lastId <= chat.peerDelivered) Icons.Outlined.DoneAll else Icons.Outlined.Done, if (chat.lastId <= chat.peerRead) "Прочитано" else "Отправлено", tint = if (chat.lastId <= chat.peerRead) Accent else Muted, modifier = Modifier.padding(start = 6.dp).size(16.dp))
-                NativeText(nativeClock(chat.lastAt), Modifier.padding(start = 6.dp), color = Muted, fontSize = 12.sp)
+                if (chat.pinned) Icon(Icons.Outlined.PushPin, "Закреплённый чат", tint = Muted, modifier = Modifier.padding(start = 5.dp).size(12.dp))
+                NativeText(nativeClock(chat.lastAt), Modifier.padding(start = 4.dp), color = Muted, fontSize = 12.sp)
             }
             Row(Modifier.padding(top = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                 NativeText(if (draft.isNotBlank()) "Черновик: $draft" else chat.lastText.ifBlank { "Начните разговор" }, Modifier.weight(1f), color = if (draft.isNotBlank()) Accent else Muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (chat.pinned) Icon(Icons.Outlined.PushPin, "Закреплённый чат", tint = Muted, modifier = Modifier.size(16.dp).padding(start = 2.dp))
-                if (chat.unread > 0) Box(Modifier.padding(start = 8.dp).heightIn(min = 22.dp).widthIn(min = 22.dp).clip(CircleShape).background(if (chat.muted) Muted else Accent).padding(horizontal = 6.dp, vertical = 2.dp), contentAlignment = Alignment.Center) { NativeText(chat.unread.coerceAtMost(999).toString(), color = if (chat.muted) Panel else AccentText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp) }
+                if (chat.unread > 0) Box(Modifier.padding(start = 8.dp).heightIn(min = 22.dp).widthIn(min = 22.dp).clip(CircleShape).background(if (chat.muted) Muted else Accent).padding(horizontal = 6.dp, vertical = 2.dp), contentAlignment = Alignment.Center) { NativeText(chat.unread.toString(), color = if (chat.muted) Panel else AccentText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp) }
             }
         }
         DropdownMenu(menu, { menu = false }) {

@@ -197,12 +197,13 @@ object NativeCalls {
         }
     }
 
-    fun accept() {
+    fun accept(video: Boolean = false) {
         val call = state.value.call ?: return
         if (!call.incoming || call.status != "ringing" || operation?.isActive == true) return
         val version = ++generation
         NativeCallDiagnostics.begin()
         stopRinging()
+        cameraWanted = video
         mutableState.update { it.copy(phase = "Подключаем микрофон…", busy = true) }
         operation = scope.launch {
             try {

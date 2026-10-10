@@ -14,16 +14,37 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.media.AudioManager
+import android.media.AudioDeviceInfo
+import android.media.AudioDeviceCallback
+import android.os.Handler
+import android.os.Looper
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 
 class CallService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
+    private var proximityLock: PowerManager.WakeLock? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val devices = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>) { updateProximity(NativeCalls.state.value) }
+        override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>) { updateProximity(NativeCalls.state.value) }
+    }
+    private var communicationChanged: AudioManager.OnCommunicationDeviceChangedListener? = null
     private var projecting = false
     private var cameraActive = false
 
     override fun onCreate() {
         super.onCreate()
+        val audio = getSystemService(AudioManager::class.java)
+        audio.registerAudioDeviceCallback(devices, Handler(Looper.getMainLooper()))
+        if (Build.VERSION.SDK_INT >= 31) {
+            communicationChanged = AudioManager.OnCommunicationDeviceChangedListener { updateProximity(NativeCalls.state.value) }
+            audio.addOnCommunicationDeviceChangedListener(mainExecutor, communicationChanged!!)
+        }
+        serviceScope.launch { NativeCalls.state.collect { updateProximity(it) } }
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL, "Активный звонок", NotificationManager.IMPORTANCE_LOW))
     }
 
@@ -51,6 +72,23 @@ class CallService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun updateProximity(state: NativeCallState) {
+        val audio = getSystemService(AudioManager::class.java)
+        val earpiece = if (Build.VERSION.SDK_INT >= 31) audio.communicationDevice?.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+            else !audio.isSpeakerphoneOn && !audio.isBluetoothScoOn && !audio.isWiredHeadsetOn
+        val enabled = state.call != null && nativeCallUsesProximity(state.connected, earpiece, state.cameraEnabled || state.remoteVideo, state.sharing || state.remoteSharing)
+        val power = getSystemService(PowerManager::class.java)
+        if (enabled && power.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
+            if (proximityLock == null) proximityLock = power.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "Volna:Proximity").apply { setReferenceCounted(false) }
+            if (proximityLock?.isHeld == false) runCatching { proximityLock?.acquire() }
+        } else releaseProximity()
+    }
+
+    private fun releaseProximity() {
+        proximityLock?.let { if (it.isHeld) runCatching { it.release() } }
+        proximityLock = null
+    }
+
     private fun updateForeground() {
         val state = NativeCalls.state.value
         val open = IncomingCallActivity.pending(this, state.call?.id ?: return)
@@ -67,6 +105,11 @@ class CallService : Service() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
+        val audio = getSystemService(AudioManager::class.java)
+        audio.unregisterAudioDeviceCallback(devices)
+        if (Build.VERSION.SDK_INT >= 31) communicationChanged?.let { audio.removeOnCommunicationDeviceChangedListener(it) }
+        releaseProximity()
         val owning = instance === this
         if (owning) instance = null
         wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
@@ -108,3 +151,6 @@ class CallActionReceiver : BroadcastReceiver() {
         if (intent.action == CallService.ACTION_END && intent.getStringExtra("call_id") == NativeCalls.state.value.call?.id) NativeCalls.end()
     }
 }
+
+/** The native proximity wake lock handles near/far automatically, including while minimized. */
+internal fun nativeCallUsesProximity(connected: Boolean, earpiece: Boolean, video: Boolean, sharing: Boolean) = connected && earpiece && !video && !sharing

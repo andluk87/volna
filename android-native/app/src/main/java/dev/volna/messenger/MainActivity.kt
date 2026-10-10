@@ -163,7 +163,9 @@ class MainActivity : ComponentActivity() {
         openAccountRequest.value = intent?.getLongExtra("account_id", 0L)?.takeIf { it > 0 }
         window.statusBarColor = android.graphics.Color.rgb(14, 23, 32)
         window.navigationBarColor = android.graphics.Color.rgb(14, 23, 32)
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        val notificationSetup = getSharedPreferences("volna-notification-setup", MODE_PRIVATE)
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && !notificationSetup.getBoolean("requested", false)) {
+            notificationSetup.edit().putBoolean("requested", true).apply()
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         setContent { NativeEmojiProvider { VolnaNativeApp(authReturn.value, openChatRequest.value, openMessageRequest.value, openAccountRequest.value) { openChatRequest.value = null; openMessageRequest.value = null; openAccountRequest.value = null } } }
@@ -240,6 +242,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     var profileRevision by remember { mutableStateOf(0) }
     var profileTargetId by remember { mutableStateOf<Long?>(null) }
     var updateAvailable by remember { mutableStateOf<VolnaUpdate?>(null) }
+    var dismissedUpdate by remember { mutableStateOf<Long?>(null) }
     var updateBusy by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf("") }
     var pendingUpdateFile by remember { mutableStateOf<File?>(null) }
@@ -275,7 +278,8 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         } else updateStatus = "Разрешите установку приложений для Волны и нажмите «Обновить» ещё раз"
     }
     val installUpdate: (VolnaUpdate?) -> Unit = { release ->
-        if (release != null && !updateBusy) scope.launch {
+        if (callState.call != null || attachmentSending) updateStatus = "Завершите звонок или отправку вложения перед обновлением"
+        else if (release != null && !updateBusy) scope.launch {
             updateBusy = true; updateStatus = "Скачиваем Волна ${release.versionName}…"
             try {
                 val file = File(context.filesDir, "updates/volna-${release.versionCode}.apk")
@@ -416,7 +420,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         while (true) {
             try { updateAvailable = withContext(Dispatchers.IO) { api.checkUpdate(BuildConfig.VOLNA_VERSION_CODE) } }
             catch (_: Exception) { /* Offline, or the update manifest is not published yet. */ }
-            delay(6 * 60 * 60 * 1000L)
+            delay(15 * 60 * 1000L)
         }
     }
 
@@ -802,6 +806,11 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     }
                 }, confirmButton = { TextButton(onClick = { clipboard.setText(AnnotatedString(callDiagnosticReport)); Toast.makeText(context, "Диагностика скопирована", Toast.LENGTH_SHORT).show() }) { NativeText("Копировать") } },
                     dismissButton = { TextButton(onClick = { callDiagnosticsOpen = false }) { NativeText("Закрыть") } })
+            }
+            updateAvailable?.takeIf { it.versionCode != dismissedUpdate && callState.call == null && !attachmentSending && !updateBusy }?.let { release ->
+                AlertDialog(onDismissRequest = { dismissedUpdate = release.versionCode }, title = { NativeText("Вышла новая версия") }, text = { NativeText("Доступна Волна ${release.versionName}. Давайте обновимся? Приложение скачает обновление и откроет установку Android.") },
+                    confirmButton = { TextButton(onClick = { dismissedUpdate = release.versionCode; installUpdate(release) }) { NativeText("Обновить") } },
+                    dismissButton = { TextButton(onClick = { dismissedUpdate = release.versionCode }) { NativeText("Позже") } })
             }
             val forwarding = forwardTargetMessage
             if (forwarding != null) {

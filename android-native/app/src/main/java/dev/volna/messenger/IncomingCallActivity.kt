@@ -32,8 +32,8 @@ class IncomingCallActivity : ComponentActivity() {
     private var expectedId by mutableStateOf("")
     private var resolved by mutableStateOf(false)
     private var answerRequested = false
-    private val microphone = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) answerCurrent() else answerRequested = false
+    private val microphone = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted[Manifest.permission.RECORD_AUDIO] == true) { answerRequested = false; NativeCalls.state.value.call?.takeIf { it.id == expectedId && it.incoming && it.status == "ringing" }?.let { NativeCalls.accept(video = it.video && granted[Manifest.permission.CAMERA] == true) } } else answerRequested = false
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,11 +87,11 @@ class IncomingCallActivity : ComponentActivity() {
     private fun answerCurrent() {
         val call = NativeCalls.state.value.call ?: return
         if (call.id != expectedId || !call.incoming || call.status != "ringing") return
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            microphone.launch(Manifest.permission.RECORD_AUDIO); return
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED || call.video && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            microphone.launch(if (call.video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)); return
         }
         answerRequested = false
-        NativeCalls.accept()
+        NativeCalls.accept(video = call.video)
     }
 
     private fun openChat() {

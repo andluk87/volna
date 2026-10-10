@@ -47,7 +47,7 @@ internal object CallAlerts {
 }
 
 @Composable
-internal fun CallAlertsSettings() {
+internal fun CallAlertsSettings(automatic: Boolean = false) {
     val context = LocalContext.current
     var revision by remember { mutableStateOf(0) }
     val lifecycle = (context as? ComponentActivity)?.lifecycle
@@ -60,6 +60,13 @@ internal fun CallAlertsSettings() {
     val ready = remember(revision) { CallAlerts.fullScreenAllowed(context) && manager.areNotificationsEnabled() &&
         (manager.getNotificationChannel(NativeCalls.CALL_CHANNEL)?.importance ?: NotificationManager.IMPORTANCE_HIGH) >= NotificationManager.IMPORTANCE_HIGH }
     var open by remember { mutableStateOf(false) }
+    val setup = remember { context.getSharedPreferences("volna-call-setup", Context.MODE_PRIVATE) }
+    LaunchedEffect(revision, automatic) {
+        if (automatic && manager.areNotificationsEnabled() && !CallAlerts.fullScreenAllowed(context) && !setup.getBoolean("fullscreen_prompted", false)) {
+            setup.edit().putBoolean("fullscreen_prompted", true).apply()
+            open = true
+        }
+    }
     if (!ready) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
         TextButton(onClick = { open = true }) { NativeText("Включить экран входящего звонка", fontSize = 12.sp) }
     }
