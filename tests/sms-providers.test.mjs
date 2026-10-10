@@ -22,7 +22,7 @@ test('gateway rejects HTTP, explicit failure, login HTML, unknown replies and un
 });
 async function fixture(t,{configured=true}={}){
  let now=Date.now(),adminCode=123456;const requests=[],logs=[];
- const app=createApp({database:':memory:',smsOptions:{notificoreKey:'qa-key',notificoreOriginator:'Volna',gatewayUrl:'http://sms.test:3825/default/en_US/send.html',gatewayUser:'qa-user',gatewayPassword:configured?'qa-password':'',gatewayLine:'4',fetcher:async(url,options)=>{requests.push({url,options});return url.startsWith('http://sms.test')?reply('Sending,L4 Send SMS to:'+new URL(url).searchParams.get('n')+'; ID:00001514'):reply(JSON.stringify({result:{error:0,id:'notificore-qa-id'}}));}},phoneAuthOptions:{clock:()=>now,codeGenerator:()=> '234567',logger:event=>logs.push(event)},adminOptions:{origin:'http://admin.test',cookieSecure:false,clock:()=>now,codeGenerator:()=>String(adminCode++)}});
+ const app=createApp({database:':memory:',smsOptions:{notificoreKey:'qa-key',notificoreOriginator:'Volna',gatewayUrl:'http://sms.test:3825/default/en_US/send.html',gatewayUser:'qa-user',gatewayPassword:configured?'qa-password':'',gatewayLine:'4',fetcher:async(url,options)=>{requests.push({url,options});return url.startsWith('http://sms.test')?reply('Sending,L4 Send SMS to:'+new URL(url).searchParams.get('n')+'; ID:00003c01'):reply(JSON.stringify({result:{error:0,id:'notificore-qa-id'}}));}},phoneAuthOptions:{clock:()=>now,codeGenerator:()=> '234567',logger:event=>logs.push(event)},adminOptions:{origin:'http://admin.test',cookieSecure:false,clock:()=>now,codeGenerator:()=>String(adminCode++)}});
  await new Promise(r=>app.server.listen(0,'127.0.0.1',r));await new Promise(r=>app.adminServer.listen(0,'127.0.0.1',r));t.after(()=>app.close());
  const normal='http://127.0.0.1:'+app.server.address().port+'/api/',admin='http://127.0.0.1:'+app.adminServer.address().port+'/admin/api/';let cookie='',csrf='';
  async function call(path,data,{adminCall=false}={}){const r=await fetch((adminCall?admin:normal)+path,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json',...(adminCall?{Origin:'http://admin.test',Cookie:cookie,'X-Admin-CSRF':csrf}:{})},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,data:await r.json(),response:r};}
@@ -38,7 +38,7 @@ test('admin-selected provider immediately routes regular and admin SMS, persists
  assert.equal((await f.call('auth/config')).data.sms_enabled,true);
  const r=await f.call('auth/sms/request',{phone:'+79001234567'});assert.equal(r.status,200);assert.equal(new URL(f.requests.at(-1).url).searchParams.get('n'),'89001234567');
  const verified=await f.call('auth/sms/verify',{sms_session_id:r.data.sms_session_id,code:'234567'});assert.equal(verified.status,200);
- const row=f.app.db.prepare('SELECT provider,provider_id FROM sms_challenges WHERE id=?').get(r.data.sms_session_id);assert.deepEqual({...row},{provider:'gateway',provider_id:'00001514'});
+ const row=f.app.db.prepare('SELECT provider,provider_id FROM sms_challenges WHERE id=?').get(r.data.sms_session_id);assert.deepEqual({...row},{provider:'gateway',provider_id:'00003c01'});
  f.advance(60001);const adminRequest=await f.ac('auth/request',{phone:'89681411241'});assert.equal(adminRequest.status,200);assert.equal((await f.ac('auth/verify',{sms_session_id:adminRequest.data.sms_session_id,code:'123457'})).status,200);assert.equal(new URL(f.requests.at(-1).url).searchParams.get('n'),'89681411241');assert.equal(f.app.db.prepare('SELECT provider FROM admin_sms ORDER BY created DESC').get().provider,'gateway');
  assert.equal((await f.ac('settings',{settings:{...initial,sms_provider:'notificore'},reason:'Возврат'})).status,200);
  assert.equal((await f.call('auth/sms/request',{phone:'+79001234568'})).status,200);assert.equal(f.requests.at(-1).options.method,'POST');
@@ -76,4 +76,15 @@ test('legacy gateway headers rejected by fetch are accepted without redirects or
   status=302;await assert.rejects(sender({phone:'+79681411241',code:'123456'}),e=>e.smsDiagnostic?.kind==='gateway-rejected');assert.equal(requests,3);
   status=200;body='ERROR invalid credentials';await assert.rejects(sender({phone:'+79681411241',code:'123456'}),e=>e.smsDiagnostic?.kind==='gateway-rejected');assert.equal(requests,4);
  }finally{await new Promise(resolve=>server.close(resolve));}
+});
+
+test('gateway accepts hexadecimal receipt IDs verbatim and rejects malformed IDs',async()=>{
+ for(const id of ['00003c01','00003C01','00001514']){
+  const sender=gatewaySender({user:'test',password:'test',fetcher:async()=>reply(`\nSending,L4 Send SMS to:89681411241; ID:${id}\n`)});
+  assert.equal((await sender({phone:'+79681411241',code:'123456'})).id,id);
+ }
+ for(const id of ['00003g01','00003c01!','f'.repeat(33),'']){
+  const sender=gatewaySender({user:'test',password:'test',fetcher:async()=>reply(`Sending,L4 Send SMS to:89681411241; ID:${id}`)});
+  await assert.rejects(sender({phone:'+79681411241',code:'123456'}),e=>e.smsDiagnostic?.kind==='gateway-rejected');
+ }
 });

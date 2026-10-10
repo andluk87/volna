@@ -45,7 +45,7 @@ export function gatewaySender({url=process.env.SMS_GATEWAY_URL||'http://188.128.
   const response=await (fetcher===fetch?gatewayHttpRequest:fetcher)(endpoint.href,{method:'GET',redirect:'error',signal:AbortSignal.timeout(15000),headers:{Accept:'text/plain, text/html, application/json','Cache-Control':'no-store',Pragma:'no-cache'}});
   const raw=await response.text();if(raw.length>32000)throw fail(503,'SMS-шлюз вернул некорректный ответ');
   const plain=raw.replace(/<[^>]*>/g,' ').trim();
-  const receipt=plain.match(/^Sending,L(\d{1,3})\s+Send\s+SMS\s+to:\s*(\d{11})\s*;\s*ID:\s*(\d{1,32})(?:\s|$)/i);
+  const receipt=plain.match(/^Sending,L(\d{1,3})\s+Send\s+SMS\s+to:\s*(\d{11})\s*;\s*ID:\s*([0-9a-f]{1,32})(?:\s|$)/i);
   if(!response.ok||!receipt||Number(receipt[1])!==Number(line)||receipt[2]!==destination||/\b(?:error|failed|failure|denied|invalid|unauthorized)\b/i.test(plain))throw Object.assign(fail(503,'SMS-шлюз не подтвердил принятие сообщения'),{smsDiagnostic:{kind:'gateway-rejected',http_status:response.status}});
   // Keep only the gateway ID, never the raw reply containing the destination.
   return {id:receipt[3],provider:'gateway',error:0};
