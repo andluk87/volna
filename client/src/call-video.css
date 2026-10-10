@@ -1,0 +1,21 @@
+.call-panel.has-video .call-person {visibility:hidden;pointer-events:none}
+.call-panel.has-video {overflow:hidden;background:#142231}
+.call-video-stage {position:absolute;inset:76px 16px 230px;z-index:0;border-radius:16px;overflow:hidden;background:#142231}
+.call-video-stage video {object-fit:contain;background:#142231}
+.call-video-remote,.call-video-local {position:absolute;width:100%;height:100%;inset:0}
+.call-video-stage .camera-hidden {visibility:hidden}
+.call-video-stage .mirrored {transform:scaleX(-1)}
+.call-video-stage.remote-main .call-video-local,.call-video-stage.local-main .call-video-remote,.call-preview-drag {inset:auto;width:110px;height:148px;left:calc((100% - 110px)*var(--preview-x));top:calc((100% - 148px)*var(--preview-y));border-radius:14px;overflow:hidden;z-index:2;box-shadow:0 0 0 1px #ffffff80}
+.call-preview-drag {z-index:4;background:transparent;touch-action:none;cursor:move;border:0;padding:0}
+.video-placeholder {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#223344;color:#fff;font-size:12px}
+.video-placeholder .avatar {width:92px;height:92px}
+.call-video-stage.remote-main .call-video-local.video-placeholder,.call-video-stage.local-main .call-video-remote.video-placeholder {font-size:10px}
+.call-video-stage.local-main .call-video-remote.video-placeholder .avatar {width:48px;height:48px}
+.call-panel.has-video .call-share-label {display:none}
+.call-panel.has-video .call-controls {flex-wrap:wrap;gap:10px;position:relative;z-index:5}
+.call-panel.has-video .call-topbar {position:relative;z-index:5}
+.call-panel.controls-hidden .call-controls,.call-panel.controls-hidden .call-topbar,.call-panel.controls-hidden .call-background-hint,.call-panel.controls-hidden .audio-output {visibility:hidden;pointer-events:none}
+.call-panel.controls-hidden .call-video-stage {inset:12px}
+@media(max-width:600px){.call-panel.has-video .call-controls .call-control b {width:46px;height:46px}.call-panel.has-video .call-controls .call-control span {font-size:10px}.call-panel.has-video .call-video-stage {bottom:230px}}
+
+.call-video-status {position:absolute;top:12px;left:12px;z-index:3;max-width:calc(100% - 140px);padding:8px 12px;border-radius:12px;background:#102231b0;color:white;font-size:12px;pointer-events:none}

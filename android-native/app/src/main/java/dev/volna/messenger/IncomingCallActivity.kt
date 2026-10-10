@@ -38,6 +38,7 @@ class IncomingCallActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        configureCallPip()
         if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
         else window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
         val token = NativeCredentials.access(getSharedPreferences("volna-native", MODE_PRIVATE).getLong("user_id",0))
@@ -56,7 +57,7 @@ class IncomingCallActivity : ComponentActivity() {
                 onDispose { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
             }
             VolnaTheme(appearance) {
-                if (state.call?.id == expectedId) NativeCallScreen(state, token, standalone = true, onMinimize = ::openChat)
+                if (state.call?.id == expectedId) NativeCallScreen(state, token, standalone = true, pip = NativeCallLayout.inPip, onMinimize = ::openChat)
                 else Box(Modifier.fillMaxSize().background(Ink), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Accent)
@@ -67,6 +68,8 @@ class IncomingCallActivity : ComponentActivity() {
         } }
     }
 
+    override fun onUserLeaveHint() { super.onUserLeaveHint(); enterCallPip() }
+    override fun onPictureInPictureModeChanged(inPip: Boolean, config: android.content.res.Configuration) { super.onPictureInPictureModeChanged(inPip, config); NativeCallLayout.inPip = inPip }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); receive(intent) }
 
     private fun receive(intent: Intent) {

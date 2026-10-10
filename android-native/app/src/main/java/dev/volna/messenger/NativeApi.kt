@@ -430,6 +430,9 @@ class NativeApi(baseUrl: String) {
         call("/chats/$chatId/delivered", "POST", token, JSONObject().put("message_id", messageId))
     }
 
+    internal fun contactRequest(path: String, token: String, data: JSONObject? = null): JSONObject = call(path, if (data == null) "GET" else "POST", token, data)
+    internal fun contactUser(row: JSONObject): VolnaUser = parseUser(row)
+
     private fun parseUser(row: JSONObject): VolnaUser {
         return VolnaUser(
             id = row.optLong("id"), username = row.optString("username"), name = row.optString("name", row.optString("username")),

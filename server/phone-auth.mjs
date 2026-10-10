@@ -18,6 +18,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
   loginCheck=()=>{},logger=event=>console.info('[sms]',JSON.stringify(event)),
   referenceStart=Number(process.env.SMS_REFERENCE_START||0),smsReady,appHashes=androidSmsHashes()}){
   const sms=createSmsRouter({db,...smsOptions});sender??=sms.send;const isSmsReady=()=>typeof smsReady==='function'?smsReady():smsReady??sms.ready();
+  if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='phone_verified_at'))db.exec('ALTER TABLE users ADD COLUMN phone_verified_at INTEGER NOT NULL DEFAULT 0');
   db.exec(`CREATE TABLE IF NOT EXISTS auth_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sms_challenges(id TEXT PRIMARY KEY,phone TEXT NOT NULL,code_hash TEXT NOT NULL,
       reference TEXT UNIQUE NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,used INTEGER,attempts INTEGER NOT NULL DEFAULT 0,
@@ -32,7 +33,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
       platform TEXT NOT NULL,agent TEXT NOT NULL,ip TEXT NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',user_id INTEGER REFERENCES users(id),approved_by TEXT);`);
   if(!db.prepare('PRAGMA table_info(sms_challenges)').all().some(c=>c.name==='provider'))db.exec("ALTER TABLE sms_challenges ADD COLUMN provider TEXT NOT NULL DEFAULT 'notificore'");
-  for(const [name,type] of [['android','INTEGER NOT NULL DEFAULT 0'],['app_hash',"TEXT NOT NULL DEFAULT ''"],['request_id','TEXT']])if(!db.prepare('PRAGMA table_info(sms_challenges)').all().some(c=>c.name===name))db.exec(`ALTER TABLE sms_challenges ADD COLUMN ${name} ${type}`);
+  for(const [name,type] of [['android','INTEGER NOT NULL DEFAULT 0'],['app_hash',"TEXT NOT NULL DEFAULT ''"],['request_id','TEXT'],['purpose',"TEXT NOT NULL DEFAULT 'login'"],['owner','INTEGER']])if(!db.prepare('PRAGMA table_info(sms_challenges)').all().some(c=>c.name===name))db.exec(`ALTER TABLE sms_challenges ADD COLUMN ${name} ${type}`);
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS sms_idempotency ON sms_challenges(phone,request_id)');
   db.prepare('INSERT OR IGNORE INTO auth_settings VALUES(?,?)').run('hmac',randomBytes(32).toString('hex'));
   if(!Number.isSafeInteger(referenceStart)||referenceStart<0)throw Error('SMS_REFERENCE_START must be a non-negative integer');
@@ -70,7 +71,8 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
   async function handle(req,res,url){
     const v1=url.pathname.startsWith('/api/v1/auth/otp/');
     const operation=v1?url.pathname.slice('/api/v1/auth/otp/'.length):'';
-    const path=v1?({start:'/api/auth/sms/request',resend:'/api/auth/sms/request',verify:'/api/auth/sms/verify',status:'/api/auth/sms/status',cancel:'/api/auth/sms/cancel'}[operation]||url.pathname):url.pathname,post=req.method==='POST';
+    let path=v1?({start:'/api/auth/sms/request',resend:'/api/auth/sms/request',verify:'/api/auth/sms/verify',status:'/api/auth/sms/status',cancel:'/api/auth/sms/cancel'}[operation]||url.pathname):url.pathname,post=req.method==='POST';
+    const changing=['/api/auth/phone/change/request','/api/auth/phone/change/verify'].includes(path);const changeOwner=changing?auth(req).user_id:null;if(changing)loginCheck(changeOwner);if(changing)path=path.endsWith('/request')?'/api/auth/sms/request':'/api/auth/sms/verify';
     if(path==='/api/auth/config'&&req.method==='GET'){json(res,200,{mode:'phone-qr-v1',sms_enabled:isSmsReady(),sms_retriever_hashes:appHashes});return true;}
     if(!path.startsWith('/api/auth/')&&!v1)return false;
     const address=ip(req),now=clock();let bucket=limits.get(address);if(!bucket||bucket.until<now){bucket={count:0,until:now+60000};limits.set(address,bucket);}if(++bucket.count>240)throw fail(429,'Подождите минуту','RATE_LIMITED',bucket.until);
@@ -98,7 +100,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
         if(previous&&now<previous.created+60000)throw fail(429,'Повторная отправка пока недоступна','RATE_LIMITED',previous.created+60000);
       }
       const appHash=v1&&appHashes.includes(data.app_hash)?data.app_hash:'';
-      const existingUser=db.prepare('SELECT id FROM users WHERE phone=?').get(phone);loginCheck(existingUser?.id);sms.validatePhone(phone);
+      const existingUser=db.prepare('SELECT id FROM users WHERE phone=?').get(phone);if(changing&&existingUser)throw fail(409,'Этот номер уже используется. Аккаунты и переписки не объединяются','PHONE_IN_USE');loginCheck(changing?changeOwner:existingUser?.id);sms.validatePhone(phone);
       const settings=readAdminSettings(db);
       const challenge=transaction(()=>{
         const recent=db.prepare('SELECT * FROM sms_challenges WHERE phone=? ORDER BY created DESC LIMIT 1').get(phone);
@@ -119,6 +121,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
         db.prepare("UPDATE sms_challenges SET status='expired' WHERE phone=? AND status IN ('created','sent')").run(phone);
         db.prepare('INSERT INTO sms_challenges(id,phone,code_hash,reference,created,expires,status,ip) VALUES(?,?,?,?,?,?,?,?)').run(id,phone,hmac(phone,code,id),reference,now,now+300000,'created',address);
         db.prepare('UPDATE sms_challenges SET android=?,app_hash=?,request_id=? WHERE id=?').run(v1?1:0,appHash,v1?data.request_id:null,id);
+        if(changing)db.prepare("UPDATE sms_challenges SET purpose='phone-change',owner=? WHERE id=?").run(changeOwner,id);
         audit('sms-request',req);return {id,phone,code,reference,provider:sms.selected(),android:v1,appHash};
       });
       try{
@@ -136,6 +139,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
       const result=transaction(()=>{
         const row=db.prepare('SELECT * FROM sms_challenges WHERE id=?').get(data.sms_session_id);
         if(!row)return {error:fail(v1?404:410,'Попытка входа не найдена','CHALLENGE_NOT_FOUND')};
+        if((row.purpose==='phone-change')!==changing||changing&&row.owner!==changeOwner)return {error:fail(403,'Подтвердите смену номера в том же аккаунте','CHALLENGE_OWNER_MISMATCH')};
         if(row.status==='blocked')return {error:fail(410,'Слишком много попыток. Запросите новый код','ATTEMPTS_EXCEEDED')};
         if(row.expires<=clock()||row.status!=='sent')return {error:fail(410,'Код истёк или уже использован. Запросите новый','CODE_EXPIRED')};
         const actual=Buffer.from(hmac(row.phone,code,row.id),'hex');
@@ -143,9 +147,18 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
           db.prepare("UPDATE sms_challenges SET attempts=attempts+1,status=CASE WHEN attempts+1>=5 THEN 'blocked' ELSE status END WHERE id=?").run(row.id);
           audit('sms-invalid',req);return {error:fail(400,'Неверный код. Попробуйте ещё раз',row.attempts+1>=5?'ATTEMPTS_EXCEEDED':'INVALID_CODE')};
         }
+        if(changing){
+          if(db.prepare('SELECT id FROM users WHERE phone=? AND id<>?').get(row.phone,changeOwner))return {error:fail(409,'Номер уже используется','PHONE_IN_USE')};
+          const old=db.prepare('SELECT phone,username FROM users WHERE id=?').get(changeOwner);
+          const automatic=new RegExp('^'+old.phone.replace(/\D/g,'')+'(?:_[0-9]+)?$').test(old.username);
+          db.prepare('UPDATE users SET phone=?,phone_verified_at=?,username=? WHERE id=?').run(row.phone,clock(),automatic?availablePhoneUsername(db,row.phone):old.username,changeOwner);
+          db.prepare("UPDATE sms_challenges SET status='expired' WHERE phone=? AND status IN ('created','sent') AND id<>?").run(old.phone,row.id);
+          db.prepare("UPDATE sms_challenges SET status='verified',used=? WHERE id=?").run(clock(),row.id);audit('phone-changed',req,changeOwner);return {success:true,user:userById(changeOwner,true)};
+        }
         let user=db.prepare('SELECT id FROM users WHERE phone=?').get(row.phone);
         loginCheck(user?.id);
         if(!user){const inserted=db.prepare('INSERT INTO users(username,name,phone) VALUES(?,?,?)').run(availablePhoneUsername(db,row.phone),'Новый пользователь',row.phone);user={id:Number(inserted.lastInsertRowid)};}
+        db.prepare('UPDATE users SET phone_verified_at=? WHERE id=?').run(clock(),user.id);
         db.prepare("UPDATE sms_challenges SET status='verified',used=? WHERE id=?").run(clock(),row.id);
         return issue(user.id,'android',req);
       });

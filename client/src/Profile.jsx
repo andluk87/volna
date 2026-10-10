@@ -1,11 +1,14 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {request,uploadFile} from './api';
+import Dialog from './Dialog';
 import {Avatar} from './ui';
 import './profile.css';
 
 export default function Profile({id,me,token,revision,onClose,onSaved}){
  const own=id===me.id,[user,setUser]=useState(null),[name,setName]=useState(''),[bio,setBio]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[saved,setSaved]=useState(false);
  const [username,setUsername]=useState(''),[usernameStatus,setUsernameStatus]=useState(null);
+ const [phoneChange,setPhoneChange]=useState(false),[newPhone,setNewPhone]=useState(''),[smsCode,setSmsCode]=useState(''),[phoneChallenge,setPhoneChallenge]=useState('');
+ const [contact,setContact]=useState(null),[alias,setAlias]=useState('');
  const dirty=useRef(false),usernameDirty=useRef(false),dialog=useRef(null);
  useEffect(()=>{const controller=new AbortController();request('/users/'+id,token,undefined,controller.signal).then(u=>{setUser(u);if(!usernameDirty.current)setUsername(u.username);if(!dirty.current){setName(u.name);setBio(u.bio);}}).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>controller.abort();},[id,token,revision]);
  useEffect(()=>{const before=document.activeElement;dialog.current?.querySelector('button')?.focus();return()=>before?.focus();},[]);
@@ -19,6 +22,9 @@ export default function Profile({id,me,token,revision,onClose,onSaved}){
    const updated=await request('/profile',token,{name:user.name,bio:user.bio,avatar_id:uploaded?.id||null,avatar_hidden:hide});setUser(updated);onSaved(updated);
   }catch(e){if(uploaded)request('/uploads/'+uploaded.id+'/discard',token,{}).catch(()=>{});setError(e.message);}finally{setBusy(false);}
  }
+ async function changePhone(){setBusy(true);setError('');try{if(!phoneChallenge){const result=await request('/auth/phone/change/request',token,{phone:newPhone});setPhoneChallenge(result.sms_session_id);}else{const result=await request('/auth/phone/change/verify',token,{sms_session_id:phoneChallenge,code:smsCode});setUser(result.user);onSaved(result.user);setPhoneChange(false);}}catch(e){setError(e.message);}finally{setBusy(false);}}
+ async function editContact(){try{const row=await request('/contacts/link',token,{user_id:id});setContact(row);setAlias(row.custom_name||'');}catch(e){setError(e.message);}}
+ async function saveContact(){setBusy(true);try{await request(`/contacts/${contact.contact_id}/name`,token,{version:contact.version,custom_name:alias});setContact(null);setUser(await request('/users/'+id,token));window.dispatchEvent(new Event('volna-contacts-updated'));}catch(e){setError(e.message);}finally{setBusy(false);}}
  function key(e){if(e.key==='Escape'&&!busy)onClose();if(e.key==='Tab'){const nodes=[...dialog.current.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),a[href],select:not(:disabled)')];const first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}}
  return <div className="modal-backdrop"><section ref={dialog} className="modal user-profile" role="dialog" aria-modal="true" aria-labelledby="profile-title" onKeyDown={key}>
   <button className="icon-button profile-close" disabled={busy} aria-label="Закрыть профиль" onClick={onClose}>×</button>
@@ -33,6 +39,10 @@ export default function Profile({id,me,token,revision,onClose,onSaved}){
     <small>{bio.length}/280 · Имя, фото и описание видны другим пользователям. Телефон доступен для точного поиска; публичный ник можно изменить.</small>
     <button className="primary" disabled={busy}>{busy?'Сохраняем…':'Сохранить профиль'}</button>{saved&&<p role="status">Профиль сохранён</p>}
    </form>:<p className="profile-bio">{user.bio||'Пользователь пока не добавил описание.'}</p>}
+   {!own&&<button className="secondary" onClick={editContact}>Изменить имя контакта</button>}
+   {contact&&<Dialog title="Изменить имя" onClose={()=>setContact(null)}><p>Имя видите только вы на своих устройствах.</p><input aria-label="Личное имя" value={alias} maxLength={100} onChange={e=>setAlias(e.target.value)}/><button onClick={()=>setAlias('')}>Вернуть исходное имя</button><button className="primary" disabled={busy} onClick={saveContact}>Сохранить</button></Dialog>}
+   {own&&<button className="secondary" onClick={()=>{setPhoneChange(true);setPhoneChallenge('');setNewPhone('');setSmsCode('');}}>Изменить номер телефона</button>}
+   {phoneChange&&<Dialog title="Изменить номер телефона" onClose={()=>!busy&&setPhoneChange(false)}><p>История и контакты сохранятся в этом аккаунте. Аккаунты разных номеров не объединяются.</p>{error&&<p role="alert" className="error">{error}</p>}{!phoneChallenge?<input aria-label="Новый номер телефона" placeholder="+7 999 123-45-67" value={newPhone} onChange={e=>setNewPhone(e.target.value)}/>:<input aria-label="Код SMS нового номера" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={smsCode} onChange={e=>setSmsCode(e.target.value.replace(/\D/g,''))}/>}<button className="primary" disabled={busy} onClick={changePhone}>{phoneChallenge?'Подтвердить':'Отправить SMS'}</button></Dialog>}
    {own&&user.phone&&<p>Телефон: {user.phone} · подтверждён</p>}
   </>:!error&&<p>Загрузка…</p>}
  </section></div>;

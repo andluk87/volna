@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {contacts} from './contacts.mjs';
 import {initAdminSchema,readAdminSettings} from './admin-config.mjs';
 import {createAdminServer} from './admin.mjs';
 import { messaging } from './messaging.mjs';
@@ -49,6 +50,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   };
   let usernameService;
   let mobileService;
+  let contactService;
   const auth = req => {
     const token = String(req.headers.authorization || '').replace(/^Bearer /, '');
     const session = db.prepare('SELECT * FROM sessions WHERE token=? AND expires>?').get(digest(token), Date.now());
@@ -64,15 +66,15 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   };
   const publish = (users, event) => {
     for (const id of users) for (const res of streams.get(id) || []) {
-      if (!res.write(`data: ${JSON.stringify(event)}\n\n`)) res.end();
+      if (!res.write(`data: ${JSON.stringify(contactService?.personalize(id,event)||event)}\n\n`)) res.end();
     }
   };
   let pushService;
   const broadcast = (chat, event) => {const users=db.prepare('SELECT user_id FROM members WHERE chat_id=?').all(chat).map(x=>x.user_id);if(['message','message-update'].includes(event.type)){for(const uid of users)publish([uid],{...event,notify:topicNotification(db,chat,uid,event.message.text)});if(event.type==='message')pushService?.message(chat,event.message);}else publish(users,event);};
-  const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
+  const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(contactService?.personalize(res.volnaViewer,data)||data)); };
   const body = async req => {
     if(req.volnaParsedBody){const data=req.volnaParsedBody;delete req.volnaParsedBody;return data;}
-    let raw = ''; for await (const chunk of req) { raw += chunk; if (Buffer.byteLength(raw) > 20000) throw fail(413, 'Слишком большой запрос'); }
+    let raw = ''; for await (const chunk of req) { raw += chunk; if (Buffer.byteLength(raw) > (req.url?.split('?')[0]==='/api/contacts/sync'?65536:20000)) throw fail(413, 'Слишком большой запрос'); }
     try { const value = JSON.parse(raw || '{}'); if (!value || Array.isArray(value) || typeof value !== 'object') throw Error(); return value; } catch { throw fail(400, 'Некорректный JSON'); }
   };
   const limit = (key, max) => {
@@ -90,10 +92,11 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   handleMessaging.cleanupUnused();
   const handleCommunities = communities({db,member,broadcast,publish,json,body,userById,online:id=>!!streams.get(id)?.size});
   const handleTopics=topics({db,body,json,member,broadcast,publish});
-  pushService = notifications({db,auth,body,json,sender:pushSender});
+  pushService = notifications({db,auth,body,json,sender:pushSender,contactDisplay:(uid,id,name)=>contactService?.display(uid,id,name)||name});
   const callService = calls({db,auth,body,json,userById,onRing:pushService.call,onEnd:pushService.endCall});
   mobileService=mobile({db,auth,body,json,userById,online:id=>!!streams.get(id)?.size,
     disconnect:(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();}});
+  contactService=contacts({db,body,json,publish,userById});
   const adminService=createAdminServer({db,smsOptions,uploads,json,body,publish,broadcast,hydrate:handleMessaging.hydrate,userById,disconnectUser:uid=>{for(const stream of streams.get(uid)||[])stream.end();},cleanupFiles:handleMessaging.cleanupUnused,callService,...adminOptions});
   const cleanup = setInterval(() => {
     const now = Date.now(); for (const [key, entry] of limits) if (entry.until < now) limits.delete(key);
@@ -115,6 +118,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
       if (path.startsWith('/api/auth/') || path.startsWith('/api/v1/auth/otp/')) { if(await phoneService.handle(req,res,url))return; }
       if (url.pathname.startsWith("/api/public/users/")) { limit("public:"+req.socket.remoteAddress,120); if(await usernameService.publicHandle(req,res,url))return; }
       const session = auth(req), uid = session.user_id;
+      res.volnaViewer=uid;
       adminService.guard(req,url,session);
       if (path === '/api/me' && method === 'GET') {
         const user=userById(uid,true);
@@ -135,6 +139,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
         res.on('close', () => { clearInterval(heartbeat); list.delete(res); if (!list.size) streams.delete(uid); }); return;
       }
       limit(`user:${uid}`, 240);
+      if (await contactService.handle(req,res,url,uid)) return;
       if (await mobileService.handle(req,res,url,session)) return;
       if (await pushService.handle(req,res,url,uid)) return;
       if (await callService.handle(req,res,url,uid)) return;
@@ -200,7 +205,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
     } catch(e) { if (!e.status) console.error(e); if (!res.headersSent) json(res, e.status || 500, { error: e.status ? e.message : 'Ошибка сервера', ...(e.status&&e.code?{code:e.code}:{}),...(e.status&&e.retry_at?{retry_at:e.retry_at,server_time:Date.now()}:{}),...(e.status&&e.suggestions?{suggestions:e.suggestions}:{}) }); else res.end(); }
   });
   server.requestTimeout = 120000; server.headersTimeout = 15000;
-  return { server, adminServer:adminService.server, db, push:pushService, close: async () => { await adminService.close();callService.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close(); } };
+  return { server, adminServer:adminService.server, db, push:pushService, close: async () => { await adminService.close();callService.close();contactService.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close(); } };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const app = createApp(); app.server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => console.log('Volna API listening on :'+(process.env.PORT || 3000)));

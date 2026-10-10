@@ -38,7 +38,7 @@ data class NativeCallState(
     val muted: Boolean = false, val sharing: Boolean = false, val remoteSharing: Boolean = false,
     val minimized: Boolean = false, val connected: Boolean = false, val screenReady: Boolean = false,
     val elapsed: Int = 0, val relay: Boolean = true, val route: String = "Телефон", val busy: Boolean = false,
-    val cameraEnabled: Boolean = false, val remoteVideo: Boolean = false
+    val cameraEnabled: Boolean = false, val cameraFront: Boolean = true, val remoteVideo: Boolean = false
 )
 data class NativeAudioRoute(val id: Int, val label: String)
 
@@ -146,6 +146,7 @@ object NativeCalls {
         }
         if (existing.id != current.id) { end(notifyServer = false); return }
         mutableState.update { it.copy(call = current) }
+        if (cameraWanted && current.status == "active" && state.value.connected && state.value.screenReady) { cameraWanted = false; setCamera(true) }
         val pc = peer
         if (!current.incoming && current.answer != null && pc != null && pc.remoteDescription == null) {
             try { setDescription(pc, current.answer, local = false) }
@@ -331,7 +332,7 @@ object NativeCalls {
                         mutableState.update { it.copy(connected = true, phase = "Разговор") }
                         NativeCallDiagnostics.step("Звонок соединён")
                         updateScreenReady()
-                        if (cameraWanted) { cameraWanted = false; setCamera(true) }
+                        if (cameraWanted && state.value.call?.status == "active") { cameraWanted = false; setCamera(true) }
                     }
                     PeerConnection.PeerConnectionState.DISCONNECTED -> { disconnectedAt = SystemClock.elapsedRealtime(); mutableState.update { it.copy(connected = false, phase = "Восстанавливаем соединение…") } }
                     PeerConnection.PeerConnectionState.FAILED -> end("Соединение звонка потеряно")
@@ -356,7 +357,10 @@ object NativeCalls {
     fun detachVideo(sink: VideoSink) { videoSinks.remove(sink); remoteTrack?.let { runCatching { it.removeSink(sink) } } }
     fun attachLocalVideo(sink: VideoSink) { localVideoSinks.add(sink); cameraTrack?.addSink(sink) }
     fun detachLocalVideo(sink: VideoSink) { localVideoSinks.remove(sink); cameraTrack?.let { runCatching { it.removeSink(sink) } } }
-    fun switchCamera() { runCatching { cameraCapturer?.switchCamera(null) } }
+    fun switchCamera() { runCatching { cameraCapturer?.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
+        override fun onCameraSwitchDone(isFrontCamera: Boolean) { mutableState.update { it.copy(cameraFront = isFrontCamera) } }
+        override fun onCameraSwitchError(error: String) { mutableState.update { it.copy(error = "Не удалось сменить камеру") } }
+    }) } }
     fun setCamera(enabled: Boolean) {
         if (!enabled) { stopCamera(); return }
         if (state.value.cameraEnabled || !state.value.connected || !state.value.screenReady) return
@@ -381,7 +385,7 @@ object NativeCalls {
             localVideoSinks.forEach(track::addSink)
             val parameters = sender.parameters
             parameters.encodings.forEach { it.maxBitrateBps = 800_000; it.maxFramerate = 24 }; sender.setParameters(parameters)
-            mutableState.update { it.copy(cameraEnabled = true, error = "") }
+            mutableState.update { it.copy(cameraEnabled = true, cameraFront = enumerator.isFrontFacing(name), error = "") }
             signalCamera(true)
         } catch (problem: Exception) { stopCamera(); mutableState.update { it.copy(error = problem.message ?: "Не удалось включить камеру") } }
     }

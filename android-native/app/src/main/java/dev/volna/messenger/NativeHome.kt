@@ -99,9 +99,9 @@ internal fun ChatListScreen(
         Crossfade(tab, animationSpec = tween(if (motion) 180 else 0), label = "main-section", modifier = Modifier.weight(1f).hazeSource(backdrop, zIndex = 1f, key = "home-content")) { page ->
             pageState.SaveableStateProvider("${user?.id}:$page") {
             when (page) {
-                "contacts" -> NativeContactsScreen(user?.id ?: 0, token, api, cache, onStartChat, onOpenProfile)
+                "contacts" -> NativeAccountContactsScreen(user?.id ?: 0, token, api, onStartChat, onOpenProfile, onCall, onVideo)
                 "calls" -> NativeCallHistoryScreen(user?.id ?: 0, token, api, cache, chats, onCall, onVideo, { tab = "contacts" })
-                "profile" -> NativeSettingsScreen(user, token, appearance, onOpenProfile, onAppearance, onScanQr, onSavedMessages, { settings = it }, { accountsOpen = true }, onAppearanceChange)
+                "profile" -> NativeSettingsScreen(user, token, appearance, onOpenProfile, onAppearance, onScanQr, onSavedMessages, { settings = it }, { accountsOpen = true }, onAppearanceChange, { tab = "contacts" })
                 else -> Column(Modifier.fillMaxSize()) {
                     NativeSearchField(query, onQuery, "Поиск чатов", compact = true)
                     if (query.isBlank()) LazyRow(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(CircleShape).background(Panel), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -355,6 +355,7 @@ private fun NativeContactsScreen(account: Long, token: String, api: NativeApi, c
 
 @Composable
 private fun NativeCallHistoryScreen(account: Long, token: String, api: NativeApi, cache: NativeCache, chats: List<VolnaChat>, onCall: (VolnaChat) -> Unit, onVideo: (VolnaChat) -> Unit, onNew: () -> Unit) {
+    val contactNames = rememberNativeContactNames(account)
     val state by NativeCalls.state.collectAsState()
     var history by remember(token) { mutableStateOf(emptyList<VolnaCallRecord>()) }
     var busy by remember { mutableStateOf(false) }
@@ -383,9 +384,9 @@ private fun NativeCallHistoryScreen(account: Long, token: String, api: NativeApi
                 val missed = call.incoming && call.status in listOf("missed", "cancelled", "declined", "interrupted") && call.duration == 0
                 val chat = chats.firstOrNull { it.id == call.chatId }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(call.peer?.name ?: "Собеседник", call.peer?.id ?: 0, call.peer?.avatarUrl, token, size = 52.dp)
+                    Avatar(contactNames[call.peer?.id] ?: call.peer?.name ?: "Собеседник", call.peer?.id ?: 0, call.peer?.avatarUrl, token, size = 52.dp)
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                        NativeText(call.peer?.name ?: "Собеседник", color = if (missed) MaterialTheme.colorScheme.error else TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        NativeText(contactNames[call.peer?.id] ?: call.peer?.name ?: "Собеседник", color = if (missed) MaterialTheme.colorScheme.error else TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(if (missed) Icons.Outlined.CallMissed else if (call.incoming) Icons.Outlined.CallReceived else Icons.Outlined.CallMade, null, tint = if (missed) MaterialTheme.colorScheme.error else Muted, modifier = Modifier.size(16.dp))
                             NativeText(when { missed -> "Пропущенный"; call.status == "declined" -> "Отклонён"; call.status in listOf("preparing", "ringing", "connecting", "active") -> "В процессе"; call.incoming -> "Входящий"; else -> "Исходящий" } + if (call.duration > 0) " · ${call.duration / 60}:${(call.duration % 60).toString().padStart(2, '0')}" else "", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp))
@@ -401,7 +402,7 @@ private fun NativeCallHistoryScreen(account: Long, token: String, api: NativeApi
 }
 
 @Composable
-private fun NativeSettingsScreen(user: VolnaUser?, token: String, appearance: NativeAppearance, onProfile: (Long) -> Unit, onAppearance: () -> Unit, onScanQr: () -> Unit, onSaved: () -> Unit, onSection: (String) -> Unit, onAccounts: () -> Unit, onAppearanceChange: (NativeAppearance) -> Unit) {
+private fun NativeSettingsScreen(user: VolnaUser?, token: String, appearance: NativeAppearance, onProfile: (Long) -> Unit, onAppearance: () -> Unit, onScanQr: () -> Unit, onSaved: () -> Unit, onSection: (String) -> Unit, onAccounts: () -> Unit, onAppearanceChange: (NativeAppearance) -> Unit, onContacts: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 90.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Surface(color = Panel, shape = RoundedCornerShape(24.dp)) { Column(Modifier.fillMaxWidth().clickable { user?.id?.let(onProfile) }.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Avatar(user?.name ?: "Волна", user?.id ?: 0, user?.avatarUrl, token, size = 88.dp); NativeText(user?.name ?: "Подключение…", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, modifier = Modifier.padding(top = 12.dp)); NativeText("@${user?.username.orEmpty()}", color = Accent, fontSize = 14.sp); user?.phone?.takeIf { it.isNotBlank() }?.let { NativeText(it, color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) } } } }
         item { NativeSettingsCard {
@@ -419,6 +420,7 @@ private fun NativeSettingsScreen(user: VolnaUser?, token: String, appearance: Na
         item { NativeSettingsCard {
             Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.BatterySaver, null, tint = Accent); Column(Modifier.weight(1f).padding(start = 12.dp)) { NativeText("Энергосбережение", color = TextMain, fontSize = 15.sp); NativeText("Меньше анимаций и эффектов", color = Muted, fontSize = 12.sp) }; Switch(appearance.powerSaving, { onAppearanceChange(appearance.copy(powerSaving = it)) }) }
             NativeSettingRow(Icons.Outlined.Language, "Язык", "Русский") { onSection("language") }
+            NativeSettingRow(Icons.Outlined.Contacts, "Контакты и синхронизация", "Телефонная книга и приватность") { onContacts() }
             NativeSettingRow(Icons.Outlined.ManageAccounts, "Аккаунты", "Добавить или переключить") { onAccounts() }
         } }
         item { NativeText("Эмодзи: Noto Color Emoji 2.051 · Google · SIL OFL 1.1\nДанные: Unicode 17 / CLDR 48 · Unicode License\nСтеклянные эффекты: Haze 1.5.4 · Apache 2.0", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(12.dp)) }

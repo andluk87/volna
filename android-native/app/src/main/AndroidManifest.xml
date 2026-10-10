@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -25,7 +26,7 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <activity
-            android:name=".MainActivity"
+            android:name=".MainActivity" android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
@@ -42,7 +43,7 @@
                 <data android:scheme="volna" android:host="profile" />
             </intent-filter>
         </activity>
-        <activity android:name=".IncomingCallActivity" android:exported="false" android:launchMode="singleTop" android:excludeFromRecents="true" android:showWhenLocked="true" android:turnScreenOn="true" android:configChanges="orientation|screenSize|keyboardHidden|uiMode" />
+        <activity android:name=".IncomingCallActivity" android:supportsPictureInPicture="true" android:exported="false" android:launchMode="singleTop" android:excludeFromRecents="true" android:showWhenLocked="true" android:turnScreenOn="true" android:configChanges="orientation|screenSize|keyboardHidden|uiMode" />
         <service
             android:name=".MessagingService"
             android:exported="false"

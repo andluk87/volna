@@ -9,7 +9,7 @@ export function validateEndpoint(value){
  const h=url.hostname;const allowed=h==='fcm.googleapis.com'||h==='updates.push.services.mozilla.com'||h.endsWith('.push.services.mozilla.com')||h==='web.push.apple.com'||h.endsWith('.push.apple.com');
  if(url.protocol!=='https:'||!allowed||url.port||url.username||url.password||url.hash)throw fail(400,'Этот push-провайдер не поддерживается');return url.href;
 }
-export function notifications({db,auth,body,json,sender=webpush.sendNotification.bind(webpush),subject=process.env.VAPID_SUBJECT||'https://volna.lknet.ru'}){
+export function notifications({db,auth,body,json,contactDisplay=(uid,id,name)=>name,sender=webpush.sendNotification.bind(webpush),subject=process.env.VAPID_SUBJECT||'https://volna.lknet.ru'}){
  db.exec(`BEGIN IMMEDIATE;
  CREATE TABLE IF NOT EXISTS push_keys(id INTEGER PRIMARY KEY CHECK(id=1),public_key TEXT NOT NULL,private_key TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS push_subscriptions(id TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),session_token TEXT NOT NULL REFERENCES sessions(token) ON DELETE CASCADE,subscription TEXT NOT NULL,preview INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL);
@@ -39,7 +39,7 @@ export function notifications({db,auth,body,json,sender=webpush.sendNotification
   if(job.kind==='message'){
    const m=db.prepare('SELECT m.*,u.name FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=? AND m.chat_id=?').get(job.message_id,job.chat_id);
    if(!m||m.deleted_at||member.last_read>=m.id||!topicNotification(db,job.chat_id,row.user_id,m.text)){remove(job.id);return;}
-   if(row.preview){const chat=db.prepare(`SELECT c.kind,CASE WHEN c.parent_id IS NOT NULL THEN (SELECT title FROM chats WHERE id=c.parent_id)||' › '||c.title ELSE c.title END AS title FROM chats c WHERE c.id=?`).get(job.chat_id);title=chat.kind==='direct'?m.name:chat.title;text=m.text?.slice(0,160)||'Новое вложение';}
+   if(row.preview){const chat=db.prepare(`SELECT c.kind,CASE WHEN c.parent_id IS NOT NULL THEN (SELECT title FROM chats WHERE id=c.parent_id)||' › '||c.title ELSE c.title END AS title FROM chats c WHERE c.id=?`).get(job.chat_id);title=chat.kind==='direct'?contactDisplay(row.user_id,m.sender_id,m.name):chat.title;text=m.text?.slice(0,160)||'Новое вложение';}
   }
   try{
    await sender(JSON.parse(row.subscription),JSON.stringify({title,body:text,tag:job.topic,chat_id:job.chat_id,expires:job.expires,kind:job.kind}),{vapidDetails:{subject,publicKey:keys.public_key,privateKey:keys.private_key},TTL:Math.max(1,Math.floor((job.expires-Date.now())/1000)),urgency:'high',topic:hash(job.topic).slice(0,32),timeout:10000});

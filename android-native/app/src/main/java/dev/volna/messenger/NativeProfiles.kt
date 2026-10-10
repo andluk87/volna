@@ -45,6 +45,7 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
     var editing by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf("info") }
     var retry by remember { mutableStateOf(0) }
+    val contactNames = rememberNativeContactNames(currentUser?.id ?: 0)
     val own = userId == currentUser?.id
     val chat = chats.firstOrNull { it.kind == "direct" && it.peerId == userId } ?: if (own) chats.firstOrNull { it.saved } else null
     LaunchedEffect(userId, token, retry, refresh) {
@@ -60,7 +61,7 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
         else {
             Column(Modifier.fillMaxWidth().background(Panel).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Avatar(loaded.name, loaded.id, loaded.avatarUrl, token, size = 88.dp)
-                NativeText(loaded.name, color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
+                NativeText(contactNames[userId] ?: loaded.name, color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
                 NativeText("@${loaded.username}", Modifier.clickable { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(nativeProfileUrl(loaded.username)))) }, color = Accent, fontSize = 14.sp)
                 if(own && loaded.phone.isNotBlank() && loaded.username.startsWith(loaded.phone.filter { it.isDigit() })) NativeText("Ник содержит ваш номер. Измените username в профиле.",Modifier.clickable { editing=true },color=Muted,fontSize=12.sp)
                 if (!own && loaded.online) NativeText("в сети", color = Accent, fontSize = 12.sp)
@@ -73,6 +74,8 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
                     if (chat != null) ProfileAction(Icons.Outlined.Search, "Поиск", Modifier.weight(1f)) { onOpenChat(chat, true) }
                 }
             }
+            if (own) NativePhoneChange(loaded, token, api) { profile = it; onSaved(it) }
+            if (!own) NativePrivateContactName(currentUser?.id ?: 0, userId, token, api) { retry++ }
             Row(Modifier.fillMaxWidth().background(Panel), horizontalArrangement = Arrangement.SpaceEvenly) {
                 TextButton(onClick = { tab = "info" }) { NativeText("Информация", color = if (tab == "info") Accent else Muted) }
                 if (chat != null) TextButton(onClick = { tab = "media" }) { NativeText("Общие медиа", color = if (tab == "media") Accent else Muted) }

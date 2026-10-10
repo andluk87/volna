@@ -156,6 +156,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        configureCallPip()
         authReturn.value = intent?.dataString
         if (intent?.getBooleanExtra("open_call", false) == true) NativeCalls.minimize(false)
         openChatRequest.value = intent?.getLongExtra("chat_id", 0L)?.takeIf { it > 0 }
@@ -168,9 +169,16 @@ class MainActivity : ComponentActivity() {
             notificationSetup.edit().putBoolean("requested", true).apply()
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        setContent { NativeEmojiProvider { VolnaNativeApp(authReturn.value, openChatRequest.value, openMessageRequest.value, openAccountRequest.value) { openChatRequest.value = null; openMessageRequest.value = null; openAccountRequest.value = null } } }
+        setContent { NativeEmojiProvider {
+            Box(Modifier.fillMaxSize()) {
+                VolnaNativeApp(authReturn.value, openChatRequest.value, openMessageRequest.value, openAccountRequest.value) { openChatRequest.value = null; openMessageRequest.value = null; openAccountRequest.value = null }
+                if (NativeCallLayout.inPip) { val state by NativeCalls.state.collectAsState(); val account = getSharedPreferences("volna-native", MODE_PRIVATE).getLong("user_id", 0); NativeCallScreen(state, NativeCredentials.access(account), standalone = true, pip = true) }
+            }
+        } }
     }
 
+    override fun onUserLeaveHint() { super.onUserLeaveHint(); enterCallPip() }
+    override fun onPictureInPictureModeChanged(inPip: Boolean, config: android.content.res.Configuration) { super.onPictureInPictureModeChanged(inPip, config); NativeCallLayout.inPip = inPip }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -214,12 +222,18 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     val homeState = rememberSaveableStateHolder()
     var token by remember { mutableStateOf(NativeCredentials.access(prefs.getLong("user_id",0))) }
     var me by remember { mutableStateOf<VolnaUser?>(null) }
+    NativeContactSyncHost(me?.id ?: 0, token, api)
+    val contactNames = rememberNativeContactNames(me?.id ?: 0)
     val chats = remember { mutableStateListOf<VolnaChat>() }
     val messages = remember { mutableStateListOf<VolnaMessage>() }
     val messageSearchResults = remember { mutableStateListOf<VolnaMessage>() }
     val pinnedMessages = remember { mutableStateListOf<VolnaMessage>() }
     val transcribingMessages = remember { mutableStateListOf<Long>() }
     var selectedChat by remember { mutableStateOf<VolnaChat?>(null) }
+    LaunchedEffect(contactNames) {
+        chats.indices.forEach { index -> val row = chats[index]; val alias = contactNames[row.peerId]; if (row.kind == "direct" && alias != null && alias != row.name) chats[index] = row.copy(name = alias) }
+        selectedChat?.let { row -> contactNames[row.peerId]?.let { selectedChat = row.copy(name = it) } }
+    }
     androidx.compose.runtime.SideEffect { MainActivity.visibleChatId = selectedChat?.id ?: 0 }
     var moreHistory by remember { mutableStateOf(false) }
     var retryGeneration by remember { mutableStateOf(0) }
@@ -448,7 +462,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         val cachedUser = withContext(Dispatchers.IO) { cache.me(prefs.getLong("user_id", 0)) }
         if (cachedUser != null) {
             me = cachedUser
-            chats.clear(); chats.addAll(withContext(Dispatchers.IO) { cache.chats(cachedUser.id) })
+            chats.clear(); chats.addAll(withContext(Dispatchers.IO) { cache.chats(cachedUser.id).map { row -> row.copy(name = if (row.kind == "direct") contactNames[row.peerId] ?: row.name else row.name) } })
             MessagingService.start(context, token, cachedUser.id)
         }
         try {
@@ -854,7 +868,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     finally { busy = false }
                 }
             }
-            if (callState.call != null && !callState.minimized) NativeCallScreen(callState, token)
+            if (callState.call != null && !callState.minimized && !NativeCallLayout.inPip) NativeCallScreen(callState, token)
         }
     }
 }
