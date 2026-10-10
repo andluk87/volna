@@ -1,3 +1,4 @@
+import net from 'node:net';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createApp} from '../server/index.mjs';
@@ -61,4 +62,18 @@ test('0.12.12 SMS histories migrate additively, provider selection persists and 
  assert.equal(app.db.prepare('SELECT provider,code_hash FROM sms_challenges WHERE id=?').get('old-regular').provider,'notificore');assert.equal(app.db.prepare('SELECT code_hash FROM admin_sms WHERE id=?').get('old-admin').code_hash,'b'.repeat(64));
  const settings=(await import('../server/admin-config.mjs')).readAdminSettings(app.db);app.db.prepare('INSERT INTO admin_config VALUES(1,?)').run(JSON.stringify({...settings,sms_provider:'gateway'}));await app.close();app=null;app=createApp(options);
  const config=app.db.prepare('SELECT value FROM admin_config').get().value;assert.equal(JSON.parse(config).sms_provider,'gateway');assert.ok(!config.includes('qa-private'));assert.equal(app.db.prepare('SELECT COUNT(*) n FROM sms_challenges').get().n,1);
+});
+
+test('legacy gateway headers rejected by fetch are accepted without redirects or retries',async()=>{
+ let requests=0,body='Sending,L4 Send SMS to:89681411241; ID:00001514',status=200;
+ const server=net.createServer(socket=>socket.once('data',()=>{requests++;socket.end(`HTTP/1.1 ${status} Response\r\nX-Legacy: value\u0001\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\nLocation: /redirect\r\n\r\n${body}`);}));
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const url=`http://127.0.0.1:${server.address().port}/default/en_US/send.html`;
+ try{
+  await assert.rejects(fetch(url),e=>e.cause?.name==='HTTPParserError');
+  const sender=gatewaySender({url,user:'test',password:'test'});
+  assert.equal((await sender({phone:'+79681411241',code:'123456'})).id,'00001514');assert.equal(requests,2);
+  status=302;await assert.rejects(sender({phone:'+79681411241',code:'123456'}),e=>e.smsDiagnostic?.kind==='gateway-rejected');assert.equal(requests,3);
+  status=200;body='ERROR invalid credentials';await assert.rejects(sender({phone:'+79681411241',code:'123456'}),e=>e.smsDiagnostic?.kind==='gateway-rejected');assert.equal(requests,4);
+ }finally{await new Promise(resolve=>server.close(resolve));}
 });
