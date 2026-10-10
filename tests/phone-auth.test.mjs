@@ -98,6 +98,6 @@ test('SMS request logs acceptance or a network failure without leaking the chall
  await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(()=>app.close());
  const request=phone=>fetch(`http://127.0.0.1:${app.server.address().port}/api/auth/sms/request`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})});
  assert.equal((await request('+79001234567')).status,503);broken=false;assert.equal((await request('+79007654321')).status,200);
- assert.deepEqual(events,[{event:'failed',reference:'ext_id_001',kind:'ECONNREFUSED'},{event:'accepted',reference:'ext_id_002'}]);
+ assert.deepEqual(events,[{event:'failed',reference:'ext_id_001',provider:'notificore',kind:'ECONNREFUSED'},{event:'accepted',reference:'ext_id_002',provider:'notificore'}]);
  assert.ok(!JSON.stringify(events).includes('private'));assert.ok(!JSON.stringify(events).includes('7900'));
 });

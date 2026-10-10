@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => Object.assign(new Error(message), { status });
-export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', uploads = process.env.UPLOAD_PATH || join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads'), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
+export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, smsOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', uploads = process.env.UPLOAD_PATH || join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads'), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
   if (database !== ':memory:') mkdirSync(dirname(database), { recursive: true });
   const db = new DatabaseSync(database);
   const legacy = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
@@ -81,7 +81,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, tr
     if (++item.count > max) throw fail(429, 'Слишком много запросов. Подождите минуту');
   };
   const disconnect=(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();};
-  const phoneService=phoneAuth({db,json,body,userById,auth,disconnect,loginCheck:(uid)=>{if(uid&&db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(uid)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');if(!uid&&!readAdminSettings(db).registration_enabled)throw fail(403,'Регистрация новых пользователей временно закрыта');},...phoneAuthOptions});
+  const phoneService=phoneAuth({db,smsOptions,json,body,userById,auth,disconnect,loginCheck:(uid)=>{if(uid&&db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(uid)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');if(!uid&&!readAdminSettings(db).registration_enabled)throw fail(403,'Регистрация новых пользователей временно закрыта');},...phoneAuthOptions});
   const handleProfiles = profiles({db,uploads,auth,publish,userById,json,body});
   usernameService=usernames({db,body,json,userById,publish,uploads});
   let expressionService;
@@ -94,7 +94,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, tr
   const callService = calls({db,auth,body,json,userById,onRing:pushService.call,onEnd:pushService.endCall});
   mobileService=mobile({db,auth,body,json,userById,online:id=>!!streams.get(id)?.size,
     disconnect:(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();}});
-  const adminService=createAdminServer({db,uploads,json,body,publish,broadcast,hydrate:handleMessaging.hydrate,userById,disconnectUser:uid=>{for(const stream of streams.get(uid)||[])stream.end();},cleanupFiles:handleMessaging.cleanupUnused,callService,...adminOptions});
+  const adminService=createAdminServer({db,smsOptions,uploads,json,body,publish,broadcast,hydrate:handleMessaging.hydrate,userById,disconnectUser:uid=>{for(const stream of streams.get(uid)||[])stream.end();},cleanupFiles:handleMessaging.cleanupUnused,callService,...adminOptions});
   const cleanup = setInterval(() => {
     const now = Date.now(); for (const [key, entry] of limits) if (entry.until < now) limits.delete(key);
     phoneService.cleanup(); adminService.cleanup();

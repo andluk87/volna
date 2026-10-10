@@ -1,3 +1,5 @@
+import {createSmsRouter} from './sms-providers.mjs';
+export {notificoreSender} from './sms-providers.mjs';
 import {readAdminSettings} from './admin-config.mjs';
 import {availablePhoneUsername} from './usernames.mjs';
 import {randomBytes, randomInt, createHash, createHmac, timingSafeEqual} from 'node:crypto';
@@ -10,24 +12,11 @@ export function normalizePhone(value){
   if(!/^\+[1-9][0-9]{7,14}$/.test(clean))throw fail(400,'Нужен международный номер с кодом страны');
   return clean;
 }
-export function notificoreSender({key=process.env.NOTIFICORE_API_KEY||'',originator=process.env.NOTIFICORE_ORIGINATOR||'',fetcher=fetch}={}){
-  return async ({phone,code,reference})=>{
-    if(!key||!originator)throw fail(503,'Отправка SMS пока не настроена');
-    const response=await fetcher('https://api.notificore.ru/v1.0/sms/create',{
-      method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'X-API-KEY':key,'Content-Type':'application/json'},
-      body:JSON.stringify({destination:'phone',originator,body:`${code.slice(0,3)}-${code.slice(3)} твоя волна`,msisdn:phone.slice(1),reference})});
-    const text=await response.text();if(text.length>32000)throw fail(503,'SMS-провайдер временно недоступен');
-    let data;try{data=JSON.parse(text);}catch{throw fail(503,'SMS-провайдер временно недоступен');}
-    const result=data.result||data;
-    if(!response.ok||Number(result.error)!==0||!result.id)throw Object.assign(fail(503,'Не удалось отправить SMS. Повторите позже'),{smsDiagnostic:{kind:'provider-rejected',http_status:response.status,provider_error:Number.isSafeInteger(Number(result.error))?Number(result.error):null}});
-    // Do not retain the provider's raw response: it may echo phone, body or secrets.
-    return {id:String(result.id).slice(0,100),error:0};
-  };
-}
-export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=notificoreSender(),clock=Date.now,
+export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,smsOptions={},clock=Date.now,
   codeGenerator=()=>String(randomInt(0,1000000)).padStart(6,'0'),trustProxy=process.env.AUTH_TRUST_PROXY==='1',
   loginCheck=()=>{},logger=event=>console.info('[sms]',JSON.stringify(event)),
-  referenceStart=Number(process.env.SMS_REFERENCE_START||0),smsReady=!!(process.env.NOTIFICORE_API_KEY&&process.env.NOTIFICORE_ORIGINATOR)}){
+  referenceStart=Number(process.env.SMS_REFERENCE_START||0),smsReady}){
+  const sms=createSmsRouter({db,...smsOptions});sender??=sms.send;const isSmsReady=()=>typeof smsReady==='function'?smsReady():smsReady??sms.ready();
   db.exec(`CREATE TABLE IF NOT EXISTS auth_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sms_challenges(id TEXT PRIMARY KEY,phone TEXT NOT NULL,code_hash TEXT NOT NULL,
       reference TEXT UNIQUE NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,used INTEGER,attempts INTEGER NOT NULL DEFAULT 0,
@@ -41,6 +30,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=n
     CREATE TABLE IF NOT EXISTS qr_challenges(id TEXT PRIMARY KEY,scan_hash TEXT UNIQUE NOT NULL,poll_hash TEXT NOT NULL,
       platform TEXT NOT NULL,agent TEXT NOT NULL,ip TEXT NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',user_id INTEGER REFERENCES users(id),approved_by TEXT);`);
+  if(!db.prepare('PRAGMA table_info(sms_challenges)').all().some(c=>c.name==='provider'))db.exec("ALTER TABLE sms_challenges ADD COLUMN provider TEXT NOT NULL DEFAULT 'notificore'");
   db.prepare('INSERT OR IGNORE INTO auth_settings VALUES(?,?)').run('hmac',randomBytes(32).toString('hex'));
   if(!Number.isSafeInteger(referenceStart)||referenceStart<0)throw Error('SMS_REFERENCE_START must be a non-negative integer');
   db.prepare('INSERT OR IGNORE INTO auth_settings VALUES(?,?)').run('sms-reference',String(referenceStart));
@@ -75,14 +65,14 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=n
   const limits=new Map();
   async function handle(req,res,url){
     const path=url.pathname,post=req.method==='POST';
-    if(path==='/api/auth/config'&&req.method==='GET'){json(res,200,{mode:'phone-qr-v1',sms_enabled:smsReady});return true;}
+    if(path==='/api/auth/config'&&req.method==='GET'){json(res,200,{mode:'phone-qr-v1',sms_enabled:isSmsReady()});return true;}
     if(!path.startsWith('/api/auth/'))return false;
     const address=ip(req),now=clock();let bucket=limits.get(address);if(!bucket||bucket.until<now){bucket={count:0,until:now+60000};limits.set(address,bucket);}if(++bucket.count>240)throw fail(429,'Подождите минуту');
     if(path==='/api/auth/clear'&&post){res.setHeader('Set-Cookie','volna.refresh=; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=0');json(res,200,{ok:true});return true;}
     if(path==='/api/auth/sms/request'&&post){
-      if(!smsReady)throw fail(503,'Отправка SMS пока не настроена');
+      if(!isSmsReady())throw fail(503,'Отправка SMS пока не настроена');
       const data=await body(req),phone=normalizePhone(data.phone),now=clock(),address=ip(req);
-      const existingUser=db.prepare('SELECT id FROM users WHERE phone=?').get(phone);loginCheck(existingUser?.id);
+      const existingUser=db.prepare('SELECT id FROM users WHERE phone=?').get(phone);loginCheck(existingUser?.id);sms.validatePhone(phone);
       const settings=readAdminSettings(db);
       const challenge=transaction(()=>{
         const recent=db.prepare('SELECT * FROM sms_challenges WHERE phone=? ORDER BY created DESC LIMIT 1').get(phone);
@@ -99,14 +89,15 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender=n
         const reference='ext_id_'+String(counter).padStart(3,'0');
         db.prepare("UPDATE sms_challenges SET status='expired' WHERE phone=? AND status IN ('created','sent')").run(phone);
         db.prepare('INSERT INTO sms_challenges(id,phone,code_hash,reference,created,expires,status,ip) VALUES(?,?,?,?,?,?,?,?)').run(id,phone,hmac(phone,code,id),reference,now,now+300000,'created',address);
-        audit('sms-request',req);return {id,phone,code,reference};
+        audit('sms-request',req);return {id,phone,code,reference,provider:sms.selected()};
       });
       try{
+        db.prepare('UPDATE sms_challenges SET provider=? WHERE id=?').run(challenge.provider||sms.selected(),challenge.id);
         const provider=await sender(challenge);
         db.prepare("UPDATE sms_challenges SET status='sent',provider_id=? WHERE id=? AND status='created'").run(provider?.id||'',challenge.id);
-        log({event:'accepted',reference:challenge.reference});
+        log({event:'accepted',reference:challenge.reference,provider:challenge.provider});
         json(res,200,{success:true,sms_session_id:challenge.id,expires_in:300,resend_after:60});
-      }catch(e){const networkCodes=['ECONNREFUSED','ECONNRESET','ENOTFOUND','EAI_AGAIN','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'];const diagnostic=e.smsDiagnostic||{kind:['AbortError','TimeoutError'].includes(e.name)?'timeout':networkCodes.includes(e.cause?.code)?e.cause.code:'provider-unavailable'};log({event:'failed',reference:challenge.reference,...diagnostic});db.prepare("UPDATE sms_challenges SET status='failed' WHERE id=?").run(challenge.id);audit('sms-failed',req);throw fail(503,'Не удалось отправить SMS. Повторите позже');}
+      }catch(e){const networkCodes=['ECONNREFUSED','ECONNRESET','ENOTFOUND','EAI_AGAIN','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'];const diagnostic=e.smsDiagnostic||{kind:['AbortError','TimeoutError'].includes(e.name)?'timeout':networkCodes.includes(e.cause?.code)?e.cause.code:'provider-unavailable'};log({event:'failed',reference:challenge.reference,provider:challenge.provider,...diagnostic});db.prepare("UPDATE sms_challenges SET status='failed' WHERE id=?").run(challenge.id);audit('sms-failed',req);throw fail(503,'Не удалось отправить SMS. Повторите позже');}
       return true;
     }
     if(path==='/api/auth/sms/verify'&&post){

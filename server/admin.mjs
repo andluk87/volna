@@ -1,3 +1,4 @@
+import {createSmsRouter} from './sms-providers.mjs';
 import http from 'node:http';
 import {randomBytes,createHash,createHmac,randomInt,timingSafeEqual} from 'node:crypto';
 import {readFileSync,mkdirSync,statSync,statfsSync,createReadStream,readdirSync,linkSync,chmodSync,existsSync,rmSync} from 'node:fs';
@@ -6,7 +7,7 @@ import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {notificoreSender,normalizePhone} from './phone-auth.mjs';
+import {normalizePhone} from './phone-auth.mjs';
 import {ADMIN_PHONE,initAdminSchema,readAdminSettings,validateAdminSettings} from './admin-config.mjs';
 import {canonicalUsername,usernameProblem,availablePhoneUsername} from './usernames.mjs';
 const fail=(status,message)=>Object.assign(Error(message),{status});
@@ -21,10 +22,10 @@ const boolean=value=>{if(typeof value!=='boolean')throw fail(400,'Ожидает
 const opaque=(value,length=32)=>{if(typeof value!=='string'||!new RegExp(`^[a-f0-9]{${length}}$`).test(value))throw fail(400,'Некорректный идентификатор');return value;};
 export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrate,userById,disconnectUser,cleanupFiles,callService,
  adminPhone=process.env.ADMIN_PHONE||ADMIN_PHONE,origin=process.env.ADMIN_PUBLIC_URL||(process.env.CHAT_DOMAIN?`https://${process.env.CHAT_DOMAIN}:8998`:'http://localhost:8998'),
- sender=notificoreSender(),smsReady=!!(process.env.NOTIFICORE_API_KEY&&process.env.NOTIFICORE_ORIGINATOR),clock=Date.now,
+ sender,smsReady,smsOptions={},clock=Date.now,
  codeGenerator=()=>String(randomInt(0,1000000)).padStart(6,'0'),trustProxy=process.env.AUTH_TRUST_PROXY==='1',cookieSecure=new URL(origin).protocol==='https:',
  serviceStatus=async()=>{const url=new URL(process.env.WHISPER_URL||'http://transcription:8000/transcribe');url.pathname='/health';const r=await fetch(url,{signal:AbortSignal.timeout(2500)});if(!r.ok)throw Error();const v=await r.json();return {available:true,ready:!!v.ready,state:String(v.state||'unknown').slice(0,30),model:String(v.model||'').slice(0,40)};}}){
- initAdminSchema(db);adminPhone=normalizePhone(adminPhone);origin=new URL(origin).origin;
+ initAdminSchema(db);const sms=createSmsRouter({db,...smsOptions});sender??=sms.send;const isSmsReady=()=>typeof smsReady==='function'?smsReady():smsReady??sms.ready();adminPhone=normalizePhone(adminPhone);origin=new URL(origin).origin;
  const priorPhone=db.prepare("SELECT value FROM admin_meta WHERE key='admin-phone'").get()?.value;
  if(priorPhone&&priorPhone!==adminPhone){db.exec('DELETE FROM admin_sessions; DELETE FROM admin_sms;');}
  db.prepare("INSERT INTO admin_meta VALUES('admin-phone',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(adminPhone);
@@ -86,13 +87,13 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
     if(!asset||!['GET','HEAD'].includes(method))throw fail(404,'Страница не найдена');const bytes=readFileSync(join(staticRoot,asset[0]));res.writeHead(200,{'Content-Type':asset[1]});return res.end(method==='HEAD'?undefined:bytes);
    }
    if(method!=='GET'&&!String(req.headers['content-type']||'').toLowerCase().startsWith('application/json'))throw fail(415,'Ожидается JSON');
-   if(path==='/admin/api/config'&&method==='GET')return json(res,200,{version,sms_enabled:smsReady,phone_hint:adminPhone.slice(0,2)+' ••• ••• '+adminPhone.slice(-4),origin});
+   if(path==='/admin/api/config'&&method==='GET')return json(res,200,{version,sms_enabled:isSmsReady(),phone_hint:adminPhone.slice(0,2)+' ••• ••• '+adminPhone.slice(-4),origin});
    if(path.startsWith('/admin/api/auth/')){
     const address=ip(req),now=clock();let bucket=buckets.get(address);if(!bucket||bucket.until<=now){bucket={until:now+60000,count:0};buckets.set(address,bucket);}if(++bucket.count>30)throw fail(429,'Подождите минуту');
     const data=await body(req);
     if(path==='/admin/api/auth/request'&&method==='POST'){
      const raw=typeof data.phone==='string'?data.phone.replace(/[\s()-]/g,''):'';const phone=normalizePhone(/^[78]\d{10}$/.test(raw)?'+7'+raw.slice(1):raw);
-     if(phone!==adminPhone)throw fail(403,'Вход разрешён только администратору');if(!smsReady)throw fail(503,'Отправка SMS не настроена');
+     if(phone!==adminPhone)throw fail(403,'Вход разрешён только администратору');sms.validatePhone(phone);if(!isSmsReady())throw fail(503,'Отправка SMS не настроена');
      const challenge=transaction(()=>{
       const recent=db.prepare('SELECT id,code_hash,created FROM admin_sms ORDER BY created DESC LIMIT 1').get();if(recent&&now-recent.created<60000)throw fail(429,'Повторный код — через 60 секунд');
       const adminHour=db.prepare('SELECT COUNT(*) n FROM admin_sms WHERE created>?').get(now-3600000).n;
@@ -103,10 +104,10 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
       const counter=Number(db.prepare("SELECT value FROM auth_settings WHERE key='sms-reference'").get().value)+1;
       if(!Number.isSafeInteger(counter))throw Error('SMS counter exhausted');db.prepare("UPDATE auth_settings SET value=? WHERE key='sms-reference'").run(String(counter));
       const reference='ext_id_'+String(counter).padStart(3,'0');db.prepare("UPDATE admin_sms SET status='expired' WHERE status IN ('created','sent')").run();
-      db.prepare('INSERT INTO admin_sms(id,phone,code_hash,reference,created,expires,status,ip) VALUES(?,?,?,?,?,?,?,?)').run(id,phone,mac('admin:'+id+':'+code),reference,now,now+300000,'created',address);return {id,phone,code,reference};
+      db.prepare('INSERT INTO admin_sms(id,phone,code_hash,reference,created,expires,status,ip) VALUES(?,?,?,?,?,?,?,?)').run(id,phone,mac('admin:'+id+':'+code),reference,now,now+300000,'created',address);return {id,phone,code,reference,provider:sms.selected()};
      });
-     try{const provider=await sender(challenge);db.prepare("UPDATE admin_sms SET status='sent',provider_id=? WHERE id=? AND status='created'").run(String(provider?.id||'').slice(0,100),challenge.id);audit('auth.sms.accepted',challenge.reference,'',{},'system');json(res,200,{sms_session_id:challenge.id,expires_in:300,resend_after:60});}
-     catch(e){db.prepare("UPDATE admin_sms SET status='failed' WHERE id=?").run(challenge.id);audit('auth.sms.failed',challenge.reference,'',{},'system');throw fail(503,'Не удалось отправить SMS администратора. Проверьте Notificore');}return;
+     try{db.prepare('UPDATE admin_sms SET provider=? WHERE id=?').run(challenge.provider,challenge.id);const provider=await sender(challenge);db.prepare("UPDATE admin_sms SET status='sent',provider_id=? WHERE id=? AND status='created'").run(String(provider?.id||'').slice(0,100),challenge.id);audit('auth.sms.accepted',challenge.reference,'',{},'system');json(res,200,{sms_session_id:challenge.id,expires_in:300,resend_after:60});}
+     catch(e){db.prepare("UPDATE admin_sms SET status='failed' WHERE id=?").run(challenge.id);audit('auth.sms.failed',challenge.reference,'',{},'system');throw fail(503,'Не удалось отправить SMS администратора. Проверьте выбранного SMS-провайдера');}return;
     }
     if(path==='/admin/api/auth/verify'&&method==='POST'){
      const code=String(data.code||'').replace('-','');if(!/^\d{6}$/.test(code)||typeof data.sms_session_id!=='string')throw fail(400,'Введите шесть цифр из SMS');
@@ -185,7 +186,7 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
    if(path==='/admin/api/packs'&&method==='GET'){const where=" WHERE (?='' OR instr(casefold(p.title),?)>0 OR p.id=?)",args=[p.q,p.q,p.q];return json(res,200,list('SELECT p.id,p.title,p.kind,p.owner_id,p.public,p.status,p.created,(SELECT COUNT(*) FROM expression_items WHERE pack_id=p.id) AS items FROM expression_packs p'+where+' ORDER BY p.created DESC','SELECT COUNT(*) n FROM expression_packs p'+where,args,p));}
    match=path.match(/^\/admin\/api\/packs\/([a-f0-9]{32})$/);
    if(match&&method==='POST'){const id=opaque(match[1]),d=await body(req),reason=text(d.reason);if(!['published','blocked'].includes(d.status))throw fail(400,'Некорректный статус набора');if(!db.prepare('SELECT 1 FROM expression_packs WHERE id=?').get(id))throw fail(404,'Набор не найден');db.prepare('UPDATE expression_packs SET status=?,updated=? WHERE id=?').run(d.status,clock(),id);audit('pack.'+d.status,id,reason);publish(db.prepare('SELECT id FROM users').all().map(x=>x.id),{type:'emoji_pack.updated',pack_id:id});return json(res,200,{ok:true});}
-   if(path==='/admin/api/sms'&&method==='GET')return json(res,200,{regular:db.prepare("SELECT reference,substr(phone,1,2)||'••••'||substr(phone,-4) AS phone,status,attempts,created,expires,provider_id FROM sms_challenges ORDER BY created DESC LIMIT 100").all(),admin:db.prepare('SELECT reference,status,attempts,created,expires FROM admin_sms ORDER BY created DESC LIMIT 30').all(),limits:readAdminSettings(db)});
+   if(path==='/admin/api/sms'&&method==='GET')return json(res,200,{regular:db.prepare("SELECT reference,provider,substr(phone,1,2)||'••••'||substr(phone,-4) AS phone,status,attempts,created,expires,provider_id FROM sms_challenges ORDER BY created DESC LIMIT 100").all(),admin:db.prepare('SELECT reference,provider,provider_id,status,attempts,created,expires FROM admin_sms ORDER BY created DESC LIMIT 30').all(),limits:readAdminSettings(db)});
    if(path==='/admin/api/sms/reset'&&method==='POST'){const d=await body(req),phone=normalizePhone(d.phone),reason=text(d.reason);requireConfirm(d,'RESET');const recent=db.prepare('SELECT id FROM sms_challenges WHERE phone=? AND created>?').all(phone,clock()-86400000);transaction(()=>{db.prepare("UPDATE sms_challenges SET status='expired',created=MIN(created,?) WHERE phone=? AND created>?").run(clock()-86400000-1,phone,clock()-86400000);audit('sms.limit.reset',phone.slice(0,2)+'••••'+phone.slice(-4),reason,{requests:recent.length});});return json(res,200,{ok:true});}
    if(path==='/admin/api/devices'&&method==='GET')return json(res,200,list('SELECT r.id,r.user_id,u.name,r.platform,r.created,r.expires,d.last_seen,d.agent FROM refresh_sessions r JOIN users u ON u.id=r.user_id LEFT JOIN session_details d ON d.token=r.access_id ORDER BY d.last_seen DESC','SELECT COUNT(*) n FROM refresh_sessions',[],p));
    match=path.match(/^\/admin\/api\/devices\/([A-Za-z0-9_-]{43})\/revoke$/);
@@ -193,8 +194,9 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
    if(path==='/admin/api/calls'&&method==='GET')return json(res,200,{active:callService.list(),...list('SELECT id,chat_id,caller,callee,created,answered,ended,status,video FROM call_history ORDER BY created DESC','SELECT COUNT(*) n FROM call_history',[],p)});
    match=path.match(/^\/admin\/api\/calls\/([a-f0-9]{32})\/end$/);
    if(match&&method==='POST'){const d=await body(req),reason=text(d.reason);callService.terminate(match[1]);audit('call.terminate',match[1],reason);return json(res,200,{ok:true});}
+   if(path==='/admin/api/sms/providers'&&method==='GET')return json(res,200,sms.status());
    if(path==='/admin/api/settings'){
-    if(method==='GET')return json(res,200,readAdminSettings(db));if(method==='POST'){const d=await body(req),reason=text(d.reason),settings=validateAdminSettings(d.settings);db.prepare('INSERT INTO admin_config VALUES(1,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(JSON.stringify(settings));audit('settings.update','system',reason,{keys:Object.keys(settings)});return json(res,200,settings);}
+    if(method==='GET')return json(res,200,readAdminSettings(db));if(method==='POST'){const d=await body(req),reason=text(d.reason),settings=validateAdminSettings(d.settings);if(settings.sms_provider!==readAdminSettings(db).sms_provider&&!sms.status().providers[settings.sms_provider]?.configured)throw fail(400,'Сначала настройте выбранного провайдера в .env и перезапустите сервер');if(settings.sms_provider==='gateway')sms.validatePhone(adminPhone,'gateway');db.prepare('INSERT INTO admin_config VALUES(1,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(JSON.stringify(settings));audit('settings.update','system',reason,{keys:Object.keys(settings)});return json(res,200,settings);}
    }
    if(path==='/admin/api/maintenance/cleanup'&&method==='POST'){const d=await body(req),reason=text(d.reason);cleanupFiles();const result=db.prepare('DELETE FROM push_jobs WHERE expires<?').run(clock());audit('storage.cleanup','system',reason,{expired_push_jobs:Number(result.changes)});return json(res,200,{ok:true});}
    if(path==='/admin/api/backups'){
