@@ -144,31 +144,35 @@ internal fun ChatRoomScreen(
     BackHandler { when { selection.isNotEmpty() -> selection = emptySet(); recorder.recording -> recorder.cancel(); panel.open -> { if (panel.searching || panel.query.isNotEmpty()) { panel.searching = false; panel.query = ""; focus.clearFocus(); keyboard?.hide() } else if (panel.expanded) panel.expanded = false else panel.open = false }; searchOpen -> { searchOpen = false; onSearch("") }; else -> onBack() } }
     val visible = when { searchQuery.isNotBlank() -> searchResults; showPins -> pinnedMessages; else -> messages }
     val groups = remember(visible) { nativeMessageGroups(visible) }
-    val historyButton = moreHistory && !searchOpen && !showPins
+    var callPages by remember(chat.id) { mutableStateOf(1) }
+    val chatCalls = rememberNativeChatCalls(token, user?.id ?: 0, chat, if (moreHistory || earlierWindow) messages.firstOrNull()?.createdAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } else null, !searchOpen && !showPins, callPages)
+    val timeline = remember(groups, chatCalls) { nativeChatTimeline(groups, chatCalls) }
+    var previousLastEvent by remember(chat.id) { mutableStateOf("") }
+    val historyButton = (moreHistory || chatCalls.size >= callPages * 50 && callPages < 20) && !searchOpen && !showPins
     val offset = if (historyButton) 1 else 0
-    fun jumpBottom() { if (groups.isNotEmpty()) scope.launch { if (motion) listState.animateScrollToItem(groups.lastIndex + offset) else listState.scrollToItem(groups.lastIndex + offset); newMessages = 0 } }
+    fun jumpBottom() { if (timeline.isNotEmpty()) scope.launch { if (motion) listState.animateScrollToItem(timeline.lastIndex + offset) else listState.scrollToItem(timeline.lastIndex + offset); newMessages = 0 } }
     fun jump(id: Long) {
-        val index = groups.indexOfFirst { group -> group.any { it.id == id } }
+        val index = timeline.indexOfFirst { entry -> entry.messages.any { it.id == id } }
         if (index >= 0) scope.launch { if (motion) listState.animateScrollToItem(index + offset) else listState.scrollToItem(index + offset); highlighted = id }
         else { showPins = false; searchOpen = false; onSearch(""); onJumpToMessage(id) }
     }
-    LaunchedEffect(groups.size, visible.lastOrNull()?.id, searchOpen, showPins) {
-        if (groups.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(timeline.size, timeline.lastOrNull()?.key, visible.lastOrNull()?.id, searchOpen, showPins) {
+        if (timeline.isEmpty()) return@LaunchedEffect
         val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-        val addedAtEnd = visible.last().id != previousLastId
-        if (!firstScroll || addedAtEnd && !searchOpen && !showPins && nativeShouldFollow(lastVisible, previousCount, visible.last().senderId, user?.id)) {
-            if (firstScroll && motion) listState.animateScrollToItem(groups.lastIndex + offset) else listState.scrollToItem(groups.lastIndex + offset)
+        val addedAtEnd = timeline.lastOrNull()?.key != previousLastEvent
+        if (!firstScroll || addedAtEnd && !searchOpen && !showPins && nativeShouldFollow(lastVisible, previousCount, visible.lastOrNull()?.senderId ?: user?.id ?: 0, user?.id)) {
+            if (firstScroll && motion) listState.animateScrollToItem(timeline.lastIndex + offset) else listState.scrollToItem(timeline.lastIndex + offset)
             firstScroll = true; newMessages = 0
-        } else if (addedAtEnd && !searchOpen && !showPins && groups.size + offset > previousCount) newMessages += groups.size + offset - previousCount
-        previousCount = groups.size + offset; previousLastId = visible.last().id
+        } else if (addedAtEnd && !searchOpen && !showPins && timeline.size + offset > previousCount) newMessages += timeline.size + offset - previousCount
+        previousLastEvent = timeline.lastOrNull()?.key.orEmpty(); previousCount = timeline.size + offset; previousLastId = visible.lastOrNull()?.id ?: 0
     }
     LaunchedEffect(focusMessageId, groups.size) { focusMessageId?.let { id -> if (groups.any { group -> group.any { it.id == id } }) { jump(id); onFocusConsumed() } else if (groups.isNotEmpty()) onJumpToMessage(id) } }
     LaunchedEffect(highlighted) { if (highlighted != null) { delay(1800); highlighted = null } }
-    val currentGroups by rememberUpdatedState(groups)
+    val currentGroups by rememberUpdatedState(timeline)
     val currentOffset by rememberUpdatedState(offset)
     val reportVisible by rememberUpdatedState(onVisibleMessage)
     LaunchedEffect(chat.id, listState) {
-        snapshotFlow { val index = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1; currentGroups.getOrNull(index - currentOffset)?.lastOrNull()?.id }.distinctUntilChanged().debounce(400).collect { id ->
+        snapshotFlow { val index = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1; currentGroups.take((index - currentOffset + 1).coerceAtLeast(0)).lastOrNull { it.messages.isNotEmpty() }?.messages?.lastOrNull()?.id }.distinctUntilChanged().debounce(400).collect { id ->
             if (!searchOpen && !showPins && MainActivity.isVisible) id?.let(reportVisible)
         }
     }
@@ -234,13 +238,18 @@ internal fun ChatRoomScreen(
         if (showPins) Row(Modifier.fillMaxWidth().background(Panel).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) { NativeText("Закреплённые · ${pinnedMessages.size}", Modifier.weight(1f), color = Accent, fontSize = 13.sp); TextButton(onClick = { showPins = false }) { NativeText("Закрыть") } }
         if (error.isNotBlank()) NativeConnectionNotice(error, onRetry)
         Box(Modifier.weight(1f).fillMaxWidth().hazeSource(backdrop, zIndex = 1f, key = "history")) {
-            if (visible.isEmpty()) Column(Modifier.fillMaxWidth().align(Alignment.Center)) { NativeEmptyState(Icons.Outlined.ChatBubbleOutline, if (searchQuery.isNotBlank()) "Ничего не найдено" else if (showPins) "Нет закреплённых сообщений" else "Начните разговор") }
+            if (timeline.isEmpty()) Column(Modifier.fillMaxWidth().align(Alignment.Center)) { NativeEmptyState(Icons.Outlined.ChatBubbleOutline, if (searchQuery.isNotBlank()) "Ничего не найдено" else if (showPins) "Нет закреплённых сообщений" else "Начните разговор") }
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(LocalNativeAppearance.current.spacing.dp)) {
-                if (historyButton) item(key = "history") { TextButton(onClick = onLoadOlder, enabled = !loadingHistory, modifier = Modifier.fillMaxWidth()) { if (loadingHistory) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else NativeText("Более ранние сообщения", fontSize = 12.sp) } }
-                itemsIndexed(groups, key = { _, group -> "${chat.id}-${group.first().id}" }) { index, group ->
+                if (historyButton) item(key = "history") { TextButton(onClick = { if (moreHistory) onLoadOlder() else callPages++ }, enabled = !loadingHistory, modifier = Modifier.fillMaxWidth()) { if (loadingHistory) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else NativeText(if (moreHistory) "Более ранние сообщения" else "Более ранние звонки", fontSize = 12.sp) } }
+                itemsIndexed(timeline, key = { _, entry -> "${chat.id}-${entry.key}" }) { index, entry ->
+                    val group = entry.messages
+                    val previousEntry = timeline.getOrNull(index - 1)
+                    if (nativeDay(entry.createdIso) != previousEntry?.let { nativeDay(it.createdIso) }) Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) { NativeText(nativeDay(entry.createdIso), Modifier.clip(CircleShape).background(Panel).padding(horizontal = 12.dp, vertical = 5.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextMain) }
+                    if (entry.call != null) {
+                        NativeChatCallCard(entry.call, enabled = !callActive) { if (entry.call.video) onVideo(chat) else onCall(chat) }
+                    } else {
                     val message = group.first()
-                    val previous = groups.getOrNull(index - 1)?.lastOrNull()
-                    if (nativeDay(message.createdAt) != previous?.let { nativeDay(it.createdAt) }) Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) { NativeText(nativeDay(message.createdAt), Modifier.clip(CircleShape).background(Panel).padding(horizontal = 12.dp, vertical = 5.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextMain) }
+                    val previous = previousEntry?.messages?.lastOrNull()
                     MessageBubble(message, group, message.senderId == user?.id, group.last().id <= chat.peerDelivered, group.last().id <= chat.peerRead, canModerate, canPin, message.id in transcribingMessages,
                         onReply = { replyTo = it; editTarget = null; panel.open = false }, onEdit = { editTarget = it; panel.tab = "emoji"; replyTo = null; input = TextFieldValue(it.text, TextRange(it.text.length)); entities = it.emojiEntities }, onForward = onForward,
                         onCopy = { clipboard.setText(AnnotatedString(it.text)); Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show() }, onAction = onMessageAction,
@@ -249,10 +258,11 @@ internal fun ChatRoomScreen(
                         selected = group.any { it.id in selection }, selectionMode = selection.isNotEmpty(), onSelect = ::select,
                         onSelectGroup = { val ids = group.map { it.id }.toSet(); selection = if (ids.all { it in selection }) selection - ids else (selection + ids).take(50).toSet() },
                     onJump = ::jump, highlighted = group.any { it.id == highlighted }, onProfile = onOpenProfile, canReply = chat.canSend)
+                    }
                 }
             }
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            if (groups.isNotEmpty() && (earlierWindow || lastVisible < groups.lastIndex + offset - 1)) SmallFloatingActionButton(onClick = { if (earlierWindow) onNewest() else jumpBottom() }, modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp), containerColor = Panel, contentColor = Accent) { BadgedBox(badge = { if (newMessages > 0) Badge { NativeText(newMessages.toString()) } }) { Icon(Icons.Outlined.KeyboardArrowDown, "К новым сообщениям") } }
+            if (timeline.isNotEmpty() && (earlierWindow || lastVisible < timeline.lastIndex + offset - 1)) SmallFloatingActionButton(onClick = { if (earlierWindow) onNewest() else jumpBottom() }, modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp), containerColor = Panel, contentColor = Accent) { BadgedBox(badge = { if (newMessages > 0) Badge { NativeText(newMessages.toString()) } }) { Icon(Icons.Outlined.KeyboardArrowDown, "К новым сообщениям") } }
         }
         if (replyTo != null || editTarget != null) Row(Modifier.fillMaxWidth().background(Panel).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(3.dp).height(34.dp).background(Accent))

@@ -26,7 +26,7 @@ internal object CallAlerts {
     fun show(context: Context, call: VolnaCall) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(NativeCalls.CALL_CHANNEL, "Входящие звонки", NotificationManager.IMPORTANCE_HIGH).apply {
-            setSound(null, null); lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            setSound(null, null); enableVibration(false); lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         })
         val open = IncomingCallActivity.pending(context, call.id)
         val answer = IncomingCallActivity.pending(context, call.id, answer = true)

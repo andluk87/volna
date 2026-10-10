@@ -54,3 +54,21 @@ test('calls: timeout and TURN credentials with controlled clock',async()=>{
  const next=await invoke('/start',uid,'POST',{device,chat_id:chat});const offer={type:'offer',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n'};await invoke('/'+next.id+'/offer',uid,'POST',{device,description:offer});now+=45000;await invoke('/current?device='+device,uid);now+=10000;const other=d();await invoke('/'+next.id+'/accept',peer,'POST',{device:other});now+=20000;await invoke('/'+next.id+'/answer',peer,'POST',{device:other,description:{...offer,type:'answer'}});assert.equal(result.status,'active');
  }finally{service.close();await app.close();}
 });
+
+test('calls: two cameras operate independently and chat history is isolated, directed and paginated',async t=>{
+ const app=createApp({database:':memory:'});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(()=>app.close());const base=`http://127.0.0.1:${app.server.address().port}/api`;
+ const req=async(path,token,data)=>{const r=await fetch(base+path,{method:data===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,data:await r.json()};};
+ const users=[];for(const username of ['call_one','call_two','call_three'])users.push((await req('/register','',{username})).data);const [a,b,c]=users;
+ const chat=(await req('/chats',a.token,{user_id:b.user.id})).data.id,other=(await req('/chats',a.token,{user_id:c.user.id})).data.id,da=d(),db=d();
+ const call=(await req('/calls/start',a.token,{device:da,chat_id:chat,video:true})).data;
+ const sdp='v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=sendrecv\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=sendrecv\r\n';
+ await req(`/calls/${call.id}/offer`,a.token,{device:da,description:{type:'offer',sdp}});await req(`/calls/${call.id}/accept`,b.token,{device:db});await req(`/calls/${call.id}/answer`,b.token,{device:db,description:{type:'answer',sdp}});
+ for(const [token,device]of[[a.token,da],[b.token,db]])assert.equal((await req(`/calls/${call.id}/camera`,token,{device,enabled:true})).status,200);
+ assert.equal((await req('/calls/current?device='+da,a.token)).data.peer_video,true);assert.equal((await req('/calls/current?device='+db,b.token)).data.peer_video,true);
+ await req(`/calls/${call.id}/camera`,a.token,{device:da,enabled:false});assert.equal((await req('/calls/current?device='+da,a.token)).data.peer_video,true);assert.equal((await req('/calls/current?device='+db,b.token)).data.peer_video,false);
+ await req(`/calls/${call.id}/end`,b.token,{device:db});
+ const outgoing=(await req('/calls/history?chat_id='+chat,a.token)).data,incoming=(await req('/calls/history?chat_id='+chat,b.token)).data;
+ assert.equal(outgoing.length,1);assert.equal(outgoing[0].incoming,false);assert.equal(incoming[0].incoming,true);assert.equal(outgoing[0].video,true);assert.equal(outgoing[0].status,'ended');
+ assert.deepEqual((await req('/calls/history?chat_id='+other,a.token)).data,[]);assert.equal((await req('/calls/history?chat_id='+chat,c.token)).status,404);assert.equal((await req('/calls/history?chat_id=bad',a.token)).status,400);assert.equal((await req('/calls/history?chat_id='+chat,'')).status,401);
+ assert.deepEqual((await req(`/calls/history?chat_id=${chat}&before=${outgoing[0].created}`,a.token)).data,[]);
+});

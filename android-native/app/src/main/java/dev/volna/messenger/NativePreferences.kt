@@ -121,15 +121,42 @@ internal fun NativeNotificationSettings(account: Long, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember(account) { NativeNotificationPolicy.prefs(context, account) }
     var revision by remember { mutableStateOf(0) }
+    var ringtoneKind by remember { mutableStateOf("message") }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            @Suppress("DEPRECATION")
+            val selected = result.data?.getParcelableExtra<android.net.Uri>(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            prefs.edit().putString("${ringtoneKind}_sound_uri", selected?.toString().orEmpty()).apply(); revision++
+        }
+    }
+    fun selectSound(kind: String) {
+        ringtoneKind = kind
+        val type = if (kind == "call") android.media.RingtoneManager.TYPE_RINGTONE else android.media.RingtoneManager.TYPE_NOTIFICATION
+        val current = prefs.getString("${kind}_sound_uri", null)
+        val intent = Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER)
+            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, type)
+            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
+            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, android.media.RingtoneManager.getDefaultUri(type))
+            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, if (current == null) android.media.RingtoneManager.getDefaultUri(type) else current.takeIf { it.isNotBlank() }?.let(android.net.Uri::parse))
+        runCatching { picker.launch(intent) }.onFailure { context.startActivity(Intent(Settings.ACTION_SOUND_SETTINGS)) }
+    }
     NativeFullScreen("Уведомления", onDismiss) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { NativeSettingsCard {
-                listOf("messages" to "Новые сообщения", "mentions" to "Упоминания", "replies" to "Ответы на мои сообщения", "reactions" to "Реакции на мои сообщения", "preview" to "Текст в уведомлениях", "sound" to "Звук и вибрация").forEach { (key, title) ->
+                listOf("messages" to "Новые сообщения", "mentions" to "Упоминания", "replies" to "Ответы на мои сообщения", "reactions" to "Реакции на мои сообщения", "preview" to "Текст в уведомлениях", "sound" to "Звук сообщений", "message_vibration" to "Вибрация сообщений", "call_sound" to "Звук входящего звонка", "call_vibration" to "Вибрация входящего звонка").forEach { (key, title) ->
                     val checked = remember(revision, key) { prefs.getBoolean(key, true) }
                     Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         NativeText(title, Modifier.weight(1f), fontSize = 15.sp, color = TextMain)
-                        Switch(checked, { prefs.edit().putBoolean(key, it).apply(); revision++ })
+                        Switch(checked, { val edit = prefs.edit().putBoolean(key, it); if (key == "sound") edit.putBoolean("message_vibration", prefs.getBoolean("message_vibration", true)); edit.apply(); revision++ })
                     }
+                }
+            } }
+            item { NativeSettingsCard {
+                listOf("call" to "Рингтон звонка", "message" to "Звук сообщения").forEach { (kind, label) ->
+                    val sound = remember(revision, kind) { prefs.getString("${kind}_sound_uri", null) }
+                    val title = if (sound == null) "Системный звук" else if (sound.isBlank()) "Без звука" else runCatching { android.media.RingtoneManager.getRingtone(context, android.net.Uri.parse(sound))?.getTitle(context) }.getOrNull() ?: "Выбранный звук"
+                    NativeSettingRow(Icons.Outlined.MusicNote, label, title) { selectSound(kind) }
                 }
             } }
             item { NativeSettingsCard { NativeSettingRow(Icons.Outlined.NotificationsActive, "Уведомления Android", "Звук, вибрация, экран блокировки и звонки") { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) } } }

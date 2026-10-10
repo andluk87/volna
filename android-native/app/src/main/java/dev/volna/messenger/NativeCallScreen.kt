@@ -48,11 +48,11 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
     val call = original.copy(peer = original.peer?.let { it.copy(name = contactNames[it.id] ?: it.name) })
     val layout = remember(call.id) { NativeCallLayout.forCall(call.id) }
     SideEffect { if (call.video || state.remoteVideo || state.cameraEnabled || state.remoteSharing) layout.video = true }
-    val videoMode = layout.video || call.video || state.remoteVideo || state.cameraEnabled || state.remoteSharing
+    val videoMode = (layout.video || call.video || state.remoteVideo || state.cameraEnabled || state.remoteSharing) && call.status == "active"
     var routesOpen by remember { mutableStateOf(false) }
     var routes by remember { mutableStateOf(emptyList<NativeAudioRoute>()) }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted -> if (granted[Manifest.permission.RECORD_AUDIO] == true && NativeCalls.state.value.call?.id == call.id) NativeCalls.accept(video = call.video && granted[Manifest.permission.CAMERA] == true) }
-    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (it && NativeCalls.state.value.call?.id == call.id) NativeCalls.setCamera(true) }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (it && NativeCalls.state.value.call?.id == call.id) NativeCalls.previewCamera() }
     val bluetoothPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { routes = NativeCalls.routes(); routesOpen = true }
     val screenPermission = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) result.data?.takeIf { NativeCalls.state.value.call?.id == call.id }?.let(NativeCalls::startScreenSharing)
@@ -71,14 +71,18 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
         return
     }
     val content: @Composable () -> Unit = {
-    if (pip) {
+    if (state.cameraPreview && !pip) {
+        NativeCameraPreviewScreen(state, onScreen = { NativeCalls.cancelCameraPreview(); screenPermission.launch((context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager).createScreenCaptureIntent()) })
+    } else if (pip) {
         NativeParticipantVideo(state, token, layout.localMain, Modifier.fillMaxSize(), overlay = false)
     } else {
-    Column(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF745FEA), Color(0xFF4284E8), Color(0xFF20ACC3)))).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)) {
+    Box(Modifier.fillMaxSize().background(Brush.linearGradient(if (state.connected) listOf(Color(0xFF218CBE), Color(0xFF31B2A3)) else listOf(Color(0xFF426DED), Color(0xFF7960E9), Color(0xFF20A8D4))))) {
+        if (videoMode) NativeParticipantVideo(state, token, layout.localMain, Modifier.fillMaxSize().clickable { layout.controls = !layout.controls }, overlay = false)
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)) {
         if (!videoMode || layout.controls) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { minimize() }) { Icon(Icons.Outlined.CloseFullscreen, "Свернуть звонок", tint = Color.White) }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = {
+            if (state.connected) IconButton(onClick = {
                 if (state.sharing) NativeCalls.stopScreenSharing()
                 else screenPermission.launch((context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager).createScreenCaptureIntent())
             }, enabled = state.sharing || state.connected && state.screenReady) { Icon(if (state.sharing) Icons.Outlined.StopScreenShare else Icons.Outlined.ScreenShare, if (state.sharing) "Остановить показ экрана" else "Показать экран", tint = Color.White.copy(alpha = if (state.sharing || state.connected && state.screenReady) 1f else .5f)) }
@@ -86,7 +90,6 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
         if (videoMode) {
             NativeText("${call.peer?.name ?: "Видеозвонок"} · ${if (state.connected) callDuration(state.elapsed) else state.phase}", color = Color.White, fontSize = 13.sp)
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { layout.controls = !layout.controls }) {
-                NativeParticipantVideo(state, token, layout.localMain, Modifier.fillMaxSize(), overlay = false)
                 val density = LocalDensity.current
                 val previewWidth = 110.dp.coerceAtMost(maxWidth)
                 val previewHeight = 148.dp.coerceAtMost(maxHeight)
@@ -106,10 +109,12 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
         } else {
             Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Top, horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.weight(.25f))
-                Box(Modifier.size(166.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).border(8.dp, Color.White.copy(alpha = .07f), CircleShape), contentAlignment = Alignment.Center) { Avatar(call.peer?.name ?: "В", call.peer?.id ?: 0, call.peer?.avatarUrl, token, size = 142.dp) }
-                NativeText(call.peer?.name ?: "Собеседник", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Normal, modifier = Modifier.padding(top = 20.dp))
-                NativeText(state.phase, color = Color.White.copy(alpha = .9f), fontSize = 16.sp, modifier = Modifier.padding(top = 8.dp))
-                if (state.connected) NativeText(callDuration(state.elapsed), color = Color.White, fontSize = 22.sp, modifier = Modifier.padding(top = 12.dp))
+                Box(Modifier.size(260.dp), contentAlignment = Alignment.Center) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Column { repeat(3) { Icon(Icons.Outlined.Waves, null, tint = Color(0xFF116796).copy(alpha = .24f), modifier = Modifier.padding(8.dp).size(30.dp)) } }; Column { repeat(3) { Icon(Icons.Outlined.Waves, null, tint = Color(0xFF116796).copy(alpha = .24f), modifier = Modifier.padding(8.dp).size(30.dp)) } } }
+                    Box(Modifier.size(214.dp).clip(CircleShape).background(Color.White.copy(alpha = .10f)).border(7.dp, Color.White.copy(alpha = .08f), CircleShape), contentAlignment = Alignment.Center) { Avatar(call.peer?.name ?: "В", call.peer?.id ?: 0, call.peer?.avatarUrl, token, size = 190.dp) }
+                }
+                NativeText(call.peer?.name ?: "Собеседник", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Normal, modifier = Modifier.padding(top = 4.dp))
+                NativeText(nativeCallStatus(state), color = Color.White.copy(alpha = .95f), fontSize = 18.sp, modifier = Modifier.padding(top = 8.dp))
                 if (state.sharing) NativeText("Ваш экран виден собеседнику", color = Accent, modifier = Modifier.padding(top = 12.dp))
                 Spacer(Modifier.weight(1f))
             }
@@ -117,20 +122,20 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
         if (state.error.isNotBlank()) ErrorBanner(state.error)
         if (!videoMode || layout.controls || call.status == "ringing") {
         if (call.incoming && call.status == "ringing") Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            CallControl(Icons.Outlined.CallEnd, "Отклонить", Color(0xFFF32638)) { NativeCalls.end() }
-            CallControl(Icons.Outlined.Call, "Ответить", Color(0xFF54BC91), enabled = !state.busy) {
+            CallControl(Icons.Outlined.Call, "Принять", Color(0xFF42CC41), enabled = !state.busy, size = 72.dp) {
                 if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED && (!call.video || context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)) NativeCalls.accept(video = call.video)
                 else micPermission.launch(if (call.video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO))
             }
+            CallControl(Icons.Outlined.CallEnd, "Отклонить", Color(0xFFF32638), size = 72.dp) { NativeCalls.end() }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 CallControl(Icons.Outlined.VolumeUp, "Динамик", Color.White.copy(alpha = .18f)) {
                     if (Build.VERSION.SDK_INT >= 31 && context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
                     else { routes = NativeCalls.routes(); routesOpen = true }
                 }
-                CallControl(if (state.cameraEnabled) Icons.Outlined.VideocamOff else Icons.Outlined.Videocam, if (state.cameraEnabled) "Выкл. видео" else "Вкл. видео", Color.White.copy(alpha = if (state.cameraEnabled) .35f else .18f), enabled = state.connected && state.screenReady) {
+                CallControl(if (state.cameraEnabled) Icons.Outlined.VideocamOff else Icons.Outlined.Videocam, if (state.cameraEnabled) "Выкл. видео" else "Вкл. видео", if (state.cameraEnabled) Color.White.copy(alpha = .18f) else Color.White, enabled = state.connected && state.screenReady) {
                     if (state.cameraEnabled) NativeCalls.setCamera(false)
-                    else if (context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) NativeCalls.setCamera(true)
+                    else if (context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) NativeCalls.previewCamera()
                     else cameraPermission.launch(Manifest.permission.CAMERA)
                 }
                 CallControl(if (state.muted) Icons.Outlined.MicOff else Icons.Outlined.Mic, if (state.muted) "Вкл. звук" else "Выкл. звук", Color.White.copy(alpha = if (state.muted) .35f else .18f)) { NativeCalls.toggleMute() }
@@ -139,7 +144,9 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
 
         }
         }
-        if (!videoMode || layout.controls) NativeText(if (state.sharing) "При блокировке Android может остановить показ экрана. Голосовой звонок продолжится." else "Звонок остаётся активным при сворачивании и выключении экрана", color = Color.White.copy(alpha = .7f), fontSize = 10.sp, modifier = Modifier.padding(top = 18.dp, bottom = 16.dp))
+        if (state.sharing) NativeText("При блокировке Android может остановить показ экрана", color = Color.White.copy(alpha = .7f), fontSize = 10.sp)
+        Spacer(Modifier.height(28.dp))
+    }
     }
     }
     }
@@ -150,10 +157,10 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
 }
 
 @Composable
-private fun CallControl(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, color: Color, enabled: Boolean = true, onClick: () -> Unit) {
+private fun CallControl(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, color: Color, enabled: Boolean = true, size: androidx.compose.ui.unit.Dp = 60.dp, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        IconButton(onClick, enabled = enabled, modifier = Modifier.size(60.dp).clip(CircleShape).background(if (enabled) color else Color.White.copy(alpha = .12f))) {
-            Icon(icon, label, tint = Color.White.copy(alpha = if (enabled) 1f else .45f), modifier = Modifier.size(28.dp))
+        IconButton(onClick, enabled = enabled, modifier = Modifier.size(size).clip(CircleShape).background(if (enabled) color else Color.White.copy(alpha = .12f))) {
+            Icon(icon, label, tint = if (color == Color.White && enabled) Color(0xFF5070C3) else Color.White.copy(alpha = if (enabled) 1f else .45f), modifier = Modifier.size(if (size > 60.dp) 34.dp else 28.dp))
         }
         NativeText(label, color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(top = 7.dp))
     }
@@ -164,7 +171,7 @@ private fun RemoteScreenVideo(modifier: Modifier, local: Boolean = false, overla
     val context = LocalContext.current
     val renderer = remember(overlay) {
         val surface = SurfaceViewRenderer(context)
-        try { surface.init(NativeCalls.eglContext, null); surface.setEnableHardwareScaler(true); surface.setMirror(local); surface.setZOrderMediaOverlay(overlay); surface }
+        try { surface.init(NativeCalls.eglContext, null); surface.setEnableHardwareScaler(true); surface.setScalingType(org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FILL); surface.setMirror(local); surface.setZOrderMediaOverlay(overlay); surface }
         catch (_: RuntimeException) { runCatching { surface.release() }; null }
     }
     if (renderer == null) {
@@ -179,7 +186,7 @@ private fun RemoteScreenVideo(modifier: Modifier, local: Boolean = false, overla
     DisposableEffect(renderer) { onDispose { runCatching { renderer.release() } } }
     AndroidView(factory = { renderer }, modifier = modifier.clip(RoundedCornerShape(12.dp)))
 }
-private fun callDuration(seconds: Int) = "%d:%02d".format(seconds / 60, seconds % 60)
+private fun callDuration(seconds: Int) = "%02d:%02d".format(seconds / 60, seconds % 60)
 
 internal fun nativePreviewCoordinate(value: Float, limit: Float) = value.coerceIn(0f, limit.coerceAtLeast(0f))
 
@@ -204,6 +211,32 @@ private fun NativeParticipantVideo(state: NativeCallState, token: String, local:
             if (!local) Avatar(state.call?.peer?.name ?: "В", state.call?.peer?.id ?: 0, state.call?.peer?.avatarUrl, token, size = if (overlay) 48.dp else 120.dp)
             else Icon(Icons.Outlined.Person, null, tint = Color.White, modifier = Modifier.size(if (overlay) 48.dp else 120.dp))
             NativeText(if (local) "Вы · камера выключена" else "Камера выключена", color = Color.White, fontSize = if (overlay) 10.sp else 14.sp)
+        }
+    }
+}
+
+internal fun nativeCallStatus(state: NativeCallState): String = when {
+    state.connected -> callDuration(state.elapsed)
+    state.call?.status == "ringing" && state.call.incoming -> "Звонок Волна"
+    state.call?.status == "ringing" -> "Ожидание…"
+    state.phase.contains("Восстанов", ignoreCase = true) -> state.phase
+    else -> "Соединение…"
+}
+
+@Composable
+private fun NativeCameraPreviewScreen(state: NativeCallState, onScreen: () -> Unit) {
+    BackHandler { NativeCalls.cancelCameraPreview() }
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        RemoteScreenVideo(Modifier.fillMaxSize(), local = true)
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)) {
+            IconButton(onClick = NativeCalls::cancelCameraPreview) { Icon(Icons.Outlined.ArrowBack, "Назад", tint = Color.White) }
+            Spacer(Modifier.weight(1f))
+            Button(onClick = NativeCalls::publishCameraPreview, enabled = state.connected, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(9.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF208EF0))) { NativeText("Включить трансляцию", color = Color.White, fontSize = 17.sp) }
+            Row(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 28.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                TextButton(onClick = onScreen) { NativeText("Экран", color = Color.White, fontSize = 12.sp) }
+                TextButton(onClick = { NativeCalls.previewCamera(true) }) { NativeText("Передняя камера", color = if (state.cameraFront) Color.White else Color.White.copy(alpha=.65f), fontSize = 12.sp) }
+                TextButton(onClick = { NativeCalls.previewCamera(false) }) { NativeText("Задняя камера", color = if (!state.cameraFront) Color.White else Color.White.copy(alpha=.65f), fontSize = 12.sp) }
+            }
         }
     }
 }

@@ -76,7 +76,7 @@ class CallService : Service() {
         val audio = getSystemService(AudioManager::class.java)
         val earpiece = if (Build.VERSION.SDK_INT >= 31) audio.communicationDevice?.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
             else !audio.isSpeakerphoneOn && !audio.isBluetoothScoOn && !audio.isWiredHeadsetOn
-        val enabled = state.call != null && nativeCallUsesProximity(state.connected, earpiece, state.cameraEnabled || state.remoteVideo, state.sharing || state.remoteSharing)
+        val enabled = state.call != null && nativeCallUsesProximity(state.connected, earpiece, state.cameraPreview || state.cameraEnabled || state.remoteVideo, state.sharing || state.remoteSharing)
         val power = getSystemService(PowerManager::class.java)
         if (enabled && power.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
             if (proximityLock == null) proximityLock = power.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "Volna:Proximity").apply { setReferenceCounted(false) }

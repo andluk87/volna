@@ -38,7 +38,7 @@ data class NativeCallState(
     val muted: Boolean = false, val sharing: Boolean = false, val remoteSharing: Boolean = false,
     val minimized: Boolean = false, val connected: Boolean = false, val screenReady: Boolean = false,
     val elapsed: Int = 0, val relay: Boolean = true, val route: String = "Телефон", val busy: Boolean = false,
-    val cameraEnabled: Boolean = false, val cameraFront: Boolean = true, val remoteVideo: Boolean = false
+    val cameraPreview: Boolean = false, val cameraEnabled: Boolean = false, val cameraFront: Boolean = true, val remoteVideo: Boolean = false
 )
 data class NativeAudioRoute(val id: Int, val label: String)
 
@@ -211,8 +211,10 @@ object NativeCalls {
                 val accepted = withContext(Dispatchers.IO) { api.callAction(token, device, call.id, "accept") }
                 checkVersion(version)
                 mutableState.update { it.copy(call = accepted) }
-                val pc = prepare(version)
+                val pc = prepare(version, incoming = true)
                 setDescription(pc, call.offer ?: error("Нет предложения звонка"), local = false)
+                // Reuse the transceiver created by the remote offer: both peers send and receive.
+                pc.transceivers.filter { it.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO }.forEach { it.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV }
                 setDescription(pc, createDescription(pc, offer = false), local = true)
                 gather(pc)
                 checkVersion(version)
@@ -229,7 +231,7 @@ object NativeCalls {
         }
     }
 
-    private suspend fun prepare(version: Int): PeerConnection {
+    private suspend fun prepare(version: Int, incoming: Boolean = false): PeerConnection {
         val app = context ?: error("Приложение не запущено")
         // NetworkMonitor queries ConnectivityManager from JNI during ICE. An uncaught
         // SecurityException there aborts the native network thread instead of reaching Kotlin.
@@ -295,7 +297,7 @@ object NativeCalls {
         audioTrack = track
         checkNotNull(pc.addTrack(track, listOf("volna"))) { "Не удалось подключить микрофон к звонку" }
         NativeCallDiagnostics.step("Добавление канала демонстрации экрана")
-        checkNotNull(pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV, listOf("volna")))) { "Не удалось подготовить видеоканал" }
+        if (!incoming) checkNotNull(pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV, listOf("volna")))) { "Не удалось подготовить видеоканал" }
         attemptAt = SystemClock.elapsedRealtime()
         mutableState.update { it.copy(relay = config.optBoolean("relayConfigured")) }
         return pc
@@ -361,9 +363,21 @@ object NativeCalls {
         override fun onCameraSwitchDone(isFrontCamera: Boolean) { mutableState.update { it.copy(cameraFront = isFrontCamera) } }
         override fun onCameraSwitchError(error: String) { mutableState.update { it.copy(error = "Не удалось сменить камеру") } }
     }) } }
-    fun setCamera(enabled: Boolean) {
+    fun previewCamera(front: Boolean = true) {
+        if (state.value.cameraPreview) { if (state.value.cameraFront != front) switchCamera(); return }
+        setCamera(true, preview = true, front = front)
+    }
+    fun cancelCameraPreview() { if (state.value.cameraPreview) stopCamera() }
+    fun publishCameraPreview() {
+        if (!state.value.cameraPreview || !state.value.connected || state.value.call?.status != "active") return
+        val sender = videoSender() ?: return
+        val track = cameraTrack ?: return
+        if (!sender.setTrack(track, false)) { mutableState.update { it.copy(error = "Не удалось включить трансляцию") }; return }
+        mutableState.update { it.copy(cameraPreview = false, cameraEnabled = true) }; signalCamera(true)
+    }
+    fun setCamera(enabled: Boolean, preview: Boolean = false, front: Boolean = true) {
         if (!enabled) { stopCamera(); return }
-        if (state.value.cameraEnabled || !state.value.connected || !state.value.screenReady) return
+        if (state.value.cameraEnabled || state.value.cameraPreview || !state.value.connected || !state.value.screenReady) return
         try {
             val app = context ?: error("Звонок завершён")
             check(app.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) { "Разрешите доступ к камере" }
@@ -371,7 +385,7 @@ object NativeCalls {
             CallService.cameraStarted()
             val mediaFactory = factory ?: error("Звонок завершён")
             val enumerator = Camera2Enumerator(app)
-            val name = enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) } ?: enumerator.deviceNames.firstOrNull() ?: error("Камера не найдена")
+            val name = enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) == front } ?: enumerator.deviceNames.firstOrNull() ?: error("Камера не найдена")
             val capture = enumerator.createCapturer(name, null) ?: error("Камера недоступна")
             cameraCapturer = capture
             val source = mediaFactory.createVideoSource(false).also { cameraSource = it }
@@ -381,12 +395,12 @@ object NativeCalls {
             source.adaptOutputFormat(640, 480, 24); capture.startCapture(640, 480, 24)
             val track = mediaFactory.createVideoTrack("volna-camera", source).also { cameraTrack = it }
             val sender = videoSender() ?: error("Видеоканал недоступен")
-            check(sender.setTrack(track, false)) { "Не удалось включить камеру" }
+            if (!preview) check(sender.setTrack(track, false)) { "Не удалось включить камеру" }
             localVideoSinks.forEach(track::addSink)
             val parameters = sender.parameters
             parameters.encodings.forEach { it.maxBitrateBps = 800_000; it.maxFramerate = 24 }; sender.setParameters(parameters)
-            mutableState.update { it.copy(cameraEnabled = true, cameraFront = enumerator.isFrontFacing(name), error = "") }
-            signalCamera(true)
+            mutableState.update { it.copy(cameraEnabled = !preview, cameraPreview = preview, cameraFront = enumerator.isFrontFacing(name), error = "") }
+            if (!preview) signalCamera(true)
         } catch (problem: Exception) { stopCamera(); mutableState.update { it.copy(error = problem.message ?: "Не удалось включить камеру") } }
     }
     private fun stopCamera() {
@@ -397,13 +411,21 @@ object NativeCalls {
         val track = cameraTrack; cameraTrack = null; runCatching { if (track != null) { localVideoSinks.forEach(track::removeSink); track.dispose() } }
         val source = cameraSource; cameraSource = null; runCatching { source?.dispose() }
         val helper = cameraTexture; cameraTexture = null; runCatching { helper?.dispose() }
-        mutableState.update { it.copy(cameraEnabled = false) }; CallService.cameraStopped()
+        mutableState.update { it.copy(cameraEnabled = false, cameraPreview = false) }; CallService.cameraStopped()
         if (enabled) signalCamera(false)
     }
     private fun signalCamera(enabled: Boolean) {
         val call = state.value.call ?: return
-        val session = token
-        scope.launch(Dispatchers.IO) { runCatching { api.callCamera(session, device, call.id, enabled) } }
+        val session = token; val version = generation
+        scope.launch {
+            repeat(3) {
+                if (version != generation || state.value.call?.id != call.id) return@launch
+                try { withContext(Dispatchers.IO) { api.callCamera(session, device, call.id, enabled) }; return@launch }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { delay(1_000) }
+            }
+            if (enabled && version == generation && state.value.cameraEnabled) { stopCamera(); mutableState.update { it.copy(error = "Сервер не подтвердил видео. Звук продолжает работать; попробуйте включить камеру ещё раз.") } }
+        }
     }
     fun minimize(value: Boolean) { mutableState.update { it.copy(minimized = value) } }
     fun clearError() { mutableState.update { it.copy(error = "") }; NativeCallDiagnostics.clear() }
@@ -614,12 +636,15 @@ object NativeCalls {
     private fun ring(call: VolnaCall) {
         val app = context ?: return
         runCatching { CallAlerts.show(app, call) }
-        ringtone = RingtoneManager.getRingtone(app, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))?.also {
+        NativeCallVibration.start(app)
+        val uri = NativeNotificationSounds.callUri(app)
+        ringtone = if (NativeNotificationSounds.callSoundAllowed(app) && uri != null) runCatching { RingtoneManager.getRingtone(app, uri) }.getOrNull()?.also {
             if (Build.VERSION.SDK_INT >= 28) it.isLooping = true
             runCatching { it.play() }
-        }
+        } else null
     }
     private fun stopRinging() {
+        NativeCallVibration.stop()
         stopRingback()
         val old = ringtone; ringtone = null; runCatching { old?.stop() }
         runCatching { context?.getSystemService(NotificationManager::class.java)?.cancel(CALL_NOTIFICATION) }

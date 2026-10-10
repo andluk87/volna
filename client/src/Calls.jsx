@@ -48,14 +48,14 @@ export default forwardRef(function Calls({token,onError,onBeforeCall},ref){
  function previewDown(e){e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);drag.current={x:e.clientX,y:e.clientY,position,moved:false};}
  function previewMove(e){const d=drag.current,rect=stage.current?.getBoundingClientRect();if(!d||!rect)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(Math.abs(dx)+Math.abs(dy)>5)d.moved=true;const maxX=Math.max(1,rect.width-110),maxY=Math.max(1,rect.height-148);setPosition({x:Math.max(0,Math.min(1,d.position.x+dx/maxX)),y:Math.max(0,Math.min(1,d.position.y+dy/maxY))});}
  function previewUp(e){e.stopPropagation();if(drag.current&&!drag.current.moved)setLocalMain(v=>!v);drag.current=null;}
- async function prepare(version){
+ async function prepare(version,incoming=false){
   onBeforeCall?.();
   if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)throw Error('Для звонка нужен HTTPS и браузер с поддержкой микрофона и WebRTC');
   const config=await request('/calls/config',token);check(version);setRelay(config.relayConfigured);
   const media=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});if(version!==generation.current){media.getTracks().forEach(t=>t.stop());check(version);}stream.current=media;setHasAudio(true);keepAlive(true);
   window.dispatchEvent(new CustomEvent('volna-audio-play',{detail:null}));
   const pc=new RTCPeerConnection({iceServers:config.iceServers});peer.current=pc;media.getTracks().forEach(t=>pc.addTrack(t,media));
-  if(pc.addTransceiver)pc.addTransceiver('video',{direction:'sendrecv'});
+  if(!incoming&&pc.addTransceiver)pc.addTransceiver('video',{direction:'sendrecv'});
   remoteAudioStream.current=new MediaStream();remoteScreenStream.current=new MediaStream();
   pc.ontrack=e=>{if(pc!==peer.current)return;const video=e.track.kind==='video',received=video?remoteScreenStream.current:remoteAudioStream.current;if(!received.getTracks().some(t=>t.id===e.track.id))received.addTrack(e.track);
    if(video){if(remoteVideo.current)remoteVideo.current.srcObject=received;if(current.current?.peer_sharing===undefined){setRemoteSharing(!e.track.muted);e.track.onmute=()=>setRemoteSharing(false);e.track.onunmute=()=>setRemoteSharing(true);}e.track.onended=()=>setRemoteSharing(false);}
@@ -70,7 +70,7 @@ export default forwardRef(function Calls({token,onError,onBeforeCall},ref){
   try{const c=await request('/calls/start',token,{chat_id:chat.id,device:device.current,video:!!video});if(version!==generation.current){request(`/calls/${c.id}/end`,token,{device:device.current}).catch(()=>{});return;}update(c);const pc=await prepare(version);check(version);await pc.setLocalDescription(await pc.createOffer());await gather(pc);check(version);const result=await request(`/calls/${c.id}/offer`,token,{device:device.current,description:pc.localDescription.toJSON()});check(version);update(result);setPhase('Вызываем…');}catch(e){if(e.name!=='AbortError'){onError(e.message);await end();}}finally{if(version===generation.current)operation.current=false;}
  }
  async function accept(){const c=current.current;cameraWanted.current=!!c?.video;if(!c||operation.current)return;tones.current.unlock();operation.current=true;const version=++generation.current;started.current=Date.now();setPhase('Подключаем микрофон…');
-  try{const accepted=await request(`/calls/${c.id}/accept`,token,{device:device.current});check(version);update(accepted);const pc=await prepare(version);check(version);await pc.setRemoteDescription(c.offer);await pc.setLocalDescription(await pc.createAnswer());setScreenReady(pc.getTransceivers().some(t=>t.receiver?.track?.kind==='video'&&['sendrecv','sendonly'].includes(t.currentDirection)));await gather(pc);check(version);const result=await request(`/calls/${c.id}/answer`,token,{device:device.current,description:pc.localDescription.toJSON()});check(version);update(result);if(pc.connectionState!=='connected')setPhase('Соединяем…');}catch(e){if(e.name!=='AbortError'){onError(e.message);await end();}}finally{if(version===generation.current)operation.current=false;}
+  try{const accepted=await request(`/calls/${c.id}/accept`,token,{device:device.current});check(version);update(accepted);const pc=await prepare(version,true);check(version);await pc.setRemoteDescription(c.offer);for(const t of pc.getTransceivers()){if(t.receiver?.track?.kind==='video')t.direction='sendrecv';}await pc.setLocalDescription(await pc.createAnswer());setScreenReady(pc.getTransceivers().some(t=>t.receiver?.track?.kind==='video'&&['sendrecv','sendonly'].includes(t.currentDirection)));await gather(pc);check(version);const result=await request(`/calls/${c.id}/answer`,token,{device:device.current,description:pc.localDescription.toJSON()});check(version);update(result);if(pc.connectionState!=='connected')setPhase('Соединяем…');}catch(e){if(e.name!=='AbortError'){onError(e.message);await end();}}finally{if(version===generation.current)operation.current=false;}
  }
  useImperativeHandle(ref,()=>({start,isBusy:()=>!!current.current||operation.current}));
  useEffect(()=>{

@@ -154,7 +154,7 @@ class MessagingService : Service() {
             launch.putExtra("chat_id", chatId).putExtra("message_id", id).putExtra("account_id", userId)
             val notificationId = ((id xor (id ushr 32)).toInt() and 0x1fffffff) + if (isReaction) 0x20000000 else 0
             val pending = PendingIntent.getActivity(this, notificationId, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            val channel = if (settings.getBoolean("sound", true)) CHANNEL_ID else SILENT_CHANNEL
+            val channel = NativeNotificationSounds.messageChannel(this, userId)
             val notification = builder(title, body, channel).setContentIntent(pending).setAutoCancel(true)
                 .setGroup("volna-messages-$userId").setOnlyAlertOnce(false).build()
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(notificationId, notification)
@@ -199,8 +199,8 @@ class MessagingService : Service() {
         const val ACTION_STOP = "dev.volna.messenger.STOP_MESSAGING"
         const val EXTRA_TOKEN = "token"
         const val EXTRA_USER_ID = "user_id"
-        private const val SILENT_CHANNEL = "volna_messages_silent"
-        private const val CHANNEL_ID = "volna_messages"
+        internal const val SILENT_CHANNEL = "volna_messages_silent"
+        internal const val CHANNEL_ID = "volna_messages"
         private const val STATUS_CHANNEL = "volna_connection"
         private const val FOREGROUND_ID = 11022
 

@@ -18,6 +18,7 @@ internal fun ComponentActivity.configureCallPip() {
     } }
 }
 internal fun ComponentActivity.enterCallPip() {
+    NativeCalls.cancelCameraPreview()
     if (Build.VERSION.SDK_INT >= 26 && nativePipEligible(NativeCalls.state.value) && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
         runCatching { enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(9, 16)).build()) }
     }

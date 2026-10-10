@@ -338,7 +338,7 @@ class NativeApi(baseUrl: String) {
 
     fun gallery(token: String, chatId: Long, before: Long? = null, type: String = "all"): List<VolnaMessage> = messageList(token, "/chats/$chatId/media?type=$type" + if (before != null) "&before=$before" else "")
     fun contacts(token: String): List<VolnaUser> = arrayCall("/contacts", token).let { rows -> (0 until rows.length()).map { parseUser(rows.getJSONObject(it)) } }
-    fun callHistory(token: String, before: Long? = null): List<VolnaCallRecord> = arrayCall("/calls/history" + if (before != null) "?before=$before" else "", token).let { rows ->
+    fun callHistory(token: String, before: Long? = null, chatId: Long? = null): List<VolnaCallRecord> = arrayCall("/calls/history?" + listOfNotNull(before?.let { "before=$it" }, chatId?.let { "chat_id=$it" }).joinToString("&"), token).let { rows ->
         (0 until rows.length()).map { i -> val row = rows.getJSONObject(i); VolnaCallRecord(row.getString("id"), row.getLong("chat_id"), row.optJSONObject("peer")?.let(::parseUser), row.optBoolean("incoming"), row.getLong("created"), row.optString("status"), row.optInt("duration"), row.optBoolean("screen_shared"), row.optBoolean("video")) }
     }
     fun sessions(token: String): List<VolnaDeviceSession> = arrayCall("/sessions", token).let { rows ->

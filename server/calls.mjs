@@ -27,7 +27,10 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   if(url.pathname==='/api/calls/history'&&req.method==='GET'){
    const before=Number(url.searchParams.get('before')||Number.MAX_SAFE_INTEGER);
    if(!Number.isSafeInteger(before)||before<1)throw fail(400,'Некорректный курсор');
-   const rows=db.prepare('SELECT * FROM call_history WHERE (caller=? OR (callee=? AND ringed=1)) AND created<? ORDER BY created DESC,id DESC LIMIT 50').all(uid,uid,before);
+   const chatId=url.searchParams.has('chat_id')?Number(url.searchParams.get('chat_id')):null;
+   if(chatId!==null&&(!Number.isSafeInteger(chatId)||chatId<1))throw fail(400,'Некорректный чат');
+   if(chatId!==null&&!db.prepare("SELECT 1 FROM chats c JOIN members m ON c.id=m.chat_id WHERE c.id=? AND m.user_id=? AND c.kind='direct' AND c.admin_deleted=0").get(chatId,uid))throw fail(404,'Личный чат не найден');
+   const rows=db.prepare('SELECT * FROM call_history WHERE (caller=? OR (callee=? AND ringed=1)) AND created<?'+(chatId===null?'':' AND chat_id=?')+' ORDER BY created DESC,id DESC LIMIT 50').all(uid,uid,before,...(chatId===null?[]:[chatId]));
    json(res,200,rows.map(c=>({id:c.id,chat_id:c.chat_id,peer:userById(c.caller===uid?c.callee:c.caller),incoming:c.callee===uid,created:c.created,
     ended:c.ended,status:c.status,duration:c.answered?Math.max(0,Math.floor(((c.ended??clock())-c.answered)/1000)):0,screen_shared:!!c.screen_shared,video:!!c.video})));return true;
   }
