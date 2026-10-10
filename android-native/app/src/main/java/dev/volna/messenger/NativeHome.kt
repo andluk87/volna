@@ -72,7 +72,7 @@ internal fun ChatListScreen(
     CompositionLocalProvider(LocalNativeBackdrop provides backdrop) {
     Box(Modifier.fillMaxSize()) {
     NativeWallpaperView(if (appearance.design != null) LocalThemeVariant.current.wallpaper else NativeWallpaper(colors = listOf(Panel.toArgb().toLong() and 0xFFFFFFFFL)), Modifier.matchParentSize().hazeSource(backdrop))
-    Column(Modifier.fillMaxSize().padding(bottom = 72.dp)) {
+    Column(Modifier.fillMaxSize()) {
         NativeGlassSurface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), radius = 28.dp, floating = true) { Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { if (tab == "chats") drawerOpen = true else tab = "chats" }) { if (tab == "chats") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 34.dp) else Icon(Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
             Column(Modifier.weight(1f)) {

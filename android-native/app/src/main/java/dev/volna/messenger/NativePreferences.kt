@@ -46,7 +46,7 @@ internal fun NativeFullScreen(title: String, onDismiss: () -> Unit, content: @Co
         NativeDialogSystemBars()
         val backdrop = remember { HazeState() }
         CompositionLocalProvider(LocalNativeBackdrop provides backdrop) {
-        Surface(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), color = Ink) {
+        Surface(Modifier.fillMaxSize().background(Ink).windowInsetsPadding(WindowInsets.safeDrawing), color = Ink) {
             Box(Modifier.fillMaxSize()) {
             NativeWallpaperView(LocalThemeVariant.current.wallpaper, Modifier.matchParentSize().hazeSource(backdrop))
             Column(Modifier.fillMaxSize()) {
@@ -67,7 +67,8 @@ internal fun NativeDialogSystemBars() {
     val window = (LocalView.current.parent as? DialogWindowProvider)?.window
     val color = Ink
     SideEffect { window?.let { target ->
-        target.statusBarColor = color.toArgb(); target.navigationBarColor = color.toArgb()
+        target.statusBarColor = android.graphics.Color.TRANSPARENT; target.navigationBarColor = android.graphics.Color.TRANSPARENT
+        if (android.os.Build.VERSION.SDK_INT >= 29) target.isNavigationBarContrastEnforced = false
         WindowInsetsControllerCompat(target, target.decorView).apply { isAppearanceLightStatusBars = color.luminance() > .5f; isAppearanceLightNavigationBars = color.luminance() > .5f }
     } }
 }

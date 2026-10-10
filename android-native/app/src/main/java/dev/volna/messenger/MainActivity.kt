@@ -162,8 +162,8 @@ class MainActivity : ComponentActivity() {
         openChatRequest.value = intent?.getLongExtra("chat_id", 0L)?.takeIf { it > 0 }
         openMessageRequest.value = intent?.getLongExtra("message_id", 0L)?.takeIf { it > 0 }
         openAccountRequest.value = intent?.getLongExtra("account_id", 0L)?.takeIf { it > 0 }
-        window.statusBarColor = android.graphics.Color.rgb(14, 23, 32)
-        window.navigationBarColor = android.graphics.Color.rgb(14, 23, 32)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
         val notificationSetup = getSharedPreferences("volna-notification-setup", MODE_PRIVATE)
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && !notificationSetup.getBoolean("requested", false)) {
             notificationSetup.edit().putBoolean("requested", true).apply()
@@ -548,7 +548,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     }
 
     VolnaTheme(appearance) {
-            Surface(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)), color = Ink) {
+            Surface(Modifier.fillMaxSize().background(Ink).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)), color = Ink) {
             Column(Modifier.fillMaxSize()) {
             if (attachmentSending && attachmentBatch?.voiceFile != null) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Accent)
             if (callState.call != null && callState.minimized) NativeCallScreen(callState, token)

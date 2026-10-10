@@ -141,7 +141,8 @@ fun VolnaTheme(appearance: NativeAppearance, updateSystemBars: Boolean = true, c
     val density = LocalNativeBaseDensity.current ?: LocalDensity.current
     val activity = LocalContext.current as? android.app.Activity
     SideEffect { if (updateSystemBars) activity?.window?.let { window ->
-        window.statusBarColor = palette.ink.toArgb(); window.navigationBarColor = palette.ink.toArgb()
+        window.statusBarColor = android.graphics.Color.TRANSPARENT; window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        if (android.os.Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         WindowInsetsControllerCompat(window, window.decorView).apply { isAppearanceLightStatusBars = palette.ink.luminance() > .5f; isAppearanceLightNavigationBars = palette.ink.luminance() > .5f }
     } }
     CompositionLocalProvider(LocalNativeAppearance provides appearance, LocalVolnaPalette provides palette,
