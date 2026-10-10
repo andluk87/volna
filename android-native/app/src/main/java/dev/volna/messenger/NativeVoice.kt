@@ -14,6 +14,9 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.outlined.ArrowForward
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Pause
@@ -258,13 +261,13 @@ internal fun NativeVoiceMessage(message: VolnaMessage, token: String, playback: 
     val waveColor = if (isMine) TextMain else accent
     Column(Modifier.fillMaxWidth()) {
         if (!message.attachmentName.orEmpty().startsWith("Голосовое-")) NativeText(message.attachmentName.orEmpty(), fontSize = 11.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Row(Modifier.fillMaxWidth().heightIn(min = 58.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 50.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             IconButton(onClick = onPlay, modifier = Modifier.size(42.dp).clip(CircleShape).background(accent)) {
-                if (selected && playback.loading) CircularProgressIndicator(Modifier.size(20.dp), color = AccentText, strokeWidth = 2.dp)
-                else Icon(if (selected && playback.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (selected && playback.playing) "Пауза" else "Воспроизвести голосовое", tint = AccentText, modifier = Modifier.size(25.dp))
+                if (selected && playback.loading) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                else Icon(if (selected && playback.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (selected && playback.playing) "Пауза" else "Воспроизвести голосовое", tint = Color.White, modifier = Modifier.size(25.dp))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Canvas(Modifier.fillMaxWidth().height(27.dp).semantics {
+                Canvas(Modifier.fillMaxWidth().height(20.dp).semantics {
                     contentDescription = "Перемотка голосового"
                     progressBarRangeInfo = ProgressBarRangeInfo(progress, 0f..1f)
                     setProgress { fraction -> if (duration <= 0) false else { seek(fraction); true } }
@@ -283,18 +286,18 @@ internal fun NativeVoiceMessage(message: VolnaMessage, token: String, playback: 
                 }
                 NativeText(if (duration > 0) if (selected && position > 0) "${voiceDuration(position)} / ${voiceDuration(duration)}" else voiceDuration(duration) else "—:—", color = Muted, fontSize = 11.sp, maxLines = 1)
             }
-            Box(Modifier.size(34.dp).clip(CircleShape).background(waveColor.copy(alpha = .1f)).clickable(onClickLabel = "Скорость воспроизведения", onClick = playback::changeSpeed), contentAlignment = Alignment.Center) {
+            if (selected) Box(Modifier.size(30.dp).clip(CircleShape).background(waveColor.copy(alpha = .1f)).clickable(onClickLabel = "Скорость воспроизведения", onClick = playback::changeSpeed), contentAlignment = Alignment.Center) {
                 NativeText(if (playback.speed == 1.5f) "1.5×" else "${playback.speed.toInt()}×", color = waveColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
-            if (message.attachmentName.orEmpty().startsWith("Голосовое-")) Box(Modifier.size(34.dp).clip(CircleShape).background(waveColor.copy(alpha = .1f)).clickable(enabled = !transcribing, onClickLabel = "Расшифровать голосовое") {
+            if (message.attachmentName.orEmpty().startsWith("Голосовое-")) Box(Modifier.align(Alignment.Top).padding(top = 2.dp).width(36.dp).height(26.dp).clip(RoundedCornerShape(8.dp)).background(waveColor.copy(alpha = .16f)).clickable(enabled = !transcribing, onClickLabel = "Расшифровать голосовое") {
                 if (!message.transcript.isNullOrBlank()) showTranscript = !showTranscript else { requestedTranscript = true; onTranscribe() }
             }, contentAlignment = Alignment.Center) {
-                NativeText("А", color = waveColor, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                if (transcribing) CircularProgressIndicator(Modifier.size(32.dp), color = waveColor, strokeWidth = 2.dp)
+                if (transcribing) CircularProgressIndicator(Modifier.size(18.dp), color = waveColor, strokeWidth = 2.dp)
+                else Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.ArrowForward, null, tint = waveColor, modifier = Modifier.size(13.dp)); NativeText("А", color = waveColor, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
             }
         }
         if (showTranscript && !message.transcript.isNullOrBlank()) NativeText(message.transcript.orEmpty(), color = TextMain, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
-private fun voiceDuration(milliseconds: Int) = "%d:%02d".format(milliseconds / 60_000, milliseconds / 1000 % 60)
+private fun voiceDuration(milliseconds: Int) = "%02d:%02d".format(milliseconds / 60_000, milliseconds / 1000 % 60)

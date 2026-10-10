@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -49,26 +50,28 @@ internal class NativePanelState {
     var query by mutableStateOf("")
     var searching by mutableStateOf(false)
 }
-private val emojiGroups = listOf("recent" to "Недавние", "faces" to "Смайлы и эмоции", "people" to "Люди", "animals" to "Животные и природа", "food" to "Еда и напитки", "travel" to "Путешествия", "activities" to "Деятельность", "objects" to "Предметы", "symbols" to "Символы", "flags" to "Флаги")
+private val emojiGroups = listOf("recent" to "Недавние", "faces" to "Смайлы и люди", "people" to "Люди", "animals" to "Животные и природа", "food" to "Еда и напитки", "travel" to "Путешествия", "activities" to "Деятельность", "objects" to "Предметы", "symbols" to "Символы", "flags" to "Флаги")
 private val groupIcons = listOf(Icons.Outlined.History, Icons.Outlined.EmojiEmotions, Icons.Outlined.PanTool, Icons.Outlined.Pets, Icons.Outlined.Restaurant, Icons.Outlined.DirectionsCar, Icons.Outlined.SportsSoccer, Icons.Outlined.Lightbulb, Icons.Outlined.FavoriteBorder, Icons.Outlined.Flag)
 private fun nativeEmojiRowKey(row: Pair<String, Any>): String = row.first + when (val value = row.second) {
     is NativeEmojiEntry -> ":unicode:${value.text}"
     is NativeExpression -> ":custom:${value.id}"
+    is NativeExpressionPack -> ":suggested:${value.id}"
     else -> ":heading"
 }
 
 @Composable
 internal fun NativeExpressionPanel(state: NativePanelState, height: Dp, account: Long, token: String, api: NativeApi,
     canSendMedia: Boolean, enabled: Boolean, onEmoji: (String) -> Unit, onCustomEmoji: (NativeExpression) -> Unit,
-    onSend: (NativeExpression, () -> Unit) -> Unit, onDelete: () -> Unit, onKeyboard: () -> Unit) {
+    onSend: (NativeExpression, () -> Unit) -> Unit, onDelete: () -> Unit, onKeyboard: () -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current; val scope = rememberCoroutineScope(); val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current; val haptic = LocalHapticFeedback.current
     val catalog = LocalEmojiCatalog.current ?: return
     val motion = LocalMotionEnabled.current
-    val emojiSize = with(LocalDensity.current) { 28.dp.toSp() }
+    val emojiSize = with(LocalDensity.current) { 30.dp.toSp() }
     val store = remember(account) { NativeExpressionStore(context, account) }
     val grid = rememberLazyGridState()
     var packs by remember(account) { mutableStateOf(store.packs()) }
+    var popularVisible by remember(account) { mutableStateOf(true) }
     var recentGeneration by remember { mutableStateOf(0) }
     var section by remember(state.tab) { mutableStateOf(if (store.packs().any { it.installed && it.kind == state.tab }) "installed" else "catalog") }
     var pendingCategory by remember { mutableStateOf<String?>(null) }
@@ -109,6 +112,8 @@ internal fun NativeExpressionPanel(state: NativePanelState, height: Dp, account:
         catalog.search(state.query).forEach { emojiRows += "search" to it }
         packs.filter { it.installed && it.kind == "emoji" }.flatMap { it.items }.filter { (it.label + " " + it.keywords.joinToString(" ")).contains(state.query, true) || it.fallback == state.query }.forEach { emojiRows += "search" to it }
     } else if (state.tab == "emoji") {
+        val suggested = packs.filter { it.kind == "emoji" && it.isPublic && !it.installed && it.items.isNotEmpty() }.take(8)
+        if (popularVisible && suggested.isNotEmpty()) { emojiRows += "popular" to "Популярные наборы эмодзи"; suggested.forEach { emojiRows += "popular" to it } }
         emojiSections.forEach { (key, title, emojis) ->
             val custom = when { key == "recent" -> store.recent().filter { it.kind == "emoji" }; key.startsWith("pack:") -> packs.firstOrNull { "pack:${it.id}" == key }?.items.orEmpty(); else -> emptyList() }
             if (emojis.isNotEmpty() || custom.isNotEmpty()) { emojiRows += key to title; emojis.forEach { emojiRows += key to it }; custom.forEach { emojiRows += key to it } }
@@ -127,32 +132,44 @@ internal fun NativeExpressionPanel(state: NativePanelState, height: Dp, account:
     NativeGlassSurface(modifier = Modifier.fillMaxWidth().height(height), radius = 22.dp) {
         Column {
             Row(Modifier.fillMaxWidth().pointerInput(state.expanded) { detectVerticalDragGestures { change, dy -> change.consume(); if (dy < -10) state.expanded = true else if (dy > 10) state.expanded = false } }, verticalAlignment = Alignment.CenterVertically) {
-                TextField(state.query, { state.query = it }, modifier = Modifier.weight(1f).onFocusChanged { state.searching = it.isFocused }, placeholder = { NativeText(when (state.tab) { "gif" -> "Поиск GIF"; "sticker" -> "Поиск стикеров"; else -> "Поиск эмодзи" }, fontSize = 14.sp) }, singleLine = true,
-                    textStyle = nativeEmojiTextStyle(LocalTextStyle.current), visualTransformation = NativeEmojiTransformation(catalog, LocalEmojiFont.current),
-                    leadingIcon = { Icon(Icons.Outlined.Search, "Поиск") }, trailingIcon = { if (state.query.isNotEmpty()) IconButton(onClick = { state.query = "" }) { Icon(Icons.Outlined.Close, "Очистить поиск") } },
-                    colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
-                IconButton(onClick = { state.expanded = !state.expanded }) { Icon(if (state.expanded) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.KeyboardArrowUp, if (state.expanded) "Свернуть панель" else "Раскрыть панель") }
-            }
-            LazyRow(contentPadding = PaddingValues(horizontal = 6.dp)) {
-                if (state.tab == "emoji") {
-                    items(emojiGroups.indices.toList()) { index -> val key = emojiGroups[index].first
-                        IconButton(onClick = { state.query = ""; pendingCategory = key }, modifier = Modifier.clip(CircleShape).background(if (activeCategory == key) Hover else Color.Transparent)) { Icon(groupIcons[index], emojiGroups[index].second, tint = if (activeCategory == key) Accent else Muted) }
+                LazyRow(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp)) {
+                    if (state.tab == "emoji") {
+                        item { IconButton(onClick = { state.query = ""; pendingCategory = "recent" }, modifier = Modifier.size(40.dp)) { Icon(Icons.Outlined.History, "Недавние эмодзи", tint = if (activeCategory == "recent") Accent else Muted) } }
+                        item { IconButton(onClick = { state.query = ""; pendingCategory = "faces" }, modifier = Modifier.size(40.dp)) { Icon(Icons.Outlined.EmojiEmotions, "Стандартные эмодзи", tint = if (activeCategory == "faces") Accent else Muted) } }
+                        items(packs.filter { it.kind == "emoji" && it.installed }, key = { it.id }) { pack -> IconButton(onClick = { state.query = ""; pendingCategory = "pack:${pack.id}" }, modifier = Modifier.size(40.dp)) { pack.items.firstOrNull()?.let { NativeExpressionImage(it, token, api, store, Modifier.size(28.dp)) } } }
+                    } else {
+                        items(listOf("recent" to "Недавние", "favorite" to "Избранные", "installed" to "Наборы", "catalog" to "Популярные")) { (key, title) -> IconButton(onClick = { section = key; scope.launch { grid.scrollToItem(0) } }, modifier = Modifier.size(40.dp).clip(CircleShape).background(if (section == key) Hover else Color.Transparent)) { Icon(when (key) { "recent" -> Icons.Outlined.History; "favorite" -> Icons.Outlined.StarOutline; "catalog" -> Icons.Outlined.Explore; else -> Icons.Outlined.Collections }, title, tint = if (section == key) Accent else Muted) } }
+                        items(installed, key = { it.id }) { pack -> IconButton(onClick = { section = "pack:${pack.id}"; scope.launch { grid.scrollToItem(0) } }, modifier = Modifier.size(40.dp)) { pack.items.firstOrNull()?.let { NativeExpressionImage(it, token, api, store, Modifier.size(28.dp)) } } }
                     }
-                    items(packs.filter { it.kind == "emoji" && it.installed }, key = { it.id }) { pack -> IconButton(onClick = { state.query = ""; pendingCategory = "pack:${pack.id}" }) { pack.items.firstOrNull()?.let { NativeExpressionImage(it, token, api, store, Modifier.size(30.dp)) } } }
-                } else {
-                    items(listOf("recent" to "Недавние", "favorite" to "Избранные", "installed" to "Наборы", "catalog" to "Популярные")) { (key, title) -> IconButton(onClick = { section = key; scope.launch { grid.scrollToItem(0) } }, modifier = Modifier.clip(CircleShape).background(if (section == key) Hover else Color.Transparent)) { Icon(when (key) { "recent" -> Icons.Outlined.History; "favorite" -> Icons.Outlined.StarOutline; "catalog" -> Icons.Outlined.Explore; else -> Icons.Outlined.Collections }, title, tint = if (section == key) Accent else Muted) } }
-                    items(installed, key = { it.id }) { pack -> IconButton(onClick = { section = "pack:${pack.id}"; scope.launch { grid.scrollToItem(0) } }) { pack.items.firstOrNull()?.let { NativeExpressionImage(it, token, api, store, Modifier.size(32.dp)) } } }
+                    item { IconButton(onClick = { catalogOpen = true }, modifier = Modifier.size(40.dp)) { Icon(Icons.Outlined.AddCircleOutline, "Добавить или создать набор", tint = Muted) } }
                 }
-                item { IconButton(onClick = { catalogOpen = true }) { Icon(Icons.Outlined.Add, "Добавить или создать набор", tint = Accent) } }
+                IconButton(onClick = { state.expanded = !state.expanded }, modifier = Modifier.size(36.dp)) { Icon(if (state.expanded) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.KeyboardArrowUp, if (state.expanded) "Свернуть панель" else "Раскрыть панель", tint = Muted) }
+                IconButton(onClick = onSettings, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.Settings, "Оформление", tint = Muted) }
+            }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp).clip(RoundedCornerShape(22.dp)).background(Input).height(42.dp).padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Search, null, modifier = Modifier.size(20.dp), tint = Muted)
+                BasicTextField(state.query, { state.query = it }, modifier = Modifier.weight(1f).padding(horizontal = 8.dp).onFocusChanged { state.searching = it.isFocused }, singleLine = true,
+                    textStyle = nativeEmojiTextStyle(LocalTextStyle.current.copy(color = TextMain, fontSize = 14.sp)), visualTransformation = NativeEmojiTransformation(catalog, LocalEmojiFont.current),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Accent), decorationBox = { field -> Box { if (state.query.isEmpty()) NativeText(when (state.tab) { "gif" -> "Поиск GIF"; "sticker" -> "Поиск стикеров"; else -> "Поиск" }, color = Muted, fontSize = 14.sp); field() } })
+                if (state.query.isNotEmpty()) IconButton(onClick = { state.query = "" }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.Close, "Очистить поиск", tint = Muted) }
+                else if (state.tab == "emoji") LazyRow(Modifier.widthIn(max = 180.dp).weight(1f)) {
+                    items(emojiGroups.indices.toList()) { index -> val key = emojiGroups[index].first
+                        IconButton(onClick = { state.query = ""; pendingCategory = key }, modifier = Modifier.size(36.dp)) { Icon(groupIcons[index], emojiGroups[index].second, modifier = Modifier.size(21.dp), tint = if (activeCategory == key) Accent else Muted) }
+                    }
+                }
             }
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             Box(Modifier.weight(1f)) {
-                if (state.tab == "emoji") LazyVerticalGrid(columns = GridCells.Adaptive(44.dp), state = grid, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 6.dp)) {
+                if (state.tab == "emoji") LazyVerticalGrid(columns = GridCells.Adaptive(40.dp), state = grid, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 6.dp)) {
                     itemsIndexed(emojiRows, key = { _, row -> nativeEmojiRowKey(row) }, span = { _, row -> if (row.second is String) GridItemSpan(maxLineSpan) else GridItemSpan(1) }) { _, row ->
                         when (val value = row.second) {
-                            is String -> NativeText(value, Modifier.padding(vertical = 6.dp, horizontal = 8.dp), color = Muted, fontSize = 12.sp)
-                            is NativeEmojiEntry -> Box(Modifier.size(44.dp).combinedClickable(enabled = enabled, onClick = { use(value) }, onLongClick = { if (catalog.variants(value).size > 1) { skin = value; haptic.performHapticFeedback(HapticFeedbackType.LongPress) } }).semantics { contentDescription = value.name }, contentAlignment = Alignment.Center) { NativeText(store.preferredSkin(value, catalog).text, fontSize = emojiSize) }
-                            is NativeExpression -> Box(Modifier.size(44.dp).clickable(enabled = enabled) { onCustomEmoji(value); store.used(value); recentGeneration++ }, contentAlignment = Alignment.Center) { NativeExpressionImage(value, token, api, store, Modifier.size(30.dp), play = grid.layoutInfo.visibleItemsInfo.any { it.key == nativeEmojiRowKey(row) }) }
+                            is String -> Row(Modifier.fillMaxWidth().padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                NativeText(value, Modifier.weight(1f).padding(vertical = 8.dp), color = Muted, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                                if (row.first == "popular") IconButton(onClick = { popularVisible = false }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.Close, "Скрыть популярные наборы", tint = Muted, modifier = Modifier.size(18.dp)) }
+                            }
+                            is NativeExpressionPack -> Box(Modifier.size(40.dp).clickable { packDetail = value }.semantics { contentDescription = "Добавить набор ${value.title}" }, contentAlignment = Alignment.Center) { NativeExpressionImage(value.items.first(), token, api, store, Modifier.size(28.dp)) }
+                            is NativeEmojiEntry -> Box(Modifier.size(40.dp).combinedClickable(enabled = enabled, onClick = { use(value) }, onLongClick = { if (catalog.variants(value).size > 1) { skin = value; haptic.performHapticFeedback(HapticFeedbackType.LongPress) } }).semantics { contentDescription = value.name }, contentAlignment = Alignment.Center) { NativeText(store.preferredSkin(value, catalog).text, fontSize = emojiSize) }
+                            is NativeExpression -> Box(Modifier.size(40.dp).clickable(enabled = enabled) { onCustomEmoji(value); store.used(value); recentGeneration++ }, contentAlignment = Alignment.Center) { NativeExpressionImage(value, token, api, store, Modifier.size(30.dp), play = grid.layoutInfo.visibleItemsInfo.any { it.key == nativeEmojiRowKey(row) }) }
                         }
                     }
                 } else {
@@ -174,9 +191,11 @@ internal fun NativeExpressionPanel(state: NativePanelState, height: Dp, account:
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onKeyboard) { Icon(Icons.Outlined.Keyboard, "Переключиться на клавиатуру") }
+                Row(Modifier.weight(1f).clip(CircleShape).background(Hover), verticalAlignment = Alignment.CenterVertically) {
                 listOf("emoji" to "Эмодзи", "sticker" to "Стикеры", "gif" to "GIF").forEach { (key, title) ->
                     val color by androidx.compose.animation.animateColorAsState(if (state.tab == key) Accent else Muted, androidx.compose.animation.core.tween(if (motion) 180 else 0), label = "expression-tab")
                     TextButton(onClick = { if (canSendMedia || key == "emoji") { state.tab = key; state.query = ""; store.lastTab = key; scope.launch { grid.scrollToItem(0) } } }, enabled = key == "emoji" || canSendMedia, modifier = Modifier.weight(1f)) { NativeText(title, color = color, fontSize = 12.sp) }
+                }
                 }
                 NativeRepeatingDelete(onDelete, enabled)
             }

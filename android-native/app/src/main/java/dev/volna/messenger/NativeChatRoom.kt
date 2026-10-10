@@ -184,8 +184,8 @@ internal fun ChatRoomScreen(
         val actualHeight = maxHeight.value
         NativeWallpaperView(if (LocalNativeAppearance.current.design != null) LocalThemeVariant.current.wallpaper else NativeWallpaper(colors = listOf(ChatBackground.toArgb().toLong() and 0xFFFFFFFFL)), Modifier.matchParentSize().hazeSource(backdrop), listState.firstVisibleItemScrollOffset.toFloat())
     Column(Modifier.fillMaxSize()) {
-        NativeGlassSurface(Modifier.fillMaxWidth(), radius = 0.dp) { Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { if (selection.isNotEmpty()) selection = emptySet() else onBack() }) { Icon(if (selection.isNotEmpty()) Icons.Outlined.Close else Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { if (selection.isNotEmpty()) selection = emptySet() else onBack() }, modifier = Modifier.size(48.dp).clip(CircleShape).background(Panel)) { Icon(if (selection.isNotEmpty()) Icons.Outlined.Close else Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
             if (selection.isNotEmpty()) {
                 NativeText("Выбрано: ${selection.size}", Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Box {
@@ -198,13 +198,15 @@ internal fun ChatRoomScreen(
                 IconButton(onClick = { onForwardMany(selected.filter { !it.deleted }); selection = emptySet() }) { Icon(Icons.Outlined.ArrowForward, "Переслать выбранные", tint = Accent) }
                 if (selected.isNotEmpty() && selected.all { !it.deleted && (it.senderId == user?.id || canModerate) }) IconButton(onClick = { deleteSelected = true }) { Icon(Icons.Outlined.DeleteOutline, "Удалить выбранные", tint = MaterialTheme.colorScheme.error) }
             } else {
-                Row(Modifier.weight(1f).clickable(enabled = !recorder.recording) { if (chat.kind in listOf("group", "channel")) onCommunity() else if (!chat.saved) onOpenProfile(chat.peerId) }, verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(chat.name, chat.peerId, chat.avatarUrl, token, size = 40.dp)
-                    Column(Modifier.padding(start = 10.dp)) { NativeText(chat.name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); NativeText(if (chat.saved) "Ваши заметки" else if (chat.parentId!=0L) "Подтема · ${chat.memberCount} участников" else if (chat.kind in listOf("group", "channel")) "${chat.memberCount} участников" else if (chat.peerOnline) "в сети" else "@${chat.username}", color = if (chat.peerOnline) Accent else Muted, fontSize = 12.sp, maxLines = 1) }
+                Row(Modifier.weight(1f).padding(horizontal = 5.dp).clip(CircleShape).background(androidx.compose.ui.graphics.lerp(Panel, Outgoing, .55f)).heightIn(min = 48.dp).padding(horizontal = 4.dp).clickable(enabled = !recorder.recording) { if (chat.kind in listOf("group", "channel")) onCommunity() else if (!chat.saved) onOpenProfile(chat.peerId) }, verticalAlignment = Alignment.CenterVertically) {
+                    if (chat.saved) Box(Modifier.size(40.dp).clip(CircleShape).background(Accent), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.BookmarkBorder, "Избранное", tint = Color.White, modifier = Modifier.size(27.dp)) } else Avatar(chat.name, chat.peerId, chat.avatarUrl, token, size = 40.dp)
+                    Column(Modifier.weight(1f).padding(start = 10.dp)) { NativeText(chat.name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); if (!chat.saved) NativeText(if (chat.parentId!=0L) "Подтема · ${chat.memberCount} участников" else if (chat.kind in listOf("group", "channel")) "${chat.memberCount} участников" else if (chat.peerOnline) "в сети" else "@${chat.username}", color = if (chat.peerOnline) Accent else Muted, fontSize = 12.sp, maxLines = 1) }
                 }
                 if (chat.kind == "direct" && !chat.saved) IconButton(onClick = { onCall(chat) }, enabled = !recorder.recording) { Icon(Icons.Outlined.Call, "Позвонить", tint = Accent) }
-                Box {
-                    IconButton(onClick = { menu = true }, enabled = !recorder.recording) { Icon(Icons.Outlined.MoreVert, "Действия чата", tint = Muted) }
+                Row(Modifier.clip(CircleShape).background(Panel), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { searchOpen = !searchOpen; showPins = false; if (!searchOpen) onSearch("") }, modifier = Modifier.size(40.dp)) { Icon(Icons.Outlined.Search, "Поиск в чате", tint = Muted) }
+                    Box {
+                    IconButton(onClick = { menu = true }, enabled = !recorder.recording, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.MoreVert, "Действия чата", tint = Muted) }
                     DropdownMenu(menu, { menu = false }) {
                         if (chat.kind == "direct" && !chat.saved) DropdownMenuItem(text = { NativeText("Видеозвонок") }, leadingIcon = { Icon(Icons.Outlined.Videocam, null) }, enabled = !recorder.recording, onClick = { menu = false; onVideo(chat) })
                         if (chat.kind == "group") DropdownMenuItem(text = { NativeText("Подтемы") }, onClick = { menu = false; onTopics() })
@@ -217,8 +219,16 @@ internal fun ChatRoomScreen(
                         DropdownMenuItem(text = { NativeText("К последним сообщениям") }, onClick = { menu = false; showPins = false; searchOpen = false; onSearch(""); if (earlierWindow) onNewest() else jumpBottom() })
                     }
                 }
+                }
             }
         }
+        if (pinnedMessages.isNotEmpty() && !showPins && selection.isEmpty()) {
+            val pin = pinnedMessages.last()
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp).clip(RoundedCornerShape(14.dp)).background(Panel).clickable { jump(pin.id) }.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) { repeat(3) { Box(Modifier.width(3.dp).height(9.dp).clip(CircleShape).background(Accent)) } }
+                Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 7.dp)) { NativeText("Закреплённое сообщение", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); NativeText(pin.text.ifBlank { pin.attachmentName ?: "Вложение" }, color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                IconButton(onClick = { showPins = true; searchOpen = false; onSearch("") }) { Icon(Icons.Outlined.PushPin, "Все закреплённые сообщения", tint = Muted) }
+            }
         }
         if (searchOpen) NativeSearchField(searchQuery, onSearch, "Найти в переписке")
         if (showPins) Row(Modifier.fillMaxWidth().background(Panel).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) { NativeText("Закреплённые · ${pinnedMessages.size}", Modifier.weight(1f), color = Accent, fontSize = 13.sp); TextButton(onClick = { showPins = false }) { NativeText("Закрыть") } }
@@ -230,7 +240,7 @@ internal fun ChatRoomScreen(
                 itemsIndexed(groups, key = { _, group -> "${chat.id}-${group.first().id}" }) { index, group ->
                     val message = group.first()
                     val previous = groups.getOrNull(index - 1)?.lastOrNull()
-                    if (nativeDay(message.createdAt) != previous?.let { nativeDay(it.createdAt) }) Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) { NativeText(nativeDay(message.createdAt), Modifier.clip(CircleShape).background(Panel).padding(horizontal = 12.dp, vertical = 5.dp), fontSize = 11.sp, color = Muted) }
+                    if (nativeDay(message.createdAt) != previous?.let { nativeDay(it.createdAt) }) Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) { NativeText(nativeDay(message.createdAt), Modifier.clip(CircleShape).background(Panel).padding(horizontal = 12.dp, vertical = 5.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextMain) }
                     MessageBubble(message, group, message.senderId == user?.id, group.last().id <= chat.peerDelivered, group.last().id <= chat.peerRead, canModerate, canPin, message.id in transcribingMessages,
                         onReply = { replyTo = it; editTarget = null; panel.open = false }, onEdit = { editTarget = it; panel.tab = "emoji"; replyTo = null; input = TextFieldValue(it.text, TextRange(it.text.length)); entities = it.emojiEntities }, onForward = onForward,
                         onCopy = { clipboard.setText(AnnotatedString(it.text)); Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show() }, onAction = onMessageAction,
@@ -250,8 +260,8 @@ internal fun ChatRoomScreen(
             IconButton(onClick = { if (editTarget != null) { input = drafts.input(chat.id); entities = drafts.entities(chat.id) }; replyTo = null; editTarget = null }) { Icon(Icons.Outlined.Close, "Отменить ответ или редактирование", tint = Muted) }
         }
         if (!chat.canSend) NativeText(if(chat.topicClosed) "Подтема закрыта. История доступна для чтения." else "Публиковать могут только администраторы", Modifier.fillMaxWidth().background(Panel).padding(16.dp), color = Muted, fontSize = 13.sp)
-        else NativeGlassSurface(Modifier.fillMaxWidth().onSizeChanged { composerHeight = it.height / density.density }, radius = 0.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
-            IconButton(onClick = { if (editTarget != null) panel.tab = "emoji"; togglePanel() }) { Icon(if (panel.open) Icons.Outlined.Keyboard else Icons.Outlined.EmojiEmotions, if (panel.open) "Переключиться на клавиатуру" else "Эмодзи, стикеры и GIF", tint = if (panel.open) Accent else Muted) }
+        else NativeGlassSurface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp).onSizeChanged { composerHeight = it.height / density.density }, radius = 28.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { if (editTarget != null) panel.tab = "emoji"; togglePanel() }) { Icon(if (panel.open) Icons.Outlined.Keyboard else Icons.Outlined.EmojiEmotions, if (panel.open) "Переключиться на клавиатуру" else "Эмодзи, стикеры и GIF", tint = Muted) }
             if (recorder.recording) {
                 IconButton(onClick = recorder::cancel) { Icon(Icons.Outlined.DeleteOutline, "Отменить запись", tint = MaterialTheme.colorScheme.error) }
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 3.dp)) {
@@ -268,7 +278,7 @@ internal fun ChatRoomScreen(
             else IconButton(onClick = ::submit, enabled = !busy, modifier = Modifier.size(48.dp).clip(CircleShape).background(Accent)) { if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = AccentText, strokeWidth = 2.dp) else Icon(if (editTarget != null) Icons.Outlined.Check else Icons.Outlined.Send, "Отправить сообщение", tint = AccentText) }
         } }
         if (panel.open && !recorder.recording && chat.canSend) {
-            val reserved = 108f + composerHeight + (if (replyTo != null || editTarget != null) 54f else 0f) + (if (searchOpen || showPins) 56f else 0f) + (if (error.isNotBlank()) 48f else 0f)
+            val reserved = 108f + composerHeight + (if (replyTo != null || editTarget != null) 54f else 0f) + (if (searchOpen || showPins || pinnedMessages.isNotEmpty()) 56f else 0f) + (if (error.isNotBlank()) 48f else 0f)
             val available = (actualHeight - reserved - if (panel.searching) ime else 0f).coerceAtLeast(80f)
             val normal = keyboardHeight.coerceIn(220f, 360f).coerceAtMost(available)
             val panelHeight = if (panel.expanded && !panel.searching) available.coerceAtMost(700f) else normal
@@ -276,7 +286,7 @@ internal fun ChatRoomScreen(
                 onEmoji = { changeInput(NativeEmojiEditing.insert(input, it)) },
                 onCustomEmoji = { item -> val start = input.selection.min; val next = NativeEmojiEditing.insert(input, item.fallback); if (next.text.length <= 4000) { changeInput(next); entities = (entities + NativeEmojiEntity(item.id, start, item.fallback.length, item.attachmentId, item.mime)).sortedBy { it.start } } },
                 onSend = { item, sent -> onSendExpression(item, replyTo?.id) { replyTo = null; sent(); jumpBottom() } },
-                onDelete = { changeInput(NativeEmojiEditing.delete(input, catalog)) }, onKeyboard = ::showKeyboard)
+                onDelete = { changeInput(NativeEmojiEditing.delete(input, catalog)) }, onKeyboard = ::showKeyboard, onSettings = onAppearance)
             if (panel.searching) Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime))
         } else Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime))
     }
@@ -321,14 +331,15 @@ private fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isMi
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp / appearance.uiScale
     val available = screenWidth - 20.dp - (if (selectionMode) 44.dp else 0.dp) - (if (appearance.avatars && showAuthor && !isMine) 36.dp else 0.dp)
     val maxWidth = (screenWidth * .75f).coerceAtMost(available).coerceAtMost(560.dp).coerceAtLeast(80.dp)
+    val compactText = message.text.isNotBlank() && message.text.length * LocalDensity.current.fontScale <= 32f && '\n' !in message.text && message.attachmentId == null && message.reply == null && message.forwardedName == null && !message.deleted && !message.edited && message.reactions.isEmpty() && message.emojiEntities.isEmpty() && group.size == 1 && !(showAuthor && !isMine)
     val sticker = message.expressionKind == "sticker" || message.attachmentMime == "image/webp" && message.attachmentName.orEmpty().startsWith("Стикер-")
     NativeMessageContent(isMine) { Row(Modifier.fillMaxWidth().background(if (selected || highlighted) Accent.copy(alpha = .12f) else Color.Transparent), horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
         if (selectionMode) Checkbox(selected, { onSelectGroup() }, modifier = Modifier.size(44.dp))
         if (appearance.avatars && showAuthor && !isMine) Box(Modifier.width(36.dp).heightIn(min = 32.dp), contentAlignment = Alignment.BottomCenter) { if (!joined) Box(Modifier.clickable { onProfile(message.senderId) }) { Avatar(message.senderName, message.senderId, size = 28.dp) } }
         val shape = RoundedCornerShape(topStart = if (joined && !isMine) 6.dp else appearance.radius.dp, topEnd = if (joined && isMine) 6.dp else appearance.radius.dp, bottomEnd = appearance.radius.dp, bottomStart = appearance.radius.dp)
-        Column(Modifier.widthIn(min = if (message.attachmentMime?.startsWith("audio/") == true && !message.deleted) maxWidth.coerceAtMost(340.dp) else 0.dp, max = maxWidth).clip(shape).background(if (sticker && !message.deleted) androidx.compose.ui.graphics.SolidColor(Color.Transparent) else nativeMessageBrush(isMine))
+        Column(Modifier.widthIn(min = if (message.attachmentMime?.startsWith("audio/") == true && !message.deleted) (screenWidth * .58f).coerceIn(200.dp.coerceAtMost(maxWidth), maxWidth).coerceAtMost(300.dp) else 0.dp, max = maxWidth).clip(shape).background(if (sticker && !message.deleted) androidx.compose.ui.graphics.SolidColor(Color.Transparent) else nativeMessageBrush(isMine))
             .combinedClickable(onClick = { if (selectionMode) onSelectGroup() else detail = !detail }, onLongClick = { if (selectionMode) onSelectGroup() else { targetId = message.id; menu = true } })
-            .padding(horizontal = if (appearance.density == "minimal") 7.dp else 10.dp, vertical = appearance.padding.dp)) {
+            .padding(horizontal = if (appearance.density == "minimal") 7.dp else 10.dp, vertical = (if (compactText) appearance.padding.coerceAtMost(4) else appearance.padding).dp)) {
             if (showAuthor && !isMine && !joined && !message.deleted) NativeText(message.senderName, Modifier.clickable { onProfile(message.senderId) }, color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             if (message.forwardedName != null) NativeText("Переслано от ${message.forwardedName}", color = Muted, fontSize = 11.sp)
             message.reply?.let { reply -> Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Hover).clickable { onJump(reply.id) }.padding(6.dp)) { Box(Modifier.width(3.dp).height(30.dp).background(Accent)); Column(Modifier.padding(start = 8.dp)) { NativeText(reply.name, color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium); NativeText(reply.text, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } } }
@@ -341,11 +352,16 @@ private fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isMi
                     message.attachmentMime?.startsWith("audio/") == true -> NativeVoiceMessage(message, token, voicePlayback, { if (selectionMode) onSelect(message) else onPlayAudio(message) }, transcribing, { onAction(message, "transcribe", "") }, isMine)
                     else -> Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { if (selectionMode) onSelect(message) else onOpenAttachment(message) }, verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Description, null, tint = Accent); Column(Modifier.padding(start = 8.dp)) { NativeText(message.attachmentName.orEmpty(), color = TextMain, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis); NativeText("%.1f МБ".format(message.attachmentSize / 1048576.0), color = Muted, fontSize = 11.sp) } }
                 }
-                if (message.text.isNotBlank()) NativeLinkedText(message.text, Modifier.padding(top = if (message.attachmentId == null) 0.dp else 5.dp), message.emojiEntities, token, me ?: 0)
+                if (message.text.isNotBlank()) {
+                    if (compactText) Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        NativeLinkedText(message.text, Modifier.weight(1f, fill = false), message.emojiEntities, token, me ?: 0)
+                        NativeMessageStamp(message, isMine, peerDelivered, peerRead, !appearance.timeOnTap || detail)
+                    } else NativeLinkedText(message.text, Modifier.padding(top = if (message.attachmentId == null) 0.dp else 5.dp), message.emojiEntities, token, me ?: 0)
+                }
                 NativeMessageReactions(message, me, { onAction(message, "react", it) }, { reactionPicker = true })
             }
             Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-                if (!appearance.timeOnTap || detail) { if (group.any { it.edited }) NativeText("изменено · ", color = Muted, fontSize = 10.sp); NativeText(nativeClock(message.createdAt), color = Muted, fontSize = 11.sp); if (isMine) Icon(if (peerDelivered) Icons.Outlined.DoneAll else Icons.Outlined.Done, if (peerRead) "Прочитано" else if (peerDelivered) "Доставлено" else "Отправлено", tint = if (peerRead) Accent else Muted, modifier = Modifier.padding(start = 3.dp).size(15.dp)) }
+                if (!compactText) NativeMessageStamp(group.last(), isMine, peerDelivered, peerRead, !appearance.timeOnTap || detail, edited = group.any { it.edited })
                 DropdownMenu(menu, { menu = false }) {
                     if (!target.deleted) Row(Modifier.padding(horizontal = 4.dp)) { NativeEmoji.take(5).forEach { emoji -> NativeText(emoji, Modifier.size(44.dp).clickable { menu = false; onAction(target, "react", emoji) }.padding(8.dp), fontSize = 22.sp) }; IconButton(onClick = { menu = false; reactionPicker = true }) { Icon(Icons.Outlined.Add, "Другие реакции") } }
                     if (!target.deleted && canReply) DropdownMenuItem(text = { NativeText("Ответить") }, leadingIcon = { Icon(Icons.Outlined.Reply, null) }, onClick = { menu = false; onReply(target) })
@@ -404,5 +420,14 @@ internal fun NativeLinkedText(text: String, modifier: Modifier = Modifier, entit
         val annotated = emojiAnnotated(builder.toAnnotatedString(), LocalEmojiCatalog.current, LocalEmojiFont.current)
         androidx.compose.material3.Text(annotated, modifier, color = TextMain, fontSize = 15.sp, lineHeight = 20.sp,
             style = nativeEmojiTextStyle(LocalTextStyle.current), inlineContent = inline)
+    }
+}
+
+@Composable
+private fun NativeMessageStamp(message: VolnaMessage, isMine: Boolean, delivered: Boolean, read: Boolean, visible: Boolean, edited: Boolean = message.edited) {
+    if (visible) Row(verticalAlignment = Alignment.CenterVertically) {
+        if (edited) NativeText("изменено · ", color = Muted, fontSize = 10.sp)
+        NativeText(nativeClock(message.createdAt), color = Muted, fontSize = 11.sp)
+        if (isMine) Icon(if (delivered) Icons.Outlined.DoneAll else Icons.Outlined.Done, if (read) "Прочитано" else if (delivered) "Доставлено" else "Отправлено", tint = if (read) Accent else Muted, modifier = Modifier.padding(start = 3.dp).size(15.dp))
     }
 }

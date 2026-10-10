@@ -101,7 +101,7 @@ internal class NativeRecorder(private val context: Context, private val scope: C
 internal fun NativeRecordButton(recorder: NativeRecorder, enabled: Boolean, requestPermission: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val accent = Accent
-    val iconColor = if (recorder.recording) Color.White else AccentText
+    val iconColor = Color.White
     val enabledNow by rememberUpdatedState(enabled)
     val askPermission by rememberUpdatedState(requestPermission)
     val pulse = if (recorder.recording && LocalMotionEnabled.current) {
@@ -115,7 +115,7 @@ internal fun NativeRecordButton(recorder: NativeRecorder, enabled: Boolean, requ
         if (recorder.recording) recorder.finish() else if (!recorder.start(true)) askPermission()
         return true
     }
-    Box(Modifier.size(48.dp).clip(CircleShape).background(if (recorder.recording) Color(0xFFE35D6A) else accent).semantics {
+    Box(Modifier.size(48.dp).semantics {
         role = Role.Button; contentDescription = label; onClick(label) { tap() }
     }.pointerInput(enabled) {
         if (!enabled) return@pointerInput
@@ -144,7 +144,7 @@ internal fun NativeRecordButton(recorder: NativeRecorder, enabled: Boolean, requ
                 else if (started) when (gesture.release(releasedAt - down.uptimeMillis)) { "cancel" -> recorder.cancel(); "lock" -> recorder.lock(); else -> recorder.finish() }
             } catch (cancelled: CancellationException) { if (!recorder.locked) recorder.cancel(); throw cancelled }
         }
-    }, contentAlignment = Alignment.Center) { Icon(if (recorder.recording && recorder.locked) Icons.Outlined.Send else Icons.Outlined.Mic, null, tint = iconColor, modifier = Modifier.graphicsLayer { scaleX = pulse; scaleY = pulse }) }
+    }, contentAlignment = Alignment.Center) { Box(Modifier.size(38.dp).clip(CircleShape).background(if (recorder.recording) Color(0xFFE35D6A) else accent), contentAlignment = Alignment.Center) { Icon(if (recorder.recording && recorder.locked) Icons.Outlined.Send else Icons.Outlined.Mic, null, tint = iconColor, modifier = Modifier.graphicsLayer { scaleX = pulse; scaleY = pulse }) } }
 }
 
 @Composable

@@ -82,7 +82,7 @@ val LocalNativeAppearance = staticCompositionLocalOf { NativeAppearance() }
 internal val LocalMotionEnabled = staticCompositionLocalOf { true }
 private val LocalNativeBaseDensity = staticCompositionLocalOf<Density?> { null }
 internal val LocalVolnaPalette = staticCompositionLocalOf {
-    VolnaPalette(Color(0xFF0E1720), Color(0xFF17212B), Color(0xFF222F3C), Color(0xFF20313F), Color(0xFFEDF3F8),
+    VolnaPalette(Color(0xFF0E1823), Color(0xFF1E2B39), Color(0xFF273746), Color(0xFF2D4053), Color(0xFFEDF3F8),
         Color(0xFF8295A7), Color(0xFF58B7E8), Color(0xFF2B5278), Color(0xFF1B2B39))
 }
 internal val Ink: Color @Composable get() = LocalVolnaPalette.current.ink
@@ -114,8 +114,8 @@ fun VolnaTheme(appearance: NativeAppearance, updateSystemBars: Boolean = true, c
     val systemMotion = nativeSystemMotionEnabled()
     val accent = Color((variant?.accent ?: appearance.accent).toInt())
     val outgoingAccent = if (appearance.outgoing == 0L) accent else Color(appearance.outgoing.toInt())
-    val defaultPalette = if (dark) VolnaPalette(Color(0xFF0E1720), Color(0xFF17212B), Color(0xFF222F3C), Color(0xFF20313F),
-        Color(0xFFEDF3F8), Color(0xFF9AABB9), accent, lerp(Color(0xFF17212B), outgoingAccent, 0.28f), Color(0xFF1B2B39))
+    val defaultPalette = if (dark) VolnaPalette(Color(0xFF0E1823), Color(0xFF1E2B39), Color(0xFF273746), Color(0xFF2D4053),
+        Color(0xFFEDF3F8), Color(0xFF9AABB9), accent, if (appearance.outgoing == 0L) Color(0xFF3C6087) else lerp(Color(0xFF1E2B39), outgoingAccent, 0.28f), Color(0xFF1E2B39))
     else VolnaPalette(Color(0xFFF0F4F8), Color.White, Color(0xFFE7EDF3), Color(0xFFDCE8F0), Color(0xFF17212B),
         Color(0xFF536A7C), lerp(accent, Color(0xFF153F62), 0.25f), lerp(Color.White, outgoingAccent, 0.23f), Color.White)
     val rawTarget = if (variant == null) defaultPalette else VolnaPalette(Color(variant.wallpaper.colors.first().toInt()), Color(variant.surface.toInt()), Color(variant.secondarySurface.toInt()),
