@@ -14,8 +14,8 @@ async function fixture(t,extra={}){
 }
 test('Android OTP sends bounded own-app message, masked metadata and leading-zero codes through both providers',async()=>{
  const challenge={id:'A'.repeat(43),phone:'+79001234567',code:'001234',reference:'ref',android:true,appHash:hash};
- const text=smsMessage(challenge);assert.ok(Buffer.byteLength(text)<=140);assert.match(text,/^<#> Код входа в Волна: 001234\nПопытка: AAAAAAAA\nAbCdEfGhIjK$/);
- assert.equal(smsMessage({...challenge,android:false}),'001-234 твоя волна');
+ const text=smsMessage(challenge);assert.ok(Buffer.byteLength(text)<=140);assert.equal(text,'001234 твоя волна Попытка: AAAAAAAA AbCdEfGhIjK');assert.ok(!/[\r\n]/.test(text));
+ assert.equal(smsMessage({...challenge,android:false}),'001234 твоя волна');
  assert.ok(!smsMessage({...challenge,appHash:''}).endsWith(hash));
  let observed;
  await notificoreSender({key:'test',originator:'Volna',fetcher:async(_,options)=>{observed=JSON.parse(options.body).body;return {ok:true,text:async()=>'{"result":{"error":0,"id":"001"}}'};}})(challenge);assert.equal(observed,text);

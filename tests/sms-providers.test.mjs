@@ -7,7 +7,7 @@ const reply=(text,status=200)=>({ok:status>=200&&status<300,status,text:async()=
 test('gateway request uses exact GET parameters, local Russian format, UTF-8 text and safe provider ID',async()=>{
  let request;const sender=gatewaySender({url:'http://sms.test:3825/default/en_US/send.html',user:'qa-user',password:'qa-password',line:'4',fetcher:async(url,options)=>{request={url,options};return reply('Sending,L4 Send SMS to:89681411241; ID:00001514');}});
  const result=await sender({phone:'+79681411241',code:'123456',reference:'ext_id_001'}),url=new URL(request.url);
- assert.ok(url.search.includes('m=123-456%20'));assert.equal(url.pathname,'/default/en_US/send.html');assert.deepEqual(Object.fromEntries(url.searchParams),{u:'qa-user',p:'qa-password',l:'4',n:'89681411241',m:'123-456 твоя волна'});
+ assert.ok(url.search.includes('m=123456%20'));assert.equal(url.pathname,'/default/en_US/send.html');assert.deepEqual(Object.fromEntries(url.searchParams),{u:'qa-user',p:'qa-password',l:'4',n:'89681411241',m:'123456 твоя волна'});
  assert.equal(request.options.headers['Cache-Control'],'no-store');assert.equal(request.options.method,'GET');assert.equal(request.options.redirect,'error');assert.ok(request.options.signal instanceof AbortSignal);
  assert.deepEqual(result,{id:'00001514',provider:'gateway',error:0});assert.ok(!JSON.stringify(result).includes('89681411241'));
  assert.equal(gatewayPhone('+79001234567'),'89001234567');for(const phone of ['89681411241','+19681411241','+7968141124','+796814112411'])assert.throws(()=>gatewayPhone(phone),e=>e.status===400);

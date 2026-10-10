@@ -66,7 +66,7 @@ test('Notificore exact payload and headers, structured success, provider failure
  let request;const send=notificoreSender({key:'secret-for-test',originator:'Volna',fetcher:async(url,opts)=>{request={url,...opts};return {ok:true,text:async()=>JSON.stringify({result:{error:0,id:'213',body:'should-not-be-retained'}})};}});
  assert.deepEqual(await send({phone:'+79001112233',code:'234568',reference:'ext_id_005'}),{id:'213',error:0});
  assert.equal(request.url,'https://api.notificore.ru/v1.0/sms/create');assert.equal(request.headers['X-API-KEY'],'secret-for-test');
- assert.deepEqual(JSON.parse(request.body),{destination:'phone',originator:'Volna',body:'234-568 твоя волна',msisdn:'79001112233',reference:'ext_id_005'});
+ assert.deepEqual(JSON.parse(request.body),{destination:'phone',originator:'Volna',body:'234568 твоя волна',msisdn:'79001112233',reference:'ext_id_005'});
  for(const text of ['not json',JSON.stringify({result:{error:25,errorDescription:'private data'}})])await assert.rejects(notificoreSender({key:'key',originator:'Volna',fetcher:async()=>({ok:true,text:async()=>text})})({phone:'+79001112233',code:'123456',reference:'ext_id_001'}),e=>e.status===503&&!e.message.includes('private'));
 });
 test('web QR delivers HttpOnly cookie, refresh accepts the cookie, phones and provider codes stay private',async t=>{

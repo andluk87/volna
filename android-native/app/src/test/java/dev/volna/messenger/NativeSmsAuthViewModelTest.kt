@@ -31,7 +31,7 @@ class NativeSmsAuthViewModelTest {
         override suspend fun cancel(id: String) {}
         override suspend fun verify(id: String, code: String): VolnaSession { verifies++; lastCode=code; gate?.await(); fail?.let { throw it }; return VolnaSession("token",VolnaUser(1,"test","Test"),"refresh") }
     }
-    private fun message(nonce: String = "abcdefgh") = "<#> Код входа в Волна: 001234\nПопытка: $nonce\nAbCdEfGhIjK"
+    private fun message(nonce: String = "abcdefgh") = "001234 твоя волна Попытка: $nonce AbCdEfGhIjK"
     @Test fun earlySmsIsBufferedThenVerifiedExactlyOnce() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val repository=Repository();val monitor=Monitor();var stored=0
