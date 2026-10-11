@@ -1,0 +1,41 @@
+/* Shared geometry; Windows keeps straight columns, Web keeps floating plates. */
+.column-resize{position:absolute;top:16px;bottom:16px;width:8px;transform:translateX(-50%);z-index:65;cursor:col-resize;touch-action:none;border-radius:4px;outline:none}
+.column-resize:hover,.column-resize:focus-visible,.column-resize.resizing{background:color-mix(in srgb,var(--accent) 45%,transparent)}
+.columns-resizing,.columns-resizing *{cursor:col-resize!important;user-select:none!important}
+.app.info-open[data-info-docked=false]{grid-template-columns:var(--sidebar-width) minmax(0,1fr)}
+.app[data-info-docked=false]>.info-panel{position:absolute;inset:16px 16px 16px auto;width:min(var(--info-width),calc(100% - 32px));height:auto;z-index:100;box-shadow:-4px 0 24px #0003}
+.app.info-open[data-info-docked=true]{grid-template-columns:var(--sidebar-width) minmax(0,1fr) var(--info-width)}
+.app[data-info-docked=true]>.info-panel{position:static;inset:auto;width:auto;height:100%;box-shadow:none}
+.chat-row-wrap .chat-row{width:100%;padding-right:12px}
+.chat-row-wrap.active .chat-row{background:var(--accent);color:var(--accent-ink)}
+.folder-unread{white-space:nowrap;word-break:normal;line-height:16px}
+[data-desktop=true] .column-resize{top:0;bottom:0;border-radius:0}
+[data-desktop=true] .app.info-open[data-info-docked=true]{grid-template-columns:var(--sidebar-width) minmax(0,1fr) var(--info-width)}
+[data-desktop=true] .app[data-info-docked=false]>.info-panel{inset:0 0 0 auto;width:min(var(--info-width),100%);border-radius:0}
+[data-desktop=true] .chat-row-wrap.active .chat-row{background:#2b5278;color:#fff}
+[data-desktop=true][data-theme=light] .chat-row-wrap.active .chat-row{background:#419fd9}
+[data-desktop=true] .composer>.emoji-panel{left:auto;right:8px}
+[data-desktop=true] .composer>.emoji-panel.emoji-docked{left:auto;right:0}
+[data-desktop=true] .folder-rail-icon .folder-unread:not(:empty){width:max-content;max-width:none;min-width:18px;left:14px;display:block;padding:0 4px;height:18px;line-height:18px;text-align:center}
+@media(max-width:600px){
+ .column-resize{display:none}
+ .app[data-info-docked=false]>.info-panel{position:fixed;inset:0;width:100%;height:var(--app-height,100dvh);border-radius:0}
+}
+@media(max-width:760px){[data-desktop=true] .column-resize{display:none}[data-desktop=true] .app[data-info-docked=false]>.info-panel{position:fixed;inset:0;width:100%;height:100dvh}}
+/* Remove legacy flex slots and avatar rules that overrode the client layouts. */
+.chat-row-wrap{margin:0}
+.chat-row-wrap:hover{transform:none}
+.chat-row-wrap .chat-actions{position:absolute;right:8px;top:8px}
+.chat-row-wrap .chat-row .avatar{width:54px;height:54px;flex:0 0 54px}
+.chat-row-wrap .chat-copy strong{max-width:none}
+.chat-row-wrap.active .chat-copy strong,.chat-row-wrap.active .chat-copy p{color:inherit}
+.chat-row-wrap.active .chat-copy time{color:color-mix(in srgb,currentColor 75%,transparent)}
+[data-desktop=true] .chat-row-wrap .chat-row .avatar{width:46px;height:46px;flex:0 0 46px}
+.menu-theme-toggle .menu-switch{position:relative;flex:0 0 30px;height:16px;margin-left:auto;border-radius:10px;background:var(--muted)}
+.menu-switch:after{content:'';position:absolute;width:12px;height:12px;top:2px;left:2px;border-radius:50%;background:var(--panel)}
+.menu-theme-toggle[aria-checked=true] .menu-switch{background:var(--accent)}
+.menu-theme-toggle[aria-checked=true] .menu-switch:after{left:16px}
+[data-desktop=true] .main-menu .menu-account{background:var(--panel);color:var(--text)}
+[data-desktop=true] .main-menu .menu-account small{color:var(--muted)}
+[data-desktop=true] .main-menu .app-menu-content>button:not(.menu-account),[data-desktop=true] .main-menu-more>summary{min-height:40px;padding-top:10px;padding-bottom:10px;font-size:14px}
+[data-desktop=true] .desktop-settings-dialog{width:min(420px,calc(100vw - 32px))}

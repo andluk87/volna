@@ -48,7 +48,7 @@
 
 /* Folder rail and desktop dialogs share the application's live theme. */
 @media(min-width:761px){
- :root[data-desktop=true]{--sidebar-width:clamp(330px,34vw,510px)}
+ :root[data-desktop=true]{--sidebar-width:392px}
  [data-desktop=true] .sidebar.desktop-folder-sidebar{position:relative;display:grid;grid-template-columns:72px minmax(0,1fr);grid-template-rows:48px auto minmax(0,1fr)}
  [data-desktop=true] .desktop-folder-sidebar>.sidebar-head{grid-column:2;grid-row:1;padding-left:10px}
  [data-desktop=true] .desktop-folder-sidebar>.sidebar-head .main-menu{position:absolute;left:0;top:8px;width:72px;display:flex;justify-content:center;z-index:110}
