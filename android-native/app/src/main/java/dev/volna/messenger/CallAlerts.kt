@@ -67,16 +67,16 @@ internal fun CallAlertsSettings(automatic: Boolean = false) {
         (manager.getNotificationChannel(NativeCalls.CALL_CHANNEL)?.importance ?: NotificationManager.IMPORTANCE_HIGH) >= NotificationManager.IMPORTANCE_HIGH }
     var open by remember { mutableStateOf(false) }
     val setup = remember { context.getSharedPreferences("volna-notification-setup", Context.MODE_PRIVATE) }
-    var prompted by remember { mutableStateOf(setup.getBoolean("startup_prompted", setup.getBoolean("requested", false))) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { revision++ }
     LaunchedEffect(revision, automatic) {
-        if (automatic && ready && !prompted) {
-            prompted = true
-            setup.edit().putBoolean("startup_prompted", true).apply()
-        } else if (automatic && !ready && !prompted) {
-            prompted = true
-            setup.edit().putBoolean("startup_prompted", true).apply()
-            open = true
+        if (automatic) {
+            val checkedVersion = setup.getInt("checked_version", -1)
+            val wasReady = setup.getBoolean("last_ready", false)
+            val shouldPrompt = nativeCallPermissionPrompt(ready, wasReady, checkedVersion, BuildConfig.VERSION_CODE,
+                setup.getBoolean("startup_prompted", setup.getBoolean("requested", false)))
+            setup.edit().putInt("checked_version", BuildConfig.VERSION_CODE).putBoolean("last_ready", ready)
+                .putBoolean("startup_prompted", true).apply()
+            if (shouldPrompt) open = true
         }
     }
     if (!ready && !automatic) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
