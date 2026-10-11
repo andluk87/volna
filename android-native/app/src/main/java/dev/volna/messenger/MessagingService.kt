@@ -134,7 +134,7 @@ class MessagingService : Service() {
         }
     }
 
-    private fun clearBackgroundCall(account: Long) { getSystemService(NotificationManager::class.java).cancel("volna-call-account-$account", BACKGROUND_CALL_ID) }
+    private fun clearBackgroundCall(account: Long) { getSystemService(NotificationManager::class.java).cancel("volna-call-account-$account", NativeCalls.CALL_NOTIFICATION); NativeBackgroundCalls.remove(account) }
     private fun watchCalls(stream: AccountStream) {
         var alerted: String? = null
         val device = prefs.getString("call_device",null)?.takeIf { it.matches(Regex("[a-f0-9]{32}")) } ?: "0".repeat(32)
@@ -147,12 +147,10 @@ class MessagingService : Service() {
                     if(call == null || !call.incoming || call.status != "ringing") { clearBackgroundCall(stream.userId);alerted=null }
                     else if(call.id != alerted) {
                         val account=NativeAccounts.list(this).firstOrNull { it.user.id == stream.userId } ?: break
-                        val launch=Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).setData(Uri.parse("volna://call-notification/${stream.userId}/${call.id}"))
-                            .putExtra("account_id",stream.userId).putExtra("chat_id",call.chatId)
-                        val pending=PendingIntent.getActivity(this,BACKGROUND_CALL_ID,launch,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                        val notification=builder("${call.peer?.name ?: "Входящий звонок"} · ${account.user.name}",if(call.video)"Входящий видеозвонок · нажмите, чтобы ответить" else "Входящий звонок · нажмите, чтобы ответить",NativeNotificationSounds.backgroundCallChannel(this,stream.userId))
-                            .setCategory(Notification.CATEGORY_CALL).setContentIntent(pending).setOngoing(true).setOnlyAlertOnce(true).setTimeoutAfter(45_000).build()
-                        getSystemService(NotificationManager::class.java).notify("volna-call-account-${stream.userId}",BACKGROUND_CALL_ID,notification);if(getSystemService(NotificationManager::class.java).areNotificationsEnabled())api.callAction(stream.token,device,call.id,"ringing");alerted=call.id
+                        CallAlerts.show(this,call,stream.userId,account.user.name,background=true)
+                        NativeBackgroundCalls.put(stream.userId,account.user.name,call)
+                        if(getSystemService(NotificationManager::class.java).areNotificationsEnabled())api.callAction(stream.token,device,call.id,"ringing")
+                        alerted=call.id
                     }
                 }
             } catch(problem: NativeApiException) { if(problem.status in listOf(401,403)) { invalidSession(stream); break } }

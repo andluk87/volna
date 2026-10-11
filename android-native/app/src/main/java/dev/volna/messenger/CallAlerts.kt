@@ -28,26 +28,27 @@ import androidx.lifecycle.LifecycleEventObserver
 internal object CallAlerts {
     fun settings(context: Context, intent: Intent) { runCatching { context.startActivity(intent) }.onFailure { runCatching { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) } } }
     fun fullScreenAllowed(context: Context): Boolean = Build.VERSION.SDK_INT < 34 || context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
-    fun show(context: Context, call: VolnaCall) {
+    fun show(context: Context, call: VolnaCall, account: Long = 0, accountName: String = "", background: Boolean = false) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(NativeCalls.CALL_CHANNEL, "Входящие звонки", NotificationManager.IMPORTANCE_HIGH).apply {
             setSound(null, null); enableVibration(false); lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         })
-        val open = IncomingCallActivity.pending(context, call.id)
-        val answer = IncomingCallActivity.pending(context, call.id, answer = true)
+        val channel = if(background)NativeNotificationSounds.backgroundCallChannel(context,account) else NativeCalls.CALL_CHANNEL
+        val open = IncomingCallActivity.pending(context, call.id, account = account)
+        val answer = IncomingCallActivity.pending(context, call.id, answer = true, account = account)
         val decline = PendingIntent.getBroadcast(context, NativeCalls.CALL_NOTIFICATION,
-            Intent(context, CallActionReceiver::class.java).setAction(CallService.ACTION_END).putExtra("call_id", call.id),
+            Intent(context, CallActionReceiver::class.java).setAction(CallService.ACTION_END).putExtra("call_id", call.id).putExtra("account_id",account).setData(Uri.parse("volna-call://decline/$account/${call.id}")),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification = Notification.Builder(context, NativeCalls.CALL_CHANNEL)
+        val notification = Notification.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_volna).setContentTitle(call.peer?.name ?: "Волна")
-            .setContentText("Входящий звонок").setCategory(Notification.CATEGORY_CALL)
+            .setContentText(if(accountName.isBlank())"Входящий звонок" else "Входящий звонок · $accountName").setCategory(Notification.CATEGORY_CALL)
             .setContentIntent(open).setVisibility(Notification.VISIBILITY_PUBLIC).setOngoing(true).setOnlyAlertOnce(true)
         if (fullScreenAllowed(context)) notification.setFullScreenIntent(open, true)
         if (Build.VERSION.SDK_INT >= 31) notification.setStyle(Notification.CallStyle.forIncomingCall(
             Person.Builder().setName(call.peer?.name ?: "Собеседник").setImportant(true).build(), decline, answer))
         else notification.addAction(Notification.Action.Builder(null, "Отклонить", decline).build())
             .addAction(Notification.Action.Builder(null, "Ответить", answer).build())
-        manager.notify(NativeCalls.CALL_NOTIFICATION, notification.build())
+        if(background)manager.notify("volna-call-account-$account",NativeCalls.CALL_NOTIFICATION,notification.build()) else manager.notify(NativeCalls.CALL_NOTIFICATION, notification.build())
     }
 }
 

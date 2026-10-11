@@ -53,6 +53,7 @@ object NativeCalls {
     private var context: Context? = null
     private val api by lazy { NativeApi(BuildConfig.API_BASE_URL) }
     @Volatile private var token = ""
+    internal fun accountId():Long = NativeCredentials.accountId(token)
     internal fun configuredFor(session: String) = token.isNotBlank() && NativeCredentials.resolve(token) == NativeCredentials.resolve(session)
     private var device = ""
     private var generation = 0
@@ -96,6 +97,7 @@ object NativeCalls {
     fun configure(appContext: Context, sessionToken: String) {
         NativeTelecom.configure(appContext)
         if (context != null && token == sessionToken) return
+        if(sessionToken.isNotBlank()&&state.value.call!=null&&!configuredFor(sessionToken))return
         end()
         pollJob?.cancel()
         clockJob?.cancel()
@@ -661,7 +663,7 @@ object NativeCalls {
 
     private fun ring(call: VolnaCall) {
         val app = context ?: return
-        runCatching { CallAlerts.show(app, call) }
+        runCatching { CallAlerts.show(app, call, accountId(), NativeAccounts.list(app).firstOrNull{it.user.id==accountId()}?.user?.name.orEmpty()) }
         NativeCallVibration.start(app)
         val uri = NativeNotificationSounds.callUri(app)
         ringtone = if (NativeNotificationSounds.callSoundAllowed(app) && uri != null) runCatching { RingtoneManager.getRingtone(app, uri) }.getOrNull()?.also {

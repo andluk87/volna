@@ -44,7 +44,8 @@ import org.webrtc.SurfaceViewRenderer
 fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean = false, pip: Boolean = false, onMinimize: (() -> Unit)? = null) {
     val context = LocalContext.current
     val original = state.call ?: return
-    val account = context.getSharedPreferences("volna-native", Context.MODE_PRIVATE).getLong("user_id", 0)
+    val account = NativeCredentials.accountId(token).takeIf{it>0}?:context.getSharedPreferences("volna-native", Context.MODE_PRIVATE).getLong("user_id", 0)
+    val accountName=remember(account){NativeAccounts.list(context).firstOrNull{it.user.id==account}?.user?.name.orEmpty()}
     val contactNames = rememberNativeContactNames(account)
     val call = original.copy(peer = original.peer?.let { it.copy(name = contactNames[it.id] ?: it.name) })
     val layout = remember(call.id) { NativeCallLayout.forCall(call.id) }
@@ -115,6 +116,7 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
                     Box(Modifier.size(190.dp), contentAlignment = Alignment.Center) { Avatar(call.peer?.name ?: "В", call.peer?.id ?: 0, call.peer?.avatarUrl, token, size = 190.dp) }
                 }
                 NativeText(call.peer?.name ?: "Собеседник", color = TextMain, fontSize = 32.sp, fontWeight = FontWeight.Normal, modifier = Modifier.padding(top = 4.dp))
+                if(accountName.isNotBlank())NativeText("Аккаунт: $accountName",color=Muted,fontSize=14.sp)
                 NativeText(nativeCallStatus(state), color = TextMain.copy(alpha = .95f), fontSize = 18.sp, modifier = Modifier.padding(top = 8.dp))
                 if (state.sharing) NativeText("Ваш экран виден собеседнику", color = Accent, modifier = Modifier.padding(top = 12.dp))
                 Spacer(Modifier.weight(1f))

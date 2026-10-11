@@ -91,7 +91,7 @@ class CallService : Service() {
 
     private fun updateForeground() {
         val state = NativeCalls.state.value
-        val open = IncomingCallActivity.pending(this, state.call?.id ?: return)
+        val open = IncomingCallActivity.pending(this, state.call?.id ?: return, account=NativeCalls.accountId())
         val end = PendingIntent.getBroadcast(this, 11032, Intent(this, CallActionReceiver::class.java).setAction(ACTION_END).putExtra("call_id", state.call?.id), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_volna)
             .setContentTitle(state.call?.peer?.name ?: "Волна")
@@ -148,7 +148,19 @@ class CallService : Service() {
 
 class CallActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == CallService.ACTION_END && intent.getStringExtra("call_id") == NativeCalls.state.value.call?.id) NativeCalls.end()
+        if(intent.action!=CallService.ACTION_END)return
+        val id=intent.getStringExtra("call_id")?:return
+        if(id==NativeCalls.state.value.call?.id){NativeCalls.end();return}
+        val account=intent.getLongExtra("account_id",0);val token=NativeCredentials.access(account)
+        if(account<=0||token.isBlank())return
+        val result=goAsync()
+        kotlin.concurrent.thread {
+            try{val device=context.getSharedPreferences("volna-native",Context.MODE_PRIVATE).getString("call_device",null)?:"0".repeat(32)
+                NativeApi(BuildConfig.API_BASE_URL).callAction(token,device,id,"end")
+                NativeBackgroundCalls.remove(account)
+                context.getSystemService(NotificationManager::class.java).cancel("volna-call-account-$account",NativeCalls.CALL_NOTIFICATION)
+            }catch(_:Exception){}finally{result.finish()}
+        }
     }
 }
 

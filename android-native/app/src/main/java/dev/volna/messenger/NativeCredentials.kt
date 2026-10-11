@@ -58,6 +58,7 @@ internal object NativeCredentials {
     @Synchronized fun access(id: Long): String = read(id)?.optString("access").orEmpty()
     @Synchronized fun resolve(token: String): String = account(token)?.let { access(it) }?.ifBlank { token } ?: token
     @Synchronized fun refresh(token: String): String? = account(token)?.let { read(it)?.optString("refresh") }?.takeIf { it.isNotBlank() }
+    @Synchronized internal fun accountId(token:String):Long = account(token)?:0L
     private fun account(token: String): Long? = aliases[token] ?: prefs().all.keys.mapNotNull { it.toLongOrNull() }.firstOrNull { read(it)?.optString("access") == token }
     @Synchronized fun remove(id: Long) { prefs().edit().remove(id.toString()).commit(); aliases.entries.removeAll { it.value == id } }
     val refreshLock = Any()

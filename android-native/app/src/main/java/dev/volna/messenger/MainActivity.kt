@@ -570,6 +570,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     }
 
     VolnaTheme(appearance) {
+        NativeBackgroundCallHost(api)
             Surface(Modifier.fillMaxSize().background(Ink).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)), color = Ink) {
             Column(Modifier.fillMaxSize()) {
             if (attachmentSending && attachmentBatch?.voiceFile != null) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Accent)

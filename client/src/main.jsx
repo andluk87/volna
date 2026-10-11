@@ -1,3 +1,4 @@
+import AccountCalls from './AccountCalls';
 import useCloudAppearance from './useCloudAppearance';
 import SiteHome from './SiteHome';
 import {presenceLabel} from './presence.mjs';
@@ -102,6 +103,7 @@ function App({demo=false}){
  const [token,setToken]=useState(''),[me,setMe]=useState(null),[restoring,setRestoring]=useState(true);
  const [cloudAppearanceSaveError,setCloudAppearanceSaveError]=useState(false);
  const appearanceSaveError=localAppearanceSaveError||cloudAppearanceSaveError;
+ const displayedApp=useRef(false);
  const cloudAppearanceReady=useCloudAppearance(demo?'':token,me?.id,appearance,setAppearance,setCloudAppearanceSaveError);
  useEffect(()=>demo?undefined:onSessionChange(result=>{if(userRef.current&&userRef.current!==result.user.id){closeActive();setChats([]);setMessages([]);setProfileId(null);setQuery('');setPeople([]);setPrivateNames(new Map());setForward(null);setDeleting(null);setPendingSend(null);setNotice('');setCommunityModal(null);setTopicsGroup(null);setInfoOpen(false);setNotificationSettings(false);setDataOpen(false);setAppearanceOpen(false);clearEmojiCache();}setToken(result.token);setMe(result.user);}),[demo]);
  const acceptAddedSession=useCallback(async result=>{await saveSession(result);setAddingAccount(false);},[]);
@@ -287,7 +289,8 @@ function App({demo=false}){
  {isCommunity&&!m.deleted_at&&!adjacentMessage(displayMessages[messageIndex.get(m.id)-1],m)&&<div className="sender-name">{chat.kind==='channel'?chat.name:m.sender_name}</div>}
  {m.deleted_at?<div className="message-text">Сообщение удалено</div>:<>{m.forwarded_name&&<div className="forward-label">Переслано от {m.forwarded_name}</div>}{m.reply&&<button className="reply-quote" onClick={()=>jump({id:m.reply.id})}><strong>{m.reply.name}</strong><span>{m.reply.text}</span></button>}{m.attachment&&<Attachment key={m.attachment.id} file={m.attachment} token={token} messageId={m.id} transcript={m.transcript||''} expressionKind={m.expression?.kind} gallery={imageGallery}/>}{m.checklist&&<ChecklistMessage checklist={m.checklist} canCheck={canSend} onCheck={(item,done)=>action(m,'check',{item,done})}/>} {m.poll&&<PollMessage poll={m.poll} userId={me?.id} onVote={option=>action(m,'vote',{option})}/>}<MessageText text={m.poll||m.checklist?'':m.text} entities={m.emoji_entities||[]} token={token} meta={m.text?<MessageMeta message={m} own={m.sender_id===me?.id} chat={chat} timeFormat={appearance.timeFormat}/>:null}/>{m.reactions?.length>0&&<div className="reactions">{[...new Set(m.reactions.map(r=>r.emoji))].map(emoji=><button className={m.reactions.some(r=>r.emoji===emoji&&r.user_id===me?.id)?'mine':''} key={emoji} aria-label={'Кто отреагировал '+emoji} onClick={()=>setReactionPeople({id:m.id,emoji})}>{emoji} {m.reactions.filter(r=>r.emoji===emoji).length}</button>)}</div>}</>}
  {(!m.text||m.deleted_at)&&<MessageMeta message={m} own={m.sender_id===me?.id} chat={chat} timeFormat={appearance.timeFormat}/>}</article></React.Fragment>)}</div>)),[timeline,me?.id,chat?.peer_read,chat?.peer_delivered,chat?.kind,chat?.name,active,token,appearance.avatars,appearance.timeFormat,isCommunity,moderator,canSend,selectedIds]);
- if(restoring||(!cloudAppearanceReady&&!cloudAppearanceSaveError))return <main className="auth"><p>Подключаемся к Волне…</p></main>;
+ if(token&&!restoring&&cloudAppearanceReady)displayedApp.current=true;
+ if(restoring||(!displayedApp.current&&!cloudAppearanceReady&&!cloudAppearanceSaveError))return <main className="auth"><p>Подключаемся к Волне…</p></main>;
  if(!token&&demo)return <DemoLogin onEnter={user=>{setToken(DEMO_TOKEN);setMe(user);}}/>;
  if(!token&&!window.volnaDesktop&&location.pathname==='/')return <SiteHome><PhoneQrLogin onSession={acceptSession}/></SiteHome>;
  if(!token)return <><PhoneQrLogin onSession={acceptSession}/>{accounts.length>0&&<section className="account-login-choices"><p>Другие аккаунты на этом устройстве</p>{accounts.map(s=><button key={s.user.id} onClick={()=>selectAccount(s.user.id).catch(e=>setError(e.message))}>{s.user.name}</button>)}</section>}</>;
@@ -322,7 +325,7 @@ function App({demo=false}){
  {formatDialog&&<Dialog title={formatDialog.kind==='link'?'Гиперссылка':'Блок кода'} onClose={()=>{setFormatDialog(null);requestAnimationFrame(()=>{composerInput.current?.focus();composerInput.current?.setSelectionRange(...formatDialog.selection);});}}><form onSubmit={e=>{e.preventDefault();if(active!==formatDialog.chat){setFormatDialog(null);return;}selection.current=formatDialog.selection;formatText(formatDialog.kind,formatOption);}}><label>{formatDialog.kind==='link'?'Адрес ссылки':'Язык кода'}<input autoFocus aria-label={formatDialog.kind==='link'?'Адрес ссылки':'Язык кода'} value={formatOption} onChange={e=>setFormatOption(e.target.value)} maxLength={formatDialog.kind==='link'?2048:20}/></label>{formatError&&<p role="alert">{formatError}</p>}<p>{formatDialog.kind==='code'?'Например: js, python, json, sql. Можно оставить пустым.':'Используйте полный адрес http:// или https://'}</p><footer><button type="submit" className="primary">Применить</button></footer></form></Dialog>}
  {!demo&&token&&<NotificationStartup key={token} token={token} onConfigure={()=>setNotificationSettings(true)}/>}
  {notificationSettings&&<Notifications token={token} onClose={()=>setNotificationSettings(false)}/>}
- {!demo&&!window.volnaDesktop?.secondary&&<Calls ref={calls} token={token} onError={setError} onBeforeCall={cancelRecording}/>}
+ {!demo&&!window.volnaDesktop?.secondary&&<AccountCalls accounts={accounts.some(a=>a.user.id===me?.id)?accounts:[...accounts,{token,user:me}]} selected={me?.id} selectedRef={calls} onError={setError} onBeforeCall={cancelRecording}/>}
  {photo&&<PhotoEditor file={photo.file} onClose={()=>setPhoto(null)} onReady={file=>{attach(file,photo.chat);setPhoto(null);}}/>}
  {profileId&&me&&<Profile key={profileId} id={profileId} me={me} token={token} revision={profileRevision} onClose={()=>setProfileId(null)} onSaved={user=>{setMe(user);refreshChats().catch(handleError);}}/>}
  {addingAccount&&<Dialog title="Добавить аккаунт" onClose={()=>setAddingAccount(false)}><PhoneQrLogin onSession={acceptAddedSession}/></Dialog>}

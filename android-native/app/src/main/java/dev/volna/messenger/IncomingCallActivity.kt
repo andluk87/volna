@@ -32,6 +32,7 @@ class IncomingCallActivity : ComponentActivity() {
     private var expectedId by mutableStateOf("")
     private var resolved by mutableStateOf(false)
     private var answerRequested = false
+    private var accountId by mutableStateOf(0L)
     private val microphone = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         if (granted[Manifest.permission.RECORD_AUDIO] == true) { answerRequested = false; NativeCalls.state.value.call?.takeIf { it.id == expectedId && it.incoming && it.status == "ringing" }?.let { NativeCalls.accept(video = it.video && granted[Manifest.permission.CAMERA] == true) } } else answerRequested = false
     }
@@ -41,13 +42,16 @@ class IncomingCallActivity : ComponentActivity() {
         configureCallPip()
         if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
         else window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
-        val token = NativeCredentials.access(getSharedPreferences("volna-native", MODE_PRIVATE).getLong("user_id",0))
+        accountId=intent.getLongExtra("account_id",0).takeIf{it>0}?:getSharedPreferences("volna-native",MODE_PRIVATE).getLong("user_id",0)
+        val token = NativeCredentials.access(accountId)
+        if(NativeCalls.state.value.call!=null&&!NativeCalls.configuredFor(token)){finish();return}
+
         if (token.isBlank()) { finish(); return }
         NativeCalls.configure(this, token)
         receive(intent)
         setContent { NativeEmojiProvider {
             val state by NativeCalls.state.collectAsState()
-            val account = getSharedPreferences("volna-native", MODE_PRIVATE).getLong("user_id", 0)
+            val account = accountId
             val appearance = rememberNativeCallAppearance(account)
             LaunchedEffect(state.call?.id, resolved, expectedId) {
                 if (resolved && state.call?.id != expectedId) finish()
@@ -58,7 +62,7 @@ class IncomingCallActivity : ComponentActivity() {
                 onDispose { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
             }
             VolnaTheme(appearance) {
-                if (state.call?.id == expectedId) NativeCallScreen(state, token, standalone = true, pip = NativeCallLayout.inPip, onMinimize = ::openChat)
+                if (state.call?.id == expectedId) NativeCallScreen(state, NativeCredentials.access(accountId), standalone = true, pip = NativeCallLayout.inPip, onMinimize = ::openChat)
                 else Box(Modifier.fillMaxSize().background(Ink), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Accent)
@@ -76,6 +80,10 @@ class IncomingCallActivity : ComponentActivity() {
     private fun receive(intent: Intent) {
         val id = intent.getStringExtra(EXTRA_CALL_ID).orEmpty()
         if (id.isBlank()) { finish(); return }
+        val requestedAccount=intent.getLongExtra("account_id",0).takeIf{it>0}?:accountId
+        val session=NativeCredentials.access(requestedAccount)
+        if(session.isBlank()||(NativeCalls.state.value.call!=null&&!NativeCalls.configuredFor(session))){finish();return}
+        accountId=requestedAccount;NativeCalls.configure(this,session)
         expectedId = id; resolved = false
         answerRequested = intent.action == ACTION_ANSWER
         lifecycleScope.launch {
@@ -101,7 +109,7 @@ class IncomingCallActivity : ComponentActivity() {
     private fun openChat() {
         val open = {
             NativeCalls.minimize(true)
-            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("account_id",accountId))
             finish()
         }
         val keyguard = getSystemService(KeyguardManager::class.java)
@@ -113,12 +121,13 @@ class IncomingCallActivity : ComponentActivity() {
     companion object {
         const val EXTRA_CALL_ID = "call_id"
         private const val ACTION_ANSWER = "dev.volna.messenger.ANSWER_CALL"
-        fun pending(context: Context, callId: String, answer: Boolean = false): PendingIntent {
-            val intent = Intent(context, IncomingCallActivity::class.java)
-                .setAction(if (answer) ACTION_ANSWER else "dev.volna.messenger.SHOW_CALL")
-                .setData(Uri.parse("volna-call://call/$callId/${if (answer) "answer" else "show"}"))
-                .putExtra(EXTRA_CALL_ID, callId)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        fun intent(context:Context,callId:String,account:Long,answer:Boolean=false)=Intent(context,IncomingCallActivity::class.java)
+            .setAction(if(answer)ACTION_ANSWER else "dev.volna.messenger.SHOW_CALL")
+            .setData(Uri.parse("volna-call://call/$account/$callId/${if(answer)"answer" else "show"}"))
+            .putExtra(EXTRA_CALL_ID,callId).putExtra("account_id",account)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        fun pending(context: Context, callId: String, answer: Boolean = false, account: Long = 0): PendingIntent {
+            val intent = intent(context,callId,account,answer)
             val options = if (Build.VERSION.SDK_INT >= 35) ActivityOptions.makeBasic().apply {
                 setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
             }.toBundle() else null
