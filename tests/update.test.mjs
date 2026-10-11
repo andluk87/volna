@@ -21,6 +21,7 @@ args=sys.argv[1:]
 with open(os.environ['TRACE'],'a') as trace:trace.write(' '.join(args)+'\\n')
 if 'build' in args:sys.exit(int(os.environ.get('FAIL_BUILD','0')))
 if 'up' in args:sys.exit(int(os.environ.get('FAIL_UP','0')))
+if 'exec' in args and 'web' in args and any('cmp -s' in item for item in args):sys.exit(int(os.environ.get('FAIL_SITE','0')))
 if '--format' in args and args[args.index('--format')+1]=='json':
     enabled=os.environ.get('TEST_CALLS')=='1'
     print(json.dumps({'services':{'server':{'environment':{'TURN_HOST':'turn.example' if enabled else '', 'TURN_SECRET':'a'*64 if enabled else ''}}}}))
@@ -34,6 +35,7 @@ elif 'ps' in args and '-q' in args:print('turn-fixture')
   const configured=run({TEST_CALLS:'1'});assert.equal(configured.status,0);assert.match(configured.log,/up -d --wait --wait-timeout 600 server web transcription turn gateway/,'resolved container environment, including exported values, determines TURN startup');
   for(const env of [{FAIL_BUILD:'1'},{FAIL_BACKUP:'1'}]){const fail=run(env);assert.notEqual(fail.status,0);assert.doesNotMatch(fail.log,/up -d/);}
   const failedUp=run({FAIL_UP:'1'});assert.notEqual(failedUp.status,0);assert.match(failedUp.log,/logs --no-color --tail=80 server web transcription/);
+  const failedSite=run({FAIL_SITE:'1'});assert.notEqual(failedSite.status,0,'stale public homepage must fail the update check');assert.match(failedSite.log,/cmp -s/);
   const host=run({VOLNA_BUILD_NETWORK:'host'});assert.equal(host.status,0);assert.match(host.log,/-f compose.yaml -f compose.https.yaml -f compose.build-host.yaml --profile calls build/);
  }finally{rmSync(root,{recursive:true,force:true});}
 });

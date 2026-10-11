@@ -3,3 +3,5 @@
 html:has(.site-home),body:has(.site-home),#root:has(.site-home){height:auto;min-height:100%;overflow:visible}.site-home .site-actions span{font-family:Arial,sans-serif}
 
 .site-home .site-arrow{display:inline-block;width:16px;height:16px;vertical-align:-3px;margin-left:4px}
+
+.site-hero figure img{aspect-ratio:1;height:auto}.site-news img{aspect-ratio:16/9;object-fit:cover}

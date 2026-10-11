@@ -52,6 +52,19 @@ if ! compose exec -T web sh -ec 'grep -R -F -q "$1" /usr/share/nginx/html/assets
   exit 1
 fi
 echo "Verified web assets: Volna $version."
+if ! compose exec -T web sh -ec '
+  served=$(mktemp)
+  trap "rm -f $served" EXIT
+  test -f /usr/share/nginx/html/index.html
+  wget -Y off -T 10 -q -O "$served" http://127.0.0.1/
+  cmp -s "$served" /usr/share/nginx/html/index.html
+  ! test -f /usr/share/nginx/html/landing.html
+  ! test -d /usr/share/nginx/html/demo
+'; then
+  echo 'The public homepage is stale or demo files remain. Update aborted: inspect the running web container.' >&2
+  exit 1
+fi
+echo 'Verified public homepage route and absence of production demo files.'
 if [ "$https" -eq 1 ]; then
   compose exec -T gateway caddy reload --config /etc/caddy/Caddyfile
 fi

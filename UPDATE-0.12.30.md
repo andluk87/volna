@@ -10,7 +10,7 @@
   test -f compose.yaml && test -f .env
   volna_update_dir=$(mktemp -d)
   trap 'rm -rf "$volna_update_dir"' EXIT
-  git clone --depth 1 --branch v0.12.30 \
+  git clone --depth 1 --branch v0.12.30-sitefix \
     https://github.com/andluk87/volna.git "$volna_update_dir/source"
   git -C "$volna_update_dir/source" archive \
     --output="$volna_update_dir/source.tar" HEAD
