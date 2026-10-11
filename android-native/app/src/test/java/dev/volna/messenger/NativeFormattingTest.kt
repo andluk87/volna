@@ -2,6 +2,20 @@ package dev.volna.messenger
 import org.junit.Assert.*
 import org.junit.Test
 class NativeFormattingTest {
+ @Test fun unfinishedProfileSurvivesAccountSerialization() {
+  val user=VolnaUser(42,"79001112233","",firstName="Иван",lastName="Иван",profileSetupRequired=true)
+  assertEquals(user,NativeCodec.user(NativeCodec.user(user)))
+  val completed=user.copy(username="ivan",name="Иван Иван",profileSetupRequired=false)
+  assertEquals(completed,NativeCodec.user(NativeCodec.user(completed)))
+ }
+
+ @Test fun reversedSelectionFormatsActualTextAndPreservesEmoji() {
+  val emoji=NativeEmojiEntity("a".repeat(32),2,2)
+  val edit=nativeFormatSelection("A 😀 B",listOf(emoji),4,2,"underline")
+  assertEquals("A <u>😀</u> B",edit.text);assertEquals(5,edit.entities.single().start)
+  assertEquals("A 😀 B",nativeFormatted(edit.text).text)
+ }
+
  @Test fun allInlineFormatsAndSafeLinks() {
   val result=nativeFormatted("**жирный** __курсив__ *ещё* <u>низ</u> ~~нет~~ `x` ||секрет|| [сайт](https://example.org) [опасно](javascript:alert(1))")
   assertEquals("жирный курсив ещё низ нет x секрет сайт [опасно](javascript:alert(1))",result.text)

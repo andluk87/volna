@@ -116,14 +116,15 @@ internal fun ChatRoomScreen(
     var searchOpen by remember(chat.id) { mutableStateOf(false) }
     var showPins by remember(chat.id) { mutableStateOf(false) }
     var menu by remember(chat.id) { mutableStateOf(false) }
+    var formattingSelection by remember(chat.id) { mutableStateOf<TextRange?>(null) }
     var formattingMenu by remember(chat.id) { mutableStateOf(false) }
     var formattingDialog by remember(chat.id) { mutableStateOf<String?>(null) }
     var formattingOption by remember(chat.id) { mutableStateOf("") }
     var formattingError by remember(chat.id) { mutableStateOf("") }
     fun applyFormat(kind: String, option: String? = null) {
         formattingMenu = false
-        if (kind in listOf("link", "code") && option == null) { formattingDialog = kind; formattingOption = if (kind == "link") "https://" else "js"; formattingError = ""; return }
-        try { val result = nativeFormatSelection(input.text, entities, input.selection.min, input.selection.max, kind, option.orEmpty()); input = TextFieldValue(result.text, TextRange(result.start,result.end)); entities = result.entities; drafts.setInput(chat.id,input,entities); formattingDialog = null; inputFocus.requestFocus() } catch (problem: IllegalArgumentException) { formattingError = problem.message.orEmpty(); if (formattingDialog == null) Toast.makeText(context,formattingError,Toast.LENGTH_SHORT).show() }
+        if (kind in listOf("link", "code") && option == null) { if (formattingSelection == null) formattingSelection = input.selection; formattingDialog = kind; formattingOption = if (kind == "link") "https://" else "js"; formattingError = ""; return }
+        try { val result = nativeFormatSelection(input.text, entities, (formattingSelection ?: input.selection).min, (formattingSelection ?: input.selection).max, kind, option.orEmpty()); input = TextFieldValue(result.text, TextRange(result.start,result.end)); entities = result.entities; drafts.setInput(chat.id,input,entities); formattingDialog = null; formattingSelection = null; inputFocus.requestFocus() } catch (problem: IllegalArgumentException) { formattingError = problem.message.orEmpty(); if (formattingDialog == null) Toast.makeText(context,formattingError,Toast.LENGTH_SHORT).show() }
     }
     var attachmentMenu by remember(chat.id) { mutableStateOf(false) }
     var selection by remember(chat.id) { mutableStateOf(emptySet<Long>()) }
@@ -318,8 +319,8 @@ internal fun ChatRoomScreen(
                 }) { NativeText("Вернуть неотправленный текст") }
                 NativeRichComposer(input, ::changeInput, entities, user?.id ?: 0, token, api,
                     Modifier.weight(1f).focusRequester(inputFocus).onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.isCtrlPressed || event.isMetaPressed)) { val kind = when(event.key){Key.B -> "bold";Key.I -> "italic";Key.U -> "underline";Key.K -> "link";else -> null}; if(kind != null){applyFormat(kind);true}else false } else false }.onFocusChanged { if (it.isFocused && panel.open && !panel.searching) panel.open = false },
-                    enabled = true, maxLines = if (LocalConfiguration.current.screenHeightDp < 480) 3 else 6)
-                if (!recorder.recording) IconButton(onClick = { formattingMenu = true }) { Icon(Icons.Outlined.TextFormat, "Форматирование текста", tint = Muted) }
+                    enabled = true, maxLines = if (LocalConfiguration.current.screenHeightDp < 480) 3 else 6, onFormat = { applyFormat(it) })
+                if (!recorder.recording) IconButton(onClick = { formattingSelection = input.selection; formattingMenu = true }) { Icon(Icons.Outlined.TextFormat, "Форматирование текста", tint = Muted) }
                 if (!recorder.recording) IconButton(onClick = { attachmentMenu = true }, enabled = !busy && editTarget == null) { Icon(Icons.Outlined.AttachFile, "Вложение", tint = Muted) }
             }
             if (input.text.isBlank() && editTarget == null || recorder.recording) NativeRecordButton(recorder, enabled = !busy && !callActive) { micPermission.launch(Manifest.permission.RECORD_AUDIO) }
@@ -339,10 +340,10 @@ internal fun ChatRoomScreen(
         } else Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime))
     }
     } }
-    if (formattingMenu) ModalBottomSheet(onDismissRequest = { formattingMenu = false }, containerColor = Panel) {
+    if (formattingMenu) ModalBottomSheet(onDismissRequest = { formattingMenu = false; formattingSelection = null }, containerColor = Panel) {
         Column(Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp)) { NativeText("Форматирование текста", fontWeight = FontWeight.Bold); NativeText("Выделите текст или вставьте заготовку", color = Muted, fontSize = 12.sp); nativeFormatOptions.forEach { (kind,label) -> TextButton(onClick = { applyFormat(kind) }, modifier = Modifier.fillMaxWidth()) { NativeText(label) } } }
     }
-    if (formattingDialog != null) AlertDialog(onDismissRequest = { formattingDialog = null; inputFocus.requestFocus() }, title = { NativeText(if(formattingDialog == "link") "Гиперссылка" else "Блок кода") }, text = { Column { OutlinedTextField(value = formattingOption, onValueChange = { formattingOption = it }, label = { NativeText(if(formattingDialog == "link") "Адрес ссылки" else "Язык кода") }, singleLine = true); NativeText(if(formattingDialog == "link") "Полный адрес http:// или https://" else "Например: js, python, json, sql. Можно оставить пустым.", color = Muted, fontSize = 12.sp); if(formattingError.isNotBlank()) NativeText(formattingError,color = MaterialTheme.colorScheme.error) } }, confirmButton = { TextButton(onClick = { applyFormat(formattingDialog!!,formattingOption) }) { NativeText("Применить") } }, dismissButton = { TextButton(onClick = { formattingDialog = null; inputFocus.requestFocus() }) { NativeText("Отмена") } })
+    if (formattingDialog != null) AlertDialog(onDismissRequest = { formattingDialog = null; formattingSelection = null; inputFocus.requestFocus() }, title = { NativeText(if(formattingDialog == "link") "Гиперссылка" else "Блок кода") }, text = { Column { OutlinedTextField(value = formattingOption, onValueChange = { formattingOption = it }, label = { NativeText(if(formattingDialog == "link") "Адрес ссылки" else "Язык кода") }, singleLine = true); NativeText(if(formattingDialog == "link") "Полный адрес http:// или https://" else "Например: js, python, json, sql. Можно оставить пустым.", color = Muted, fontSize = 12.sp); if(formattingError.isNotBlank()) NativeText(formattingError,color = MaterialTheme.colorScheme.error) } }, confirmButton = { TextButton(onClick = { applyFormat(formattingDialog!!,formattingOption) }) { NativeText("Применить") } }, dismissButton = { TextButton(onClick = { formattingDialog = null; formattingSelection = null; inputFocus.requestFocus() }) { NativeText("Отмена") } })
     if (attachmentMenu) ModalBottomSheet(onDismissRequest = { attachmentMenu = false }, containerColor = Panel) {
         NativeText("Вложение", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         val options = listOf(Triple("gallery", "Галерея", Icons.Outlined.PhotoLibrary), Triple("camera", "Камера", Icons.Outlined.PhotoCamera), Triple("file", "Файл", Icons.Outlined.Description), Triple("location", "Местоположение", Icons.Outlined.LocationOn), Triple("contact", "Контакт", Icons.Outlined.PersonOutline), Triple("music", "Музыка", Icons.Outlined.MusicNote))

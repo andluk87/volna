@@ -16,7 +16,8 @@ import java.net.URI
 
 data class VolnaUser(
     val id: Long, val username: String, val name: String, val avatarUrl: String? = null,
-    val bio: String = "", val phone: String = "", val online: Boolean = false
+    val bio: String = "", val phone: String = "", val online: Boolean = false,
+    val firstName: String = "", val lastName: String = "", val profileSetupRequired: Boolean = false
 )
 data class VolnaUpdate(val versionCode: Long, val versionName: String, val apkPath: String, val sha256: String)
 data class VolnaChat(
@@ -203,6 +204,7 @@ class NativeApi(baseUrl: String) {
     }
 
     fun checkUsername(token: String, username: String): JSONObject = call("/users/username/check?username=" + android.net.Uri.encode(username), token = token)
+    fun completeInitialProfile(token: String, first: String, last: String, username: String): VolnaUser = parseUser(call("/users/me/onboarding", "POST", token, JSONObject().put("first_name", first).put("last_name", last).put("username", username)).getJSONObject("user"))
     fun changeUsername(token: String, username: String): VolnaUser = parseUser(call("/users/me/username", "PATCH", token, JSONObject().put("username", username)).getJSONObject("user"))
     fun publicProfile(username: String): VolnaUser = parseUser(call("/public/users/" + android.net.Uri.encode(username)))
     fun topics(token: String, group: Long): JSONObject = call("/groups/$group/topics", token = token)
@@ -445,7 +447,7 @@ class NativeApi(baseUrl: String) {
         return VolnaUser(
             id = row.optLong("id"), username = row.optString("username"), name = row.optString("name", row.optString("username")),
             avatarUrl = row.optString("avatar_url").takeIf { it.isNotBlank() && it != "null" },
-            bio = row.optString("bio"), phone = nullableText(row,"phone").orEmpty(), online = row.optBoolean("online")
+            bio = row.optString("bio"), phone = nullableText(row,"phone").orEmpty(), online = row.optBoolean("online"), firstName = row.optString("first_name"), lastName = row.optString("last_name"), profileSetupRequired = row.optBoolean("profile_setup_required")
         )
     }
 

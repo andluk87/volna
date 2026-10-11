@@ -50,6 +50,7 @@ internal fun ChatListScreen(
     user: VolnaUser?, chats: List<VolnaChat>, query: String, people: List<VolnaUser>, error: String, token: String,
     onQuery: (String) -> Unit, onSelect: (VolnaChat) -> Unit, onChatPreference: (VolnaChat, String, Boolean) -> Unit,
     onStartChat: (VolnaUser) -> Unit, update: VolnaUpdate?, updateBusy: Boolean, updateStatus: String,
+    autoUpdateDownload: Boolean, onAutoUpdateDownload: (Boolean) -> Unit, updateReady: Boolean, onUpdateLater: () -> Unit, onCheckUpdate: () -> Unit,
     onUpdate: () -> Unit, onScanQr: () -> Unit, onOpenProfile: (Long) -> Unit, onLogout: () -> Unit,
     onAppearance: () -> Unit, onCommunityEntry: (String) -> Unit, onSavedMessages: () -> Unit,
     api: NativeApi, cache: NativeCache, onCall: (VolnaChat) -> Unit, onVideo: (VolnaChat) -> Unit, onSearchMessage: (VolnaMessage) -> Unit,
@@ -248,6 +249,7 @@ internal fun ChatListScreen(
         Spacer(Modifier.height(24.dp))
     }
     when (settings) {
+        "updates" -> NativeUpdatesScreen(update, updateBusy, updateStatus, autoUpdateDownload, onAutoUpdateDownload, updateReady, onCheckUpdate, onUpdate, onUpdateLater) { settings = "" }
         "notifications" -> NativeNotificationSettings(user?.id ?: 0) { settings = "" }
         "security", "devices" -> NativeSessionsScreen(token, api, onScanQr) { settings = "" }
         "storage" -> NativeStorageScreen { settings = "" }
@@ -470,6 +472,7 @@ private fun NativeSettingsScreen(user: VolnaUser?, token: String, appearance: Na
             Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.BatterySaver, null, tint = Accent); Column(Modifier.weight(1f).padding(start = 12.dp)) { NativeText("Энергосбережение", color = TextMain, fontSize = 15.sp); NativeText("Меньше анимаций и эффектов", color = Muted, fontSize = 12.sp) }; Switch(appearance.powerSaving, { onAppearanceChange(appearance.copy(powerSaving = it)) }) }
             NativeSettingRow(Icons.Outlined.Language, "Язык", "Русский") { onSection("language") }
             NativeSettingRow(Icons.Outlined.Contacts, "Контакты и синхронизация", "Телефонная книга и приватность") { onContacts() }
+            NativeSettingRow(Icons.Outlined.SystemUpdate, "Обновления", "Автоматическая загрузка и установка") { onSection("updates") }
             NativeSettingRow(Icons.Outlined.ManageAccounts, "Аккаунты", "Добавить или переключить") { onAccounts() }
         } }
         item { NativeText("Эмодзи: Noto Color Emoji 2.051 · Google · SIL OFL 1.1\nДанные: Unicode 17 / CLDR 48 · Unicode License\nСтеклянные эффекты: Haze 1.5.4 · Apache 2.0", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(12.dp)) }

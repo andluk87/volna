@@ -36,7 +36,8 @@ internal fun NativeRichComposer(
     api: NativeApi,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    maxLines: Int = 6
+    maxLines: Int = 6,
+    onFormat: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -76,6 +77,11 @@ internal fun NativeRichComposer(
         }
         scroll.scrollTo(next.coerceIn(0, scroll.maxValue))
     }
+    val formatAction by rememberUpdatedState(onFormat)
+    val view = androidx.compose.ui.platform.LocalView.current
+    val toolbar = remember(view) { NativeFormattingToolbar(view) { formatAction(it) } }
+    DisposableEffect(toolbar) { onDispose { toolbar.hide() } }
+    CompositionLocalProvider(androidx.compose.ui.platform.LocalTextToolbar provides toolbar) {
     BasicTextField(
         value = value, onValueChange = onValueChange, enabled = enabled,
         modifier = modifier.heightIn(min = 48.dp), textStyle = style,
@@ -113,6 +119,7 @@ internal fun NativeRichComposer(
             )
         }
     )
+    }
 }
 
 private fun nativeComposerEmojiBounds(layout: TextLayoutResult, entity: NativeEmojiEntity): Rect {

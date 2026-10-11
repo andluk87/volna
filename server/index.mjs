@@ -41,14 +41,16 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   // New IDs cannot accidentally reuse legacy Android cache/account IDs.
   if (!db.prepare("SELECT 1 FROM sqlite_sequence WHERE name='users'").get()) db.prepare("INSERT INTO sqlite_sequence(name,seq) VALUES('users',?)").run(randomInt(1000000000,2000000000));
   if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='last_seen'))db.exec('ALTER TABLE users ADD COLUMN last_seen INTEGER');
+  const profileColumns=new Set(db.prepare('PRAGMA table_info(users)').all().map(c=>c.name));
+  for(const [name,type] of Object.entries({first_name:"TEXT NOT NULL DEFAULT ''",last_name:"TEXT NOT NULL DEFAULT ''",profile_setup_required:'INTEGER NOT NULL DEFAULT 0'}))if(!profileColumns.has(name))db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   initAdminSchema(db);
   const streams = new Map(), limits = new Map();
   let newsService;
   const userById = (id,own=false) => {
-    const row=db.prepare('SELECT id,username,name,bio,avatar_id,avatar_hidden,phone,last_seen FROM users WHERE id=?').get(id);
+    const row=db.prepare('SELECT id,username,name,bio,avatar_id,avatar_hidden,phone,last_seen,first_name,last_name,profile_setup_required FROM users WHERE id=?').get(id);
     if(!row)return;
     const user={id:row.id,username:row.username,name:row.name,bio:row.bio,online:!!streams.get(row.id)?.size,last_seen:row.last_seen};
-    if(own)user.phone=row.phone;
+    if(own){user.phone=row.phone;user.first_name=row.first_name;user.last_name=row.last_name;user.profile_setup_required=!!row.profile_setup_required;}
     user.avatar_url=row.avatar_hidden?null:row.avatar_id?`/api/files/${row.avatar_id}`:null;
     return usernameService?.decorate(user)||user;
   };

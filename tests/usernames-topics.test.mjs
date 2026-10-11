@@ -62,3 +62,16 @@ test('public avatars expose only the selected image and stop working on hide or 
  assert.equal((await fetch(base+'/files/'+file.id)).status,401);await f.call('/users/me/username',a.token,{username:'picture'},'PATCH');assert.equal((await fetch(base+'/public/users/'+a.user.username+'/avatar')).status,404);assert.equal((await fetch(base+'/public/users/picture/avatar')).status,200);
  await f.call('/profile',a.token,{name:'Фото',bio:'',avatar_id:file.id,avatar_hidden:true});assert.equal((await fetch(base+'/public/users/picture/avatar')).status,404);assert.equal((await f.call('/public/users/picture')).data.avatar_url,null);
 });
+
+test('first profile requires names and globally unique nickname; duplicate names allowed and failed updates atomic',async t=>{
+ const {app,call,login}=await fixture(t),a=await login('+79005550101'),b=await login('+79005550102');
+ assert.equal(a.user.profile_setup_required,true);assert.equal(a.user.name,'');assert.equal((await login('+79005550101')).user.profile_setup_required,true);
+ for(const body of [{first_name:'',last_name:'Иван',username:'ivan'},{first_name:'Иван',last_name:'Иван',username:'12345678'},{first_name:'Иван\n',last_name:'Иван',username:'ab'}])assert.equal((await call('/users/me/onboarding',a.token,body)).status,400);
+ const completed=await call('/users/me/onboarding',a.token,{first_name:'Иван',last_name:'Иван',username:'@IvAn'});assert.equal(completed.status,200);assert.equal(completed.data.user.name,'Иван Иван');assert.equal(completed.data.user.username,'ivan');assert.equal(completed.data.user.profile_setup_required,false);
+ const collision=await call('/users/me/onboarding',b.token,{first_name:'Иван',last_name:'Иван',username:'IVAN'});assert.equal(collision.status,409);assert.ok(collision.data.suggestions.length);assert.equal((await call('/me',b.token)).data.profile_setup_required,true);assert.equal(app.db.prepare('SELECT name FROM users WHERE id=?').get(b.user.id).name,'');
+ for(const nick of collision.data.suggestions)assert.equal((await call('/users/username/check?username='+nick,b.token)).data.available,true);
+ assert.equal((await call('/users/me/onboarding',b.token,{first_name:'Иван',last_name:'Иван',username:collision.data.suggestions[0]})).status,200);
+ const again=await login('+79005550101');assert.equal(again.user.profile_setup_required,false);assert.equal(again.user.first_name,'Иван');assert.equal(again.user.last_name,'Иван');
+ assert.equal((await call('/public/users/ivan')).data.profile_setup_required,undefined);
+ const races=await Promise.all([call('/users/me/onboarding',a.token,{first_name:'Иван',last_name:'Иван',username:'winner'}),call('/users/me/onboarding',b.token,{first_name:'Иван',last_name:'Иван',username:'WINNER'})]);assert.deepEqual(races.map(r=>r.status).sort(),[200,409]);
+});

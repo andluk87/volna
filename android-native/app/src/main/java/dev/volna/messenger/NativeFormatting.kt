@@ -61,7 +61,7 @@ internal fun nativeHighlight(text: String, language: String): List<NativeFormatS
 }
 internal data class NativeFormatEdit(val text: String, val entities: List<NativeEmojiEntity>, val start: Int, val end: Int)
 internal fun nativeFormatSelection(value: String, entities: List<NativeEmojiEntity>, a: Int, b: Int, kind: String, option: String = ""): NativeFormatEdit {
-    val start=a.coerceIn(0,value.length);val end=b.coerceIn(start,value.length);val selected=value.substring(start,end).ifEmpty{"текст"};var content=selected
+    val start=minOf(a,b).coerceIn(0,value.length);val end=maxOf(a,b).coerceIn(start,value.length);val selected=value.substring(start,end).ifEmpty{"текст"};var content=selected
     val pair=when(kind){
         "quote" -> {content=selected.split('\n').joinToString("\n"){"> $it"};(if(start==0||value[start-1]=='\n')"" else "\n") to ""}
         "link" -> { val uri=try{java.net.URI(option)}catch(_:Exception){throw IllegalArgumentException("Введите полный адрес https://example.org")};require(uri.scheme in listOf("http","https")&&!uri.host.isNullOrBlank()&&uri.userInfo==null){"Ссылка должна начинаться с http:// или https://"};"[" to ("]("+option.replace("(","%28").replace(")","%29")+")") }

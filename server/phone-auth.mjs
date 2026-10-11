@@ -166,7 +166,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
         }
         let user=db.prepare('SELECT id FROM users WHERE phone=?').get(row.phone);
         loginCheck(user?.id);
-        if(!user){const inserted=db.prepare('INSERT INTO users(username,name,phone) VALUES(?,?,?)').run(availablePhoneUsername(db,row.phone),'Новый пользователь',row.phone);user={id:Number(inserted.lastInsertRowid)};}
+        if(!user){const inserted=db.prepare('INSERT INTO users(username,name,phone,profile_setup_required) VALUES(?,?,?,1)').run(availablePhoneUsername(db,row.phone),'',row.phone);user={id:Number(inserted.lastInsertRowid)};}
         db.prepare('UPDATE users SET phone_verified_at=? WHERE id=?').run(clock(),user.id);
         db.prepare("UPDATE sms_challenges SET status='verified',used=? WHERE id=?").run(clock(),row.id);
         return issue(user.id,'android',req);

@@ -215,7 +215,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     val scope = rememberCoroutineScope()
     val homeState = rememberSaveableStateHolder()
     var token by remember { mutableStateOf(NativeCredentials.access(prefs.getLong("user_id",0))) }
-    var me by remember { mutableStateOf<VolnaUser?>(null) }
+    var me by remember { mutableStateOf(NativeAccounts.list(context).firstOrNull { it.user.id == prefs.getLong("user_id", 0) }?.user) }
     NativeContactSyncHost(me?.id ?: 0, token, api)
     val contactNames = rememberNativeContactNames(me?.id ?: 0)
     val chats = remember { mutableStateListOf<VolnaChat>() }
@@ -254,6 +254,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     var updateBusy by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf("") }
     var pendingUpdateFile by remember { mutableStateOf<File?>(null) }
+    var autoUpdateDownload by remember { mutableStateOf(prefs.getBoolean("updates_auto_download", true)) }
     val updateOnLaunch = remember { prefs.getLong("update_on_restart", 0) }
     val voicePlayback = remember { NativeVoicePlayback(context) { error = it } }
     var attachmentBatch by remember { mutableStateOf<NativeAttachmentBatch?>(null) }
@@ -304,9 +305,9 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             finally { updateBusy = false }
         }
     }
-    LaunchedEffect(updateAvailable) {
+    LaunchedEffect(updateAvailable, autoUpdateDownload) {
         val release = updateAvailable ?: return@LaunchedEffect
-        if (updateBusy) return@LaunchedEffect
+        if (updateBusy || !autoUpdateDownload) return@LaunchedEffect
         updateBusy = true; updateStatus = "Скачиваем Волна ${release.versionName}…"
         try {
             val file = File(context.filesDir, "updates/volna-${release.versionCode}.apk")
@@ -585,8 +586,8 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     { installUpdate(updateAvailable) }) { session ->
                         prefs.edit().remove("token").putLong("user_id",session.user.id).apply()
                         NativeAccounts.remember(context,session.user,session.token);me=session.user;token=session.token
-                        if(session.user.username==session.user.phone.filter { it.isDigit() })profileTargetId=session.user.id
                     }
+                me?.profileSetupRequired == true -> NativeInitialProfile(me!!, token, api) { updated -> me = updated; NativeAccounts.remember(context, updated, token); scope.launch(Dispatchers.IO) { cache.saveMe(updated) } }
                 selectedChat == null -> homeState.SaveableStateProvider("home-${me?.id ?: 0}") { ChatListScreen(
                     user = me, chats = chats.filter { it.parentId == 0L }, query = query, people = people, token = token,
                     error = error,
@@ -610,6 +611,11 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                         else { pendingCall = chat; callPermission.launch(Manifest.permission.RECORD_AUDIO) }
                     },
                     update = updateAvailable, updateBusy = updateBusy, updateStatus = updateStatus,
+                    autoUpdateDownload = autoUpdateDownload,
+                    onAutoUpdateDownload = { autoUpdateDownload = it; prefs.edit().putBoolean("updates_auto_download", it).apply() },
+                    updateReady = updateAvailable?.let { pendingUpdateFile?.name == "volna-${it.versionCode}.apk" && pendingUpdateFile?.isFile == true } == true,
+                    onUpdateLater = { updateAvailable?.let { prefs.edit().putLong("update_on_restart", it.versionCode).apply(); dismissedUpdate = it.versionCode; updateStatus = "Установка при следующем запуске" } },
+                    onCheckUpdate = { scope.launch { if (!updateBusy) { updateStatus = "Проверяем обновления…"; try { updateAvailable = withContext(Dispatchers.IO) { api.checkUpdate(BuildConfig.VOLNA_VERSION_CODE) }; updateStatus = if (updateAvailable == null) "Установлена последняя версия" else "Доступна Волна ${updateAvailable?.versionName}" } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (e: Exception) { updateStatus = e.message ?: "Не удалось проверить обновления" } } } },
                     onUpdate = { installUpdate(updateAvailable) }, onScanQr = { if (callState.call == null) { initialQr = ""; qrOpen = true } else error = "Завершите звонок перед сканированием" },
                     onOpenProfile = { profileTargetId = it },
                     onAppearance = { appearanceChat = null; appearanceOpen = true }, onCommunityEntry = { communityEntry = it },

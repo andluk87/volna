@@ -40,6 +40,16 @@ export function usernames({db,body,json,userById,publish,uploads,publicBase=proc
  }
  async function handle(req,res,url,uid){const path=url.pathname;
  if(path==='/api/users/username/check'&&req.method==='GET'){json(res,200,check(url.searchParams.get('username'),uid));return true;}
+ if(path==='/api/users/me/onboarding'&&req.method==='POST'){
+ const data=await body(req),first=typeof data.first_name==='string'?data.first_name.trim():'',last=typeof data.last_name==='string'?data.last_name.trim():'';
+ if(!first||!last||first.length>32||last.length>32||first.length+last.length>63||/[\x00-\x1f\x7f]/.test(first+last))throw fail(400,'Введите имя и фамилию, до 32 символов каждое');
+ const username=canonicalUsername(data.username),reason=usernameProblem(username);if(reason)throw fail(400,reason);
+ if(!free(username,uid))throw fail(409,'Этот ник уже занят',{suggestions:suggestions(username,uid)});
+ try{db.prepare('UPDATE users SET first_name=?,last_name=?,name=?,username=?,profile_setup_required=0 WHERE id=?').run(first,last,first+' '+last,username,uid);}
+ catch(e){if(String(e.message).includes('UNIQUE'))throw fail(409,'Этот ник уже занят',{suggestions:suggestions(username,uid)});throw e;}
+ const peers=db.prepare('SELECT DISTINCT peer.user_id FROM members m JOIN members peer ON peer.chat_id=m.chat_id WHERE m.user_id=?').all(uid).map(r=>r.user_id);
+ publish([...new Set([uid,...peers])],{type:'profile',user_id:uid,user:decorate(userById(uid))});json(res,200,{success:true,user:decorate(userById(uid,true))});return true;
+ }
  if(path==='/api/users/me/username'&&['PATCH','POST'].includes(req.method)){
  const data=await body(req),result=check(data.username,uid);if(!result.valid)throw fail(400,result.reason,{suggestions:result.suggestions});if(!result.available)throw fail(409,'Этот username уже занят',{suggestions:result.suggestions});
  try{db.prepare('UPDATE users SET username=? WHERE id=?').run(result.username,uid);}catch(e){if(e.code==='ERR_SQLITE_ERROR'&&String(e.message).includes('UNIQUE'))throw fail(409,'Этот username уже занят',{suggestions:suggestions(result.username,uid)});throw e;}
