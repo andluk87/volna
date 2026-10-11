@@ -415,6 +415,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     LaunchedEffect(token) {
         MessagingService.signals.collect { event ->
             if(event.account!=me?.id)return@collect
+            if(event.type=="history-cleared"&&selectedChat?.id==event.chatId){messages.clear();if(event.deleted)selectedChat=null}
             if(event.type=="removed"&&topicsGroup?.id==event.chatId)topicsGroup=null
             if(event.type=="removed"&&(selectedChat?.id==event.chatId||selectedChat?.parentId==event.chatId)){selectedChat=null;messages.clear();topicsGroup=null}
             if(event.type=="profile") {
@@ -598,7 +599,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     onSelect = { chat -> selectedChat = chat; messages.clear(); messageQuery = ""; focusMessageId = null },
                     onChatPreference = { chat, key, value ->
                         scope.launch {
-                            try { withContext(Dispatchers.IO) { api.updateChatPreference(token, chat.id, key, value) }; chats.clear(); chats.addAll(withContext(Dispatchers.IO) { api.chats(token) }) }
+                            try { withContext(Dispatchers.IO) { if (key in listOf("clear-history", "delete-chat")) api.contactRequest("/chats/${chat.id}/$key", token, org.json.JSONObject()) else api.updateChatPreference(token, chat.id, key, value) }; chats.clear(); chats.addAll(withContext(Dispatchers.IO) { api.chats(token) }) }
                             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось изменить чат" }
                         }
                     },
@@ -699,7 +700,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                                 sendNonces.remove(key)
                                 if (editId != null && token == session && selectedChat?.id == chatId) { val position = messages.indexOfFirst { it.id == created.id }; if (position >= 0) messages[position] = created }
                                 if (token == session && selectedChat?.id == chatId) { if (earlierWindow) { earlierWindow = false; messages.clear() }; if (messages.none { it.id == created.id }) messages.add(created) }; onSent(true)
-                            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { if (token == session) error = problem.message ?: "Не удалось отправить сообщение"; onSent(false) }
+                            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { if (problem is NativeApiException && problem.errorCode == "HISTORY_CLEARED") sendNonces.remove("$appearanceAccount:$chatId:$replyId:${text.hashCode()}:${entities.hashCode()}"); if (token == session) error = problem.message ?: "Не удалось отправить сообщение"; onSent(false) }
                             finally { busy = false }
                         }
                     },

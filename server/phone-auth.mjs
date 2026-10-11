@@ -60,9 +60,13 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
     if(!row||row.expires<=clock()||!['pending','scanned'].includes(row.status))throw fail(410,'QR-код истёк или уже использован');return row;
   }
   const android=session=>{if(db.prepare('SELECT platform FROM refresh_sessions WHERE access_id=?').get(session.token)?.platform!=='android')throw fail(403,'Подтвердите вход в Android-приложении');};
-  function deliver(res,result){
+  const cookies=req=>Object.fromEntries(String(req.headers.cookie||'').split(';').map(part=>part.trim().split('=')).filter(pair=>pair.length===2));
+  const cookie=(name,value,age)=>`${name}=${value}; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=${age}`;
+  function deliver(req,res,result,select=true){
     if(result.platform==='web'&&result.refresh_token){
-      res.setHeader('Set-Cookie',`volna.refresh=${result.refresh_token}; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=${Math.max(0,Math.floor((result.refresh_expires-clock())/1000))}`);
+      const age=Math.max(0,Math.floor((result.refresh_expires-clock())/1000)),uid=result.user.id;
+      const retained=Object.keys(cookies(req)).filter(name=>/^volna\.refresh\.[1-9]\d*$/.test(name)&&name!==`volna.refresh.${uid}`);
+      res.setHeader('Set-Cookie',[...(select?[cookie('volna.refresh',result.refresh_token,age),cookie('volna.account',uid,age)]:[]),cookie(`volna.refresh.${uid}`,result.refresh_token,age),...retained.slice(4).map(name=>cookie(name,'',0))]);
       const safe={...result};delete safe.refresh_token;json(res,200,safe);
     }else json(res,200,result);
   }
@@ -76,7 +80,12 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
     if(path==='/api/auth/config'&&req.method==='GET'){json(res,200,{mode:'phone-qr-v1',sms_enabled:isSmsReady(),sms_retriever_hashes:appHashes});return true;}
     if(!path.startsWith('/api/auth/')&&!v1)return false;
     const address=ip(req),now=clock();let bucket=limits.get(address);if(!bucket||bucket.until<now){bucket={count:0,until:now+60000};limits.set(address,bucket);}if(++bucket.count>240)throw fail(429,'Подождите минуту','RATE_LIMITED',bucket.until);
-    if(path==='/api/auth/clear'&&post){res.setHeader('Set-Cookie','volna.refresh=; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=0');json(res,200,{ok:true});return true;}
+    if(path==='/api/auth/accounts'&&req.method==='GET'){
+      const jar=cookies(req),accounts=[];
+      for(const [name,value] of Object.entries(jar)){const match=name.match(/^volna\.refresh\.([1-9]\d*)$/);if(!match||!Number.isSafeInteger(Number(match[1]))||!/^[A-Za-z0-9_-]{43}$/.test(value))continue;const row=db.prepare("SELECT user_id FROM refresh_sessions WHERE refresh_hash=? AND expires>? AND platform='web'").get(tokenHash(value),clock());if(row&&row.user_id===Number(match[1])&&!accounts.some(a=>a.id===row.user_id)){const user=userById(row.user_id,true);if(user)accounts.push(user);}}
+      json(res,200,{accounts:accounts.slice(0,5),selected:Number(jar['volna.account'])||null});return true;
+    }
+    if(path==='/api/auth/clear'&&post){const data=await body(req),jar=cookies(req),uid=data.account_id??Number(jar['volna.account']);if(data.account_id!==undefined&&(!Number.isSafeInteger(uid)||uid<1))throw fail(400,'Некорректный аккаунт');res.setHeader('Set-Cookie',[cookie('volna.refresh','',0),cookie('volna.account','',0),...(uid?[cookie(`volna.refresh.${uid}`,'',0)]:[])]);json(res,200,{ok:true});return true;}
     if(['/api/auth/sms/status','/api/auth/sms/cancel'].includes(path)&&post){
       const data=await body(req),row=db.prepare('SELECT * FROM sms_challenges WHERE id=?').get(String(data.challenge_id||''));
       if(!row)throw fail(404,'Попытка входа не найдена','CHALLENGE_NOT_FOUND');
@@ -165,19 +174,20 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
       if(result.error)throw result.error;json(res,200,result);return true;
     }
     if(path==='/api/auth/refresh'&&post){
-      const data=await body(req);if(!data.refresh_token){data.refresh_token=String(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('volna.refresh='))?.slice('volna.refresh='.length);}
+      const data=await body(req);if(data.account_id!==undefined&&(!Number.isSafeInteger(data.account_id)||data.account_id<1))throw fail(400,'Некорректный аккаунт');if(!data.refresh_token){const jar=cookies(req);data.refresh_token=data.account_id?jar[`volna.refresh.${data.account_id}`]:jar['volna.refresh'];}
       if(typeof data.refresh_token!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(data.refresh_token))throw fail(401,'Войдите заново');
       const result=transaction(()=>{
         const row=db.prepare('SELECT * FROM refresh_sessions WHERE refresh_hash=? AND expires>?').get(tokenHash(data.refresh_token),clock());
-        if(!row)throw fail(401,'Сеанс завершён. Войдите заново');loginCheck(row.user_id);
+        if(!row||data.account_id&&row.user_id!==data.account_id)throw fail(401,'Сеанс завершён. Войдите заново');loginCheck(row.user_id);
         const oldToken=row.access_id,token=secret(),refresh=secret(),expires=clock()+3600000;
         const details=db.prepare('SELECT * FROM session_details WHERE token=?').get(oldToken);
         db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(tokenHash(token),row.user_id,expires);
         db.prepare('UPDATE refresh_sessions SET refresh_hash=?,access_id=? WHERE id=?').run(tokenHash(refresh),tokenHash(token),row.id);
         db.prepare('INSERT INTO session_details VALUES(?,?,?,?)').run(tokenHash(token),agent(req),details?.created||row.created,clock());
+        db.prepare('UPDATE push_subscriptions SET session_token=? WHERE session_token=?').run(tokenHash(token),oldToken);
         db.prepare('DELETE FROM sessions WHERE token=?').run(oldToken);disconnect(row.user_id,oldToken);audit('refresh',req,row.user_id);
         return {platform:row.platform,token,access_token:token,refresh_token:refresh,expires,refresh_expires:row.expires,user:userById(row.user_id,true)};
-      });deliver(res,result);return true;
+      });deliver(req,res,result,data.select!==false);return true;
     }
     if(path==='/api/auth/qr/request'&&post){
       const data=await body(req);if(!['web','windows'].includes(data.platform))throw fail(400,'Укажите Web или Windows');
@@ -193,7 +203,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
       if(row.status==='approved'){
         const result=transaction(()=>{const current=db.prepare('SELECT * FROM qr_challenges WHERE id=?').get(row.id);if(current.status!=='approved')throw fail(410,'QR уже использован');
           if(!db.prepare('SELECT 1 FROM refresh_sessions r JOIN sessions s ON r.access_id=s.token WHERE r.id=? AND s.user_id=? AND r.platform=\'android\' AND r.expires>?').get(row.approved_by,row.user_id,clock())){db.prepare("UPDATE qr_challenges SET status='rejected' WHERE id=?").run(row.id);return {status:'rejected'};}
-          db.prepare("UPDATE qr_challenges SET status='used' WHERE id=?").run(row.id);return {status:'used',...issue(row.user_id,row.platform,req)};});deliver(res,result);
+          db.prepare("UPDATE qr_challenges SET status='used' WHERE id=?").run(row.id);return {status:'used',...issue(row.user_id,row.platform,req)};});deliver(req,res,result);
       }else json(res,200,{status:row.status});return true;
     }
     if(['/api/auth/qr/scan','/api/auth/qr/confirm'].includes(path)&&post){
@@ -209,7 +219,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
         if(typeof data.approve!=='boolean')throw fail(400,'Подтвердите или отклоните вход');
         db.prepare('UPDATE qr_challenges SET status=?,approved_by=? WHERE id=?').run(data.approve?'approved':'rejected',db.prepare('SELECT id FROM refresh_sessions WHERE access_id=?').get(session.token).id,row.id);
         audit(data.approve?'qr-approved':'qr-rejected',req,session.user_id);return {success:true};
-      });deliver(res,result);return true;
+      });deliver(req,res,result);return true;
     }
     throw fail(404,'Этот способ входа недоступен');
   }

@@ -18,7 +18,12 @@ test('push: private defaults, ownership, durable queue/key, preview, read suppre
   assert.equal((await req('/push/config','')).status,401);const publicKey=(await req('/push/config',b.token)).data;assert.deepEqual(Object.keys(publicKey),['publicKey']);
   for(const endpoint of ['http://127.0.0.1/internal','https://localhost/private','https://fcm.googleapis.com.evil.test/a','https://user:password@fcm.googleapis.com/a','https://fcm.googleapis.com:444/a'])assert.equal((await req('/push/subscribe',b.token,{subscription:{...sub,endpoint}})).status,400);
   assert.equal((await req('/push/subscribe',b.token,{subscription:sub})).status,200);
-  assert.equal((await req('/push/subscribe',c.token,{subscription:sub})).status,409);
+  const rotated=(await req('/auth/refresh','',{refresh_token:b.refresh_token})).data;b.token=rotated.token;b.refresh_token=rotated.refresh_token;
+  assert.equal((await req('/push/status',b.token,{endpoint:sub.endpoint})).data.subscribed,true);
+  assert.equal((await req('/push/subscribe',c.token,{subscription:sub})).status,200);
+  assert.equal((await req('/push/status',c.token,{endpoint:sub.endpoint})).data.subscribed,true);
+  await req('/push/unsubscribe',c.token,{endpoint:sub.endpoint});
+  assert.equal((await req('/push/status',b.token,{endpoint:sub.endpoint})).data.subscribed,true);
   assert.equal((await req('/push/status',c.token,{endpoint:sub.endpoint})).data.subscribed,false);
   const send=async text=>(await req(`/chats/${chat}/messages`,a.token,{text,client_id:randomUUID()})).data;
   await send('Первый секрет');await send('Второй секрет');assert.equal(app.db.prepare('SELECT COUNT(*) n FROM push_jobs').get().n,1);

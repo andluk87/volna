@@ -19,6 +19,18 @@ test('phone login, fresh IDs, phone privacy, one-use SMS, retries and old auth r
  for(const path of ['/register','/login','/password','/auth/telegram/config','/auth/telegram/start','/auth/telegram/exchange'])assert.equal((await f.call(path,{})).status,404);
  assert.deepEqual(f.app.db.prepare('PRAGMA table_info(users)').all().map(x=>x.name).filter(x=>/salt|hash|telegram|password/.test(x)),[]);
 });
+test('Web keeps separate HttpOnly account cookies and refreshes the requested account only',async t=>{
+ const f=await fixture(t),a=await f.login('+79001112233'),b=await f.login('+79002223344'),jar=new Map();
+ const base=`http://127.0.0.1:${f.app.server.address().port}/api`;
+ const call=async(path,data)=>{const r=await fetch(base+path,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Cookie:[...jar].map(([k,v])=>k+'='+v).join('; ')},...(data===undefined?{}:{body:JSON.stringify(data)})});for(const cookie of r.headers.getSetCookie()){const [name,value]=cookie.split(';')[0].split('=');if(value)jar.set(name,value);else jar.delete(name);}return {status:r.status,data:await r.json()};};
+ for(const android of [a,b]){const q=(await call('/auth/qr/request',{platform:'web'})).data;await f.call('/auth/qr/scan',{qr_text:q.qr_text},android.token);await f.call('/auth/qr/confirm',{qr_text:q.qr_text,approve:true},android.token);const result=await call('/auth/qr/poll',{id:q.id,poll_token:q.poll_token});assert.equal(result.data.refresh_token,undefined);}
+ const accounts=await call('/auth/accounts');assert.deepEqual(accounts.data.accounts.map(u=>u.id),[a.user.id,b.user.id]);assert.equal(accounts.data.selected,b.user.id);
+ const refreshed=await call('/auth/refresh',{account_id:a.user.id});assert.equal(refreshed.data.user.id,a.user.id);assert.equal(refreshed.data.refresh_token,undefined);
+ assert.equal((await call('/auth/refresh',{account_id:b.user.id})).data.user.id,b.user.id);
+ const background=await call('/auth/refresh',{account_id:a.user.id,select:false});assert.equal(background.data.user.id,a.user.id);assert.equal((await call('/auth/accounts')).data.selected,b.user.id);
+ assert.equal((await call('/auth/refresh',{account_id:9999})).status,401);
+ await call('/auth/clear',{account_id:a.user.id});assert.deepEqual((await call('/auth/accounts')).data.accounts.map(u=>u.id),[b.user.id]);
+});
 test('SMS expiry, resend invalidation, 5 attempts, cooldown and independent atomic references',async t=>{
  const f=await fixture(t);const phone='+79001112233';let first=await f.call('/auth/sms/request',{phone});const original={...f.sent.at(-1)};
  assert.equal((await f.call('/auth/sms/request',{phone})).status,429);

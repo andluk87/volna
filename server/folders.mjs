@@ -1,9 +1,12 @@
+import {folderInvites} from './folder-invites.mjs';
 import {defaultFolders,normalizeFolders,FOLDER_LIMIT} from '../shared/folders.mjs';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 export function folders({db,body,json,publish}){
  db.exec('CREATE TABLE IF NOT EXISTS account_folders(owner INTEGER PRIMARY KEY REFERENCES users(id),version INTEGER NOT NULL,folders TEXT NOT NULL)');
  const read=uid=>{const row=db.prepare('SELECT version,folders FROM account_folders WHERE owner=?').get(uid);if(!row)return {version:0,folders:defaultFolders()};const owned=new Set(db.prepare('SELECT chat_id FROM members WHERE user_id=?').all(uid).map(m=>m.chat_id));return {version:row.version,folders:JSON.parse(row.folders).map(f=>({...f,chats:f.chats.filter(id=>owned.has(id)),excluded:f.excluded.filter(id=>owned.has(id)),pinned:f.pinned.filter(id=>owned.has(id))}))};};
+ const invites=folderInvites({db,body,json,publish,read});
  return async(req,res,url,uid)=>{
+  if(await invites(req,res,url,uid))return true;
   if(url.pathname!=='/api/folders')return false;
   if(req.method==='GET'){json(res,200,read(uid));return true;}
   if(req.method!=='POST')throw fail(405,'Метод не поддерживается');

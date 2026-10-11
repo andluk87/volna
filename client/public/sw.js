@@ -17,14 +17,14 @@ self.addEventListener('push',event=>event.waitUntil((async()=>{
  await self.registration.showNotification(String(payload.title||'Волна').slice(0,100),{
   body:expiredCall?'Пропущенный аудиозвонок':String(payload.body||'Новое сообщение').slice(0,200),
   icon:'/icons/icon-192.png',badge:'/icons/badge-96.png',tag:String(payload.tag||'volna').slice(0,80),
-  data:{chat_id:chat},renotify:true,vibrate:[160,80,160]
+  data:{chat_id:chat,account_id:Number.isSafeInteger(payload.account_id)?payload.account_id:null},renotify:true,vibrate:[160,80,160]
  });
 })()));
 self.addEventListener('notificationclick',event=>{
  event.notification.close();const id=event.notification.data?.chat_id;
- const path=Number.isSafeInteger(id)&&id>0?'/app?chat='+id:'/app';
+ const account=event.notification.data?.account_id;const path=Number.isSafeInteger(id)&&id>0?'/app?chat='+id+(Number.isSafeInteger(account)?'&account='+account:''):'/app';
  event.waitUntil((async()=>{const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
-  for(const client of windows)if(new URL(client.url).origin===self.location.origin&&new URL(client.url).pathname.startsWith('/app')){try{await client.focus();client.postMessage({type:'volna-open-chat',chat_id:id});return;}catch{}}
+  for(const client of windows)if(new URL(client.url).origin===self.location.origin&&new URL(client.url).pathname.startsWith('/app')){try{await client.focus();client.postMessage({type:'volna-open-chat',chat_id:id,account_id:account});return;}catch{}}
   await self.clients.openWindow(path);
  })());
 });

@@ -7,7 +7,7 @@ import java.util.Locale
 
 internal fun nativeChatFilter(chat: VolnaChat, filter: String): Boolean = when (filter) {
     "archived" -> chat.archived
-    "unread" -> !chat.archived && chat.unread > 0
+    "unread" -> !chat.archived && (chat.unread > 0 || chat.manualUnread)
     "direct" -> !chat.archived && chat.kind in listOf("direct", "saved")
     "group", "channel" -> !chat.archived && chat.kind == filter
     else -> !chat.archived

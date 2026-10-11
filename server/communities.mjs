@@ -18,6 +18,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
    `);
   const preferenceColumns=new Set(db.prepare('PRAGMA table_info(chat_preferences)').all().map(c=>c.name));
   if(!preferenceColumns.has('pinned'))db.exec('ALTER TABLE chat_preferences ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0,1))');
+  if(!preferenceColumns.has('manual_unread'))db.exec('ALTER TABLE chat_preferences ADD COLUMN manual_unread INTEGER NOT NULL DEFAULT 0');
   if(!preferenceColumns.has('notification_mode'))db.exec("ALTER TABLE chat_preferences ADD COLUMN notification_mode TEXT NOT NULL DEFAULT 'all'");
   if(db.prepare('PRAGMA user_version').get().user_version<3)db.exec('PRAGMA user_version=3');
   db.exec('COMMIT');
@@ -51,28 +52,40 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
     CASE WHEN c.kind='saved' THEN 1 ELSE 0 END AS saved,
     CASE WHEN c.topic_closed=1 OR c.admin_locked=1 OR COALESCE((SELECT admin_locked FROM chats WHERE id=c.parent_id),0)=1 THEN 0 WHEN (c.kind='channel' OR c.kind='group' AND c.posting_policy='admins') AND me.role NOT IN ('owner','admin') THEN 0 ELSE 1 END AS can_send,
     (SELECT COUNT(*) FROM members WHERE chat_id=c.id) AS member_count,
-    (SELECT CASE WHEN deleted_at IS NOT NULL THEN 'Сообщение удалено' WHEN text='' THEN 'Вложение' ELSE text END FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_text,
-    (SELECT created_at FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_at,
-    (SELECT id FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_id,
-    (SELECT sender_id FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_sender_id,
-    (SELECT COUNT(*) FROM messages WHERE chat_id=c.id AND id>me.last_read AND sender_id<>? AND deleted_at IS NULL) AS unread,
-    COALESCE(pref.archived,0) AS archived,COALESCE(pref.muted,0) AS muted,COALESCE(pref.pinned,0) AS pinned
+    (SELECT CASE WHEN deleted_at IS NOT NULL THEN 'Сообщение удалено' WHEN text='' THEN 'Вложение' ELSE text END FROM messages WHERE chat_id=c.id AND id>COALESCE(vis.hidden_before,0) ORDER BY id DESC LIMIT 1) AS last_text,
+    (SELECT created_at FROM messages WHERE chat_id=c.id AND id>COALESCE(vis.hidden_before,0) ORDER BY id DESC LIMIT 1) AS last_at,
+    (SELECT id FROM messages WHERE chat_id=c.id AND id>COALESCE(vis.hidden_before,0) ORDER BY id DESC LIMIT 1) AS last_id,
+    (SELECT sender_id FROM messages WHERE chat_id=c.id AND id>COALESCE(vis.hidden_before,0) ORDER BY id DESC LIMIT 1) AS last_sender_id,
+    (SELECT COUNT(*) FROM messages WHERE chat_id=c.id AND id>MAX(me.last_read,COALESCE(vis.hidden_before,0)) AND sender_id<>? AND deleted_at IS NULL) AS unread,
+    COALESCE(pref.manual_unread,0) AS manual_unread,COALESCE(pref.archived,0) AS archived,COALESCE(pref.muted,0) AS muted,COALESCE(pref.pinned,0) AS pinned
     FROM chats c JOIN members me ON me.chat_id=c.id AND me.user_id=?
+    LEFT JOIN chat_visibility vis ON vis.chat_id=c.id AND vis.user_id=me.user_id
     LEFT JOIN chat_preferences pref ON pref.chat_id=c.id AND pref.user_id=me.user_id
     LEFT JOIN users peer ON c.kind='direct' AND peer.id=(SELECT user_id FROM members WHERE chat_id=c.id AND user_id<>? LIMIT 1)
-    WHERE c.topic_deleted=0 AND c.admin_deleted=0
+    WHERE c.topic_deleted=0 AND c.admin_deleted=0 AND (COALESCE(vis.deleted,0)=0 OR EXISTS(SELECT 1 FROM messages WHERE chat_id=c.id AND id>vis.hidden_before))
     ORDER BY saved DESC,pinned DESC,COALESCE(last_at,'') DESC,c.id DESC`).all(uid,uid,uid,uid,uid);
    const topicUnread=new Map(),latestTopic=new Map();for(const row of rows)if(row.parent_id){topicUnread.set(row.parent_id,(topicUnread.get(row.parent_id)||0)+row.unread);if(row.last_at&&row.last_at>(latestTopic.get(row.parent_id)?.last_at||''))latestTopic.set(row.parent_id,row);}
    const contactIds=new Set(db.prepare("SELECT linked FROM account_contacts WHERE owner=? AND deleted=0 AND linked IS NOT NULL").all(uid).map(c=>c.linked));
    const result=rows.map(row=>{const topic=latestTopic.get(row.id);return {...row,is_contact:contactIds.has(row.peer_id),...(topic&&topic.last_at>(row.last_at||'')?{last_at:topic.last_at,last_id:topic.last_id,last_sender_id:topic.last_sender_id,last_text:topic.topic_name+': '+(topic.last_text||'Вложение'),peer_read:topic.peer_read,peer_delivered:topic.peer_delivered}:{}),unread:row.unread+(topicUnread.get(row.id)||0),peer_online:row.kind==='direct'&&online(row.peer_id)};});
    result.sort((a,b)=>b.saved-a.saved||b.pinned-a.pinned||(b.last_at||'').localeCompare(a.last_at||'')||b.id-a.id);json(res,200,result);return true;
   }
+  const historyMatch=path.match(/^\/api\/chats\/(\d+)\/(clear-history|delete-chat)$/);
+  if(historyMatch&&method==='POST'){
+   await body(req);const chat=Number(historyMatch[1]);member(chat,uid);
+   const latest=db.prepare('SELECT COALESCE(MAX(id),0) id FROM messages WHERE chat_id=?').get(chat).id;
+   db.prepare('INSERT INTO chat_visibility(user_id,chat_id,hidden_before,deleted) VALUES(?,?,?,?) ON CONFLICT(user_id,chat_id) DO UPDATE SET hidden_before=MAX(hidden_before,excluded.hidden_before),deleted=excluded.deleted').run(uid,chat,latest,historyMatch[2]==='delete-chat'?1:0);
+   db.prepare('UPDATE members SET last_read=MAX(last_read,?) WHERE chat_id=? AND user_id=?').run(latest,chat,uid);
+   db.prepare('UPDATE chat_preferences SET manual_unread=0 WHERE user_id=? AND chat_id=?').run(uid,chat);
+   db.prepare('INSERT OR IGNORE INTO call_history_hidden(user_id,call_id) SELECT ?,id FROM call_history WHERE chat_id=?').run(uid,chat);
+   publish([uid],{type:'history-cleared',chat_id:chat,hidden_before:latest,deleted:historyMatch[2]==='delete-chat'});json(res,200,{ok:true,hidden_before:latest});return true;
+  }
   const preferenceMatch=path.match(/^\/api\/chats\/(\d+)\/preferences$/);
   if(preferenceMatch&&method==='POST'){
    const chat=Number(preferenceMatch[1]),data=await body(req);member(chat,uid);
-   if([data.archived,data.muted,data.pinned].some(v=>v!==undefined&&typeof v!=='boolean')||data.archived===undefined&&data.muted===undefined&&data.pinned===undefined)throw fail(400,'Укажите параметр чата');
+   if([data.archived,data.muted,data.pinned,data.manual_unread].some(v=>v!==undefined&&typeof v!=='boolean')||data.archived===undefined&&data.muted===undefined&&data.pinned===undefined&&data.manual_unread===undefined)throw fail(400,'Укажите параметр чата');
    db.prepare(`INSERT INTO chat_preferences(user_id,chat_id,archived,muted,pinned) VALUES(?,?,?,?,?) ON CONFLICT(user_id,chat_id) DO UPDATE SET archived=COALESCE(?,chat_preferences.archived),muted=COALESCE(?,chat_preferences.muted),pinned=COALESCE(?,chat_preferences.pinned)`).run(uid,chat,data.archived?1:0,data.muted?1:0,data.pinned?1:0,data.archived===undefined?null:(data.archived?1:0),data.muted===undefined?null:(data.muted?1:0),data.pinned===undefined?null:(data.pinned?1:0));
-   publish([uid],{type:'chats',chat_id:chat});json(res,200,db.prepare('SELECT archived,muted,pinned FROM chat_preferences WHERE user_id=? AND chat_id=?').get(uid,chat));return true;
+   if(data.manual_unread!==undefined)db.prepare('UPDATE chat_preferences SET manual_unread=? WHERE user_id=? AND chat_id=?').run(data.manual_unread?1:0,uid,chat);
+   publish([uid],{type:'chats',chat_id:chat});json(res,200,db.prepare('SELECT manual_unread,archived,muted,pinned FROM chat_preferences WHERE user_id=? AND chat_id=?').get(uid,chat));return true;
   }
   if(path==='/api/communities'&&method==='POST'){
    const data=await body(req);if(!['group','channel'].includes(data.kind))throw fail(400,'Выберите группу или канал');

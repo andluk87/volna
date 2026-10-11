@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlinx.coroutines.flow.MutableSharedFlow
 
-internal data class NativeSessionSignal(val account: Long,val type: String,val chatId: Long,val userId: Long)
+internal data class NativeSessionSignal(val account: Long,val type: String,val chatId: Long,val userId: Long,val deleted: Boolean = false)
 
 internal data class NativeMessagingEvent(val account: Long, val type: String, val message: VolnaMessage)
 
@@ -166,7 +166,7 @@ class MessagingService : Service() {
         try {
             val event = JSONObject(raw)
             val type = event.optString("type")
-            if (type in listOf("profile","topics","community","removed","chats")) { if(type=="profile" && event.optLong("user_id")==userId) runCatching { val user=api.me(token);NativeAccounts.remember(this,user,token);cache.saveMe(user) };signals.tryEmit(NativeSessionSignal(userId,type,event.optLong("chat_id"),event.optLong("user_id")));return }
+            if (type in listOf("profile","topics","community","removed","chats","history-cleared")) { if(type=="profile" && event.optLong("user_id")==userId) runCatching { val user=api.me(token);NativeAccounts.remember(this,user,token);cache.saveMe(user) };signals.tryEmit(NativeSessionSignal(userId,type,event.optLong("chat_id"),event.optLong("user_id"),event.optBoolean("deleted")));return }
             if (type !in listOf("message", "message-update")) return
             val message = event.optJSONObject("message") ?: return
             val chatId = message.optLong("chat_id")

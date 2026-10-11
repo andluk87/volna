@@ -35,7 +35,7 @@ export default forwardRef(function Calls({token,onError,onBeforeCall},ref){
   try {
    if(!enabled){const old=camera.current;camera.current=null;old?.getTracks().forEach(t=>t.stop());if(!screen.current)await videoSender()?.replaceTrack(null);setCameraEnabled(false);if(current.current)await request(`/calls/${current.current.id}/camera`,token,{device:device.current,enabled:false});return;}
    if(screen.current)await stopScreenShare();
-   capture=await navigator.mediaDevices.getUserMedia({audio:false,video:cameraConstraints(facing)});
+   capture=await navigator.mediaDevices.getUserMedia({audio:false,video:cameraConstraints(facing,true)});
    if(version!==generation.current||pc!==peer.current){capture.getTracks().forEach(t=>t.stop());return;}
    const track=capture.getVideoTracks()[0],sender=videoSender();if(!track||!sender)throw Error('Видеоканал недоступен. Обновите приложение у обоих участников.');
    await sender.replaceTrack(track);check(version);const old=camera.current;camera.current=capture;old?.getTracks().forEach(t=>t.stop());setFront(facing);setCameraEnabled(true);setVideoMode(true);
@@ -53,7 +53,7 @@ export default forwardRef(function Calls({token,onError,onBeforeCall},ref){
   onBeforeCall?.();
   if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)throw Error('Для звонка нужен HTTPS и браузер с поддержкой микрофона и WebRTC');
   const config=await request('/calls/config',token);check(version);setRelay(config.relayConfigured);
-  const media=await navigator.mediaDevices.getUserMedia({audio:microphoneConstraints(),video:false});if(version!==generation.current){media.getTracks().forEach(t=>t.stop());check(version);}stream.current=media;setHasAudio(true);keepAlive(true);
+  const media=await navigator.mediaDevices.getUserMedia({audio:microphoneConstraints(true),video:false});if(version!==generation.current){media.getTracks().forEach(t=>t.stop());check(version);}stream.current=media;setHasAudio(true);keepAlive(true);
   window.dispatchEvent(new CustomEvent('volna-audio-play',{detail:null}));
   const pc=new RTCPeerConnection({iceServers:config.iceServers});peer.current=pc;media.getTracks().forEach(t=>pc.addTrack(t,media));
   if(!incoming&&pc.addTransceiver)pc.addTransceiver('video',{direction:'sendrecv'});

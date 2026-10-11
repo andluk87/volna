@@ -67,7 +67,9 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   };
   const publish = (users, event) => {
     for (const id of users) for (const res of streams.get(id) || []) {
-      if (!res.write(`data: ${JSON.stringify(contactService?.personalize(id,event)||event)}\n\n`)) res.end();
+      let visible=event;
+      if(event.message){const hidden=db.prepare('SELECT hidden_before FROM chat_visibility WHERE user_id=? AND chat_id=?').get(id,event.message.chat_id)?.hidden_before||0;if(event.message.id<=hidden)continue;if(event.message.reply?.id<=hidden)visible={...event,message:{...event.message,reply:null,reply_to:null}};}
+      if (!res.write(`data: ${JSON.stringify(contactService?.personalize(id,visible)||visible)}\n\n`)) res.end();
     }
   };
   let pushService;
@@ -128,7 +130,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
         return json(res, 200, user);
       }
       if (path === '/api/logout' && method === 'POST') {
-        res.setHeader('Set-Cookie','volna.refresh=; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=0');
+        res.setHeader('Set-Cookie',['volna.refresh=; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=0',`volna.refresh.${uid}=; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=0`,'volna.account=; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=0']);
         db.prepare('DELETE FROM sessions WHERE token=?').run(session.token);
         for (const stream of streams.get(uid) || []) if (stream.sessionToken === session.token) stream.end();
         return json(res, 200, { ok: true });
@@ -201,6 +203,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
           const { message_id } = await body(req); const id = Number(message_id);
           if (!Number.isSafeInteger(id) || !db.prepare('SELECT 1 FROM messages WHERE id=? AND chat_id=?').get(id, chat)) throw fail(400, 'Сообщение не найдено');
           db.prepare('UPDATE members SET last_read=MAX(last_read,?) WHERE chat_id=? AND user_id=?').run(id, chat, uid);
+          db.prepare('UPDATE chat_preferences SET manual_unread=0 WHERE user_id=? AND chat_id=?').run(uid,chat);
           broadcast(chat, { type: 'read', chat_id: chat, user_id: uid, message_id: id }); return json(res, 200, { ok: true });
         }
       }

@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {chromium} from '../client/node_modules/playwright-core/index.mjs';
+import {createServer} from '../client/node_modules/vite/dist/node/index.js';
+import {createApp,fixtureFetch} from './phone-fixture.mjs';
+import {readFile,writeFile,unlink} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('../client/',import.meta.url)),html=root+'qa-sharing.html',js=root+'src/qa-sharing.jsx';
+const api=createApp({database:':memory:',origins:['http://localhost:5189']});await new Promise(r=>api.server.listen(0,'127.0.0.1',r));const target='http://127.0.0.1:'+api.server.address().port;
+const register=async username=>(await fixtureFetch(target+'/api/register',{method:'POST',body:JSON.stringify({username,name:username})})).json();const a=await register('sharingalice'),b=await register('sharingboris');
+const req=async(path,token,data)=>{const response=await fetch(target+'/api'+path,{method:data===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});assert.ok(response.ok,await response.clone().text());return response.json();};
+const group=await req('/communities',a.token,{kind:'group',title:'Команда для приглашения',client_id:crypto.randomUUID()});const saved=await req('/saved',a.token,{});
+await req('/folders',a.token,{version:0,folders:[{id:'work',name:'Работа',chats:[group.id,saved.id]}]});
+let source=await readFile(root+'src/main.jsx','utf8');source=source.replace('restoreSession().then(result=>',"(async()=>{await saveSession(window.__session);return window.__session;})().then(result=>").replace("createRoot(document.getElementById('root')).render(<><Entry/><DesktopUpdate/></>);","createRoot(document.getElementById('root')).render(<App/>);");
+await writeFile(js,source);await writeFile(html,'<div id="root"></div><script type="module" src="/src/qa-sharing.jsx"></script>');
+const vite=await createServer({root,server:{host:'127.0.0.1',port:5189,strictPort:true,proxy:{'/api':target}},logLevel:'error'});await vite.listen();
+const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']}),errors=[];
+try{
+ const context=await browser.newContext({viewport:{width:1140,height:800}});await context.addInitScript(s=>{window.__session=s;window.volnaDesktop={platform:'win32',saveAccounts:async()=>true,loadSession:async()=>null,onShortcut:()=>()=>{},onOpenChat:()=>()=>{},onShowCall:()=>()=>{},onUpdate:()=>()=>{},unreadCount:async()=>{},notifyMessage:async()=>{},callState:async()=>{},notificationStatus:async()=>({systemEnabled:true})};},a);
+ const page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));await page.goto('http://localhost:5189/qa-sharing.html');await page.getByRole('tab',{name:'Работа',exact:true}).click({button:'right'});await page.getByRole('menuitem',{name:'Настроить папку',exact:true}).click();await page.getByRole('button',{name:'#7965db',exact:true}).click();await page.getByRole('button',{name:'Сохранить',exact:true}).click();
+ assert.equal((await req('/folders',a.token)).folders[0].color,'#7965db');await page.locator('.folder-setting-row').filter({hasText:'Работа'}).locator('button').first().click();
+ await page.locator('.folder-share').getByLabel('Команда для приглашения',{exact:true}).check();assert.equal(await page.locator('.folder-share').getByText('Избранное',{exact:true}).count(),0);await page.getByRole('button',{name:'Создать ссылку-приглашение',exact:true}).click();const link=await page.getByLabel('Ссылка',{exact:true}).inputValue();const invite=new URL(link,'http://localhost:5189').searchParams.get('folder_invite');assert.ok(invite);
+ const other=await browser.newContext({viewport:{width:1140,height:800}});await other.addInitScript(s=>{window.__session=s;window.volnaDesktop={platform:'win32',saveAccounts:async()=>true,loadSession:async()=>null,onShortcut:()=>()=>{},onOpenChat:()=>()=>{},onShowCall:()=>()=>{},onUpdate:()=>()=>{},unreadCount:async()=>{},notifyMessage:async()=>{},callState:async()=>{},notificationStatus:async()=>({systemEnabled:true})};},b);
+ const recipient=await other.newPage();recipient.setDefaultTimeout(15000);recipient.on('pageerror',e=>errors.push(e.message));await recipient.goto('http://localhost:5189/qa-sharing.html?folder_invite='+invite);await recipient.getByRole('dialog',{name:'Добавить папку «Работа»?',exact:true}).waitFor();assert.equal(api.db.prepare('SELECT 1 FROM members WHERE user_id=? AND chat_id=?').get(b.user.id,group.id),undefined);await recipient.getByRole('button',{name:'Добавить папку',exact:true}).click();await recipient.getByRole('tab',{name:'Работа',exact:true}).waitFor();assert.equal((await req('/folders',b.token)).folders.at(-1).color,'#7965db');
+ assert.deepEqual(errors,[]);console.log('PASS: actual folder editor saves color, shares only permitted communities, recipient previews before joining and receives synchronized folder');
+}finally{await browser.close();await vite.close();await api.close();await unlink(html);await unlink(js);}

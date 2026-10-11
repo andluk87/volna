@@ -132,8 +132,8 @@ internal fun ChatListScreen(
                     if (query.isBlank()) LazyRow(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(CircleShape).background(Panel.copy(alpha = .64f)), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         items(folders.map { "folder:${it.id}" to (it.icon + it.name) }) { (key, label) ->
                             Row(Modifier.clip(CircleShape).background(if (filter == key) Hover else Color.Transparent).clickable { filter = key }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                NativeText(label, color = if (filter == key) Accent else Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                val unread = chats.count { it.unread > 0 && if (key.startsWith("folder:")) folders.firstOrNull { f -> "folder:${f.id}" == key }?.let { f -> nativeFolderMatches(f, it) } == true else nativeChatFilter(it, key) }
+                                NativeText(label, color = folders.firstOrNull { "folder:${it.id}" == key }?.color?.takeIf { it in nativeFolderColors }?.let { Color(android.graphics.Color.parseColor(it)) } ?: if (filter == key) Accent else Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                val unread = chats.count { (it.unread > 0 || it.manualUnread) && if (key.startsWith("folder:")) folders.firstOrNull { f -> "folder:${f.id}" == key }?.let { f -> nativeFolderMatches(f, it) } == true else nativeChatFilter(it, key) }
                                 if (unread > 0) NativeText(unread.toString(), Modifier.padding(start = 5.dp).clip(CircleShape).background(if (filter == key) Accent else Muted).padding(horizontal = 5.dp, vertical = 1.dp), color = Panel, fontSize = 11.sp)
                             }
                         }
@@ -185,7 +185,7 @@ internal fun ChatListScreen(
             Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 listOf(Triple("chats", "Чаты", Icons.Outlined.ChatBubbleOutline), Triple("contacts", "Контакты", Icons.Outlined.AccountCircle), Triple("profile", "Настройки", Icons.Outlined.Settings), Triple("account", "Профиль", Icons.Outlined.PersonOutline)).forEach { (key, label, icon) ->
                     Column(Modifier.weight(1f).clip(CircleShape).background(if (tab == key) Hover.copy(alpha = .55f) else Color.Transparent).clickable { if (key == "account") user?.id?.let(onOpenProfile) else { tab = key; onQuery("") } }.padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        BadgedBox(badge = { if (key == "chats" && chats.any { !it.archived && it.unread > 0 }) Badge(containerColor = Accent) { NativeText(chats.count { !it.archived && it.unread > 0 }.toString(), color = Panel, fontSize = 10.sp) } }) {
+                        BadgedBox(badge = { if (key == "chats" && chats.any { !it.archived && (it.unread > 0 || it.manualUnread) }) Badge(containerColor = Accent) { NativeText(chats.count { !it.archived && (it.unread > 0 || it.manualUnread) }.toString(), color = Panel, fontSize = 10.sp) } }) {
                             if (key == "account") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 23.dp) else Icon(icon, label, tint = if (tab == key) Accent else TextMain, modifier = Modifier.size(23.dp))
                         }
                         NativeText(label, color = if (tab == key) Accent else TextMain, fontSize = 10.sp, modifier = Modifier.padding(top = 3.dp))
@@ -251,7 +251,7 @@ internal fun ChatListScreen(
         "notifications" -> NativeNotificationSettings(user?.id ?: 0) { settings = "" }
         "security", "devices" -> NativeSessionsScreen(token, api, onScanQr) { settings = "" }
         "storage" -> NativeStorageScreen { settings = "" }
-        "folders" -> NativeFoldersDialog(user?.id ?: 0, chats, folders, { saveCloudFolders(it) }, folderBusy || folderVersion < 0, folderError, { folderEditing = it }) { folderEditing = false; settings = "" }
+        "folders" -> NativeFoldersDialog(user?.id ?: 0, token, api, chats, folders, { saveCloudFolders(it) }, folderBusy || folderVersion < 0, folderError, { folderEditing = it }) { folderEditing = false; settings = "" }
         "language" -> AlertDialog(onDismissRequest = { settings = "" }, title = { NativeText("Язык") }, text = { NativeText("Русский. Язык клавиатуры и голосового ввода выбирается в настройках Android.") }, confirmButton = { TextButton(onClick = { settings = "" }) { NativeText("Готово") } })
     }
 }
@@ -329,6 +329,7 @@ private fun NativeGlobalSearch(query: String, token: String, api: NativeApi, cha
 @Composable
 internal fun NativeChatRow(chat: VolnaChat, me: Long?, token: String, draft: String, onSelect: () -> Unit, onPreference: ((String, Boolean) -> Unit)?) {
     var menu by remember(chat.id) { mutableStateOf(false) }
+    var historyAction by remember(chat.id) { mutableStateOf("") }
     Row(Modifier.fillMaxWidth().combinedClickable(onClick = onSelect, onLongClick = { if (onPreference != null) menu = true }).padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
         if (chat.saved) Box(Modifier.size(54.dp).clip(CircleShape).background(Accent), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.BookmarkBorder, "Избранное", tint = Color.White, modifier = Modifier.size(32.dp)) } else Avatar(chat.name, chat.peerId, chat.avatarUrl, token, size = 54.dp)
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
@@ -341,15 +342,17 @@ internal fun NativeChatRow(chat: VolnaChat, me: Long?, token: String, draft: Str
             }
             Row(Modifier.padding(top = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                 NativeText(if (draft.isNotBlank()) "Черновик: $draft" else chat.lastText.ifBlank { "Начните разговор" }, Modifier.weight(1f), color = if (draft.isNotBlank()) Accent else Muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (chat.unread > 0) Box(Modifier.padding(start = 8.dp).heightIn(min = 22.dp).widthIn(min = 22.dp).clip(CircleShape).background(if (chat.muted) Muted else Accent).padding(horizontal = 6.dp, vertical = 2.dp), contentAlignment = Alignment.Center) { NativeText(chat.unread.toString(), color = if (chat.muted) Panel else AccentText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp) }
+                if (chat.unread > 0 || chat.manualUnread) Box(Modifier.padding(start = 8.dp).heightIn(min = 22.dp).widthIn(min = 22.dp).clip(CircleShape).background(if (chat.muted) Muted else Accent).padding(horizontal = 6.dp, vertical = 2.dp), contentAlignment = Alignment.Center) { NativeText(if (chat.unread > 0) chat.unread.toString() else "•", color = if (chat.muted) Panel else AccentText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp) }
             }
         }
         DropdownMenu(menu, { menu = false }) {
+            if (onPreference != null) listOf("clear-history" to "Очистить историю", "delete-chat" to "Удалить чат").forEach { (action, label) -> DropdownMenuItem(text = { NativeText(label) }, onClick = { menu = false; historyAction = action }) }
             onPreference?.let { action ->
-                listOf(Triple("pinned", chat.pinned, if (chat.pinned) "Открепить" else "Закрепить"), Triple("muted", chat.muted, if (chat.muted) "Включить уведомления" else "Без звука"), Triple("archived", chat.archived, if (chat.archived) "Вернуть из архива" else "В архив")).forEach { (key, active, label) -> DropdownMenuItem(text = { NativeText(label) }, onClick = { menu = false; action(key, !active) }) }
+                listOf(Triple("pinned", chat.pinned, if (chat.pinned) "Открепить" else "Закрепить"), Triple("muted", chat.muted, if (chat.muted) "Включить уведомления" else "Без звука"), Triple("archived", chat.archived, if (chat.archived) "Вернуть из архива" else "В архив"), Triple("manual_unread", chat.manualUnread, if (chat.manualUnread) "Убрать отметку непрочитанного" else "Пометить как непрочитанное")).forEach { (key, active, label) -> DropdownMenuItem(text = { NativeText(label) }, onClick = { menu = false; action(key, !active) }) }
             }
         }
     }
+    if (historyAction.isNotBlank()) AlertDialog(onDismissRequest = { historyAction = "" }, title = { NativeText(if (historyAction == "delete-chat") "Удалить чат?" else "Очистить историю?") }, text = { NativeText("История исчезнет только у вас. История собеседников сохранится. Чат вернётся при новом сообщении; вы останетесь участником сообщества.") }, dismissButton = { TextButton(onClick = { historyAction = "" }) { NativeText("Отмена") } }, confirmButton = { TextButton(onClick = { onPreference?.invoke(historyAction, true); historyAction = "" }) { NativeText("Подтвердить") } })
 }
 
 @Composable

@@ -42,7 +42,7 @@ export function notifications({db,auth,body,json,contactDisplay=(uid,id,name)=>n
    if(row.preview){const chat=db.prepare(`SELECT c.kind,CASE WHEN c.parent_id IS NOT NULL THEN (SELECT title FROM chats WHERE id=c.parent_id)||' › '||c.title ELSE c.title END AS title FROM chats c WHERE c.id=?`).get(job.chat_id);title=chat.kind==='direct'?contactDisplay(row.user_id,m.sender_id,m.name):chat.title;text=m.text?.slice(0,160)||'Новое вложение';}
   }
   try{
-   await sender(JSON.parse(row.subscription),JSON.stringify({title,body:text,tag:job.topic,chat_id:job.chat_id,expires:job.expires,kind:job.kind}),{vapidDetails:{subject,publicKey:keys.public_key,privateKey:keys.private_key},TTL:Math.max(1,Math.floor((job.expires-Date.now())/1000)),urgency:'high',topic:hash(job.topic).slice(0,32),timeout:10000});
+   await sender(JSON.parse(row.subscription),JSON.stringify({title,body:text,tag:row.user_id+':'+job.topic,account_id:row.user_id,chat_id:job.chat_id,expires:job.expires,kind:job.kind}),{vapidDetails:{subject,publicKey:keys.public_key,privateKey:keys.private_key},TTL:Math.max(1,Math.floor((job.expires-Date.now())/1000)),urgency:'high',topic:hash(row.user_id+':'+job.topic).slice(0,32),timeout:10000});
    if(!closed)db.prepare('DELETE FROM push_jobs WHERE id=? AND message_id IS ? AND expires=?').run(job.id,job.message_id,job.expires);
   }catch(e){if(closed)return;if(e.statusCode===404||e.statusCode===410)db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(row.id);else if(job.attempts>=5)remove(job.id);else db.prepare('UPDATE push_jobs SET attempts=attempts+1,next_at=? WHERE id=? AND message_id IS ?').run(Date.now()+Math.min(300000,5000*2**job.attempts),job.id,job.message_id);}
  }
@@ -51,14 +51,14 @@ export function notifications({db,auth,body,json,contactDisplay=(uid,id,name)=>n
  async function handle(req,res,url,uid){
   if(url.pathname==='/api/push/config'&&req.method==='GET'){json(res,200,{publicKey:keys.public_key});return true;}
   if(!['/api/push/subscribe','/api/push/unsubscribe','/api/push/status'].includes(url.pathname)||req.method!=='POST')return false;
-  const data=await body(req),session=auth(req);const endpoint=validateEndpoint(data.subscription?.endpoint||data.endpoint),id=hash(endpoint);const existing=db.prepare('SELECT * FROM push_subscriptions WHERE id=?').get(id);
+  const data=await body(req),session=auth(req);const endpoint=validateEndpoint(data.subscription?.endpoint||data.endpoint),id=hash(uid+':'+endpoint);const legacy=db.prepare('SELECT * FROM push_subscriptions WHERE id=? AND user_id=?').get(hash(endpoint),uid),existing=db.prepare('SELECT * FROM push_subscriptions WHERE id=?').get(id)||legacy;
   if(url.pathname==='/api/push/status'){json(res,200,{subscribed:existing?.user_id===uid&&existing.session_token===session.token,preview:existing?.user_id===uid?!!existing.preview:false});return true;}
-  if(url.pathname==='/api/push/unsubscribe'){db.prepare('DELETE FROM push_subscriptions WHERE id=? AND user_id=?').run(id,uid);json(res,200,{ok:true});return true;}
-  if(existing&&existing.user_id!==uid)throw fail(409,'Подписка другого аккаунта: выключите и включите уведомления заново');
+  if(url.pathname==='/api/push/unsubscribe'){db.prepare('DELETE FROM push_subscriptions WHERE id IN (?,?) AND user_id=?').run(id,hash(endpoint),uid);json(res,200,{ok:true});return true;}
   const sub=data.subscription;
   for(const [key,size] of [['p256dh',65],['auth',16]])if(typeof sub?.keys?.[key]!=='string'||!/^[A-Za-z0-9_-]+={0,2}$/.test(sub.keys[key])||Buffer.from(sub.keys[key],'base64url').length!==size)throw fail(400,'Некорректные ключи push-подписки');
   try{ECDH.convertKey(Buffer.from(sub.keys.p256dh,'base64url'),'prime256v1');}catch{throw fail(400,'Некорректный открытый ключ подписки');}
   if(!existing&&db.prepare('SELECT count(*) AS n FROM push_subscriptions WHERE user_id=?').get(uid).n>=12)throw fail(400,'Лимит 12 устройств для уведомлений');
+  if(legacy){db.prepare('DELETE FROM push_jobs WHERE subscription_id=?').run(legacy.id);db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(legacy.id);}
   const clean={endpoint,keys:{p256dh:sub.keys.p256dh,auth:sub.keys.auth}};
   db.prepare(`INSERT INTO push_subscriptions VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET session_token=excluded.session_token,subscription=excluded.subscription,preview=excluded.preview`).run(id,uid,session.token,JSON.stringify(clean),data.preview===true?1:0,Date.now());
   json(res,200,{subscribed:true,preview:data.preview===true});return true;

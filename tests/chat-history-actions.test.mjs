@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createApp,fixtureFetch as fetch} from './phone-fixture.mjs';
+test('clear and delete are private, prevent history leaking through search/pins/replies, and restore on new messages',async t=>{
+ const app=createApp({database:':memory:'});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(()=>app.close());const base=`http://127.0.0.1:${app.server.address().port}/api`;
+ const req=async(path,token='',data)=>{const r=await fetch(base+path,{method:data===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,data:await r.json()};};
+ const a=(await req('/register','',{username:'history_alice',name:'Alice',password:'long-test-password'})).data,b=(await req('/register','',{username:'history_boris',name:'Boris',password:'long-test-password'})).data;
+ const chat=(await req('/chats',a.token,{user_id:b.user.id})).data;
+ const old=(await req(`/chats/${chat.id}/messages`,b.token,{text:'секрет старой истории',client_id:'history-old-message-0001'})).data;
+ await req(`/messages/${old.id}/pin`,a.token,{pinned:true});
+ await req(`/chats/${chat.id}/preferences`,a.token,{manual_unread:true});assert.equal((await req('/chats',a.token)).data[0].manual_unread,1);
+ assert.equal((await req(`/chats/${chat.id}/clear-history`,a.token,{})).status,200);
+ for(const path of [`/chats/${chat.id}/messages`,`/chats/${chat.id}/pins`,`/chats/${chat.id}/search?q=секрет`,`/search/messages?q=секрет`])assert.deepEqual((await req(path,a.token)).data,[]);
+ assert.equal((await req(`/messages/${old.id}`,a.token)).status,404);assert.equal((await req(`/chats/${chat.id}/messages?around=${old.id}`,a.token)).status,404);
+ assert.equal((await req(`/chats/${chat.id}/messages`,b.token)).data.length,1);
+ assert.equal((await req(`/chats/${chat.id}/messages`,a.token,{text:'Ответ на старое',reply_to:old.id,client_id:'history-invalid-reply-0004'})).status,400);
+ const ownSaved=(await req('/saved',a.token,{})).data,payload={text:'Ранее отправлено',client_id:'history-old-own-0005'};await req(`/chats/${ownSaved.id}/messages`,a.token,payload);await req(`/chats/${ownSaved.id}/clear-history`,a.token,{});assert.equal((await req(`/chats/${ownSaved.id}/messages`,a.token,payload)).status,409);
+ const reply=(await req(`/chats/${chat.id}/messages`,b.token,{text:'новое сообщение',reply_to:old.id,client_id:'history-new-message-0002'})).data;
+ const visible=(await req(`/chats/${chat.id}/messages`,a.token)).data;assert.equal(visible.length,1);assert.equal(visible[0].id,reply.id);assert.equal(visible[0].reply,null);
+ await req(`/chats/${chat.id}/delete-chat`,a.token,{});assert.equal((await req('/chats',a.token)).data.filter(c=>c.id===chat.id).length,0);
+ await req(`/chats/${chat.id}/messages`,b.token,{text:'чат вернулся',client_id:'history-new-message-0003'});assert.equal((await req('/chats',a.token)).data.filter(c=>c.id===chat.id).length,1);
+ assert.equal((await req(`/chats/${chat.id}/messages`,a.token)).data.length,1);assert.equal((await req(`/chats/${chat.id}/messages`,b.token)).data.length,3);
+});

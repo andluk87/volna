@@ -45,4 +45,10 @@ class NativeFolderPolicyTest {
         assertFalse(nativeFolderMatches(f, chat(10)))
         assertFalse(nativeFolderMatches(f, chat(10, kind = "group").copy(isContact = true)))
     }
+    @Test fun manualUnreadKeepsChatInUnreadFolderAndBypassesExcludeRead() {
+        val marked = chat(20).copy(manualUnread = true)
+        assertTrue(nativeFolderMatches(nativeDefaultFolders().first { it.rule == "unread" }, marked))
+        assertTrue(nativeFolderMatches(NativeFolder("read", "Новые", emptySet(), types = setOf("direct"), excludeRead = true), marked))
+        assertFalse(nativeFolderMatches(nativeDefaultFolders().first { it.rule == "unread" }, marked.copy(manualUnread = false)))
+    }
 }
