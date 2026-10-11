@@ -18,7 +18,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   if(!c)return null;const caller=c.caller===uid,owned=caller?c.callerDevice===d:c.calleeDevice===d;
   if(!owned&&(caller||c.calleeDevice))return {id:c.id,status:'other-device'};
   if(!caller&&c.status==='preparing')return null;
-  return {id:c.id,chat_id:c.chat,peer:userById(caller?c.callee:c.caller),incoming:!caller,status:c.status,created:c.created,video:!!c.video,
+  return {id:c.id,chat_id:c.chat,peer:userById(caller?c.callee:c.caller),incoming:!caller,status:c.status,created:c.created,video:!!c.video,ring_received:!!c.ringReceived,
     peer_video:!!(caller?c.calleeCamera:c.callerCamera),peer_sharing:!!(caller?c.calleeSharing:c.callerSharing),offer:!caller?c.offer:undefined,answer:caller?c.answer:undefined};
  };
  const sdp=(value,type)=>{if(!value||value.type!==type||typeof value.sdp!=='string'||value.sdp.length>24000||!value.sdp.startsWith('v=0')||!value.sdp.includes('m=audio')||value.sdp.includes('m=application'))throw fail(400,'Некорректные параметры звонка');return {type,sdp:value.sdp};};
@@ -62,14 +62,15 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
    const peer=db.prepare('SELECT user_id FROM members WHERE chat_id=? AND user_id<>?').get(chat.id,uid)?.user_id;if(!peer||db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(peer)?.admin_blocked)throw fail(404,'Собеседник недоступен');
    if([...active.values()].some(c=>[c.caller,c.callee].some(id=>id===uid||id===peer)))throw fail(409,'Вы или собеседник уже участвуете в звонке');
    if(active.size>=100)throw fail(503,'Сервер звонков занят');
-   const c={id:randomBytes(16).toString('hex'),caller:uid,callee:peer,chat:chat.id,callerDevice:d,calleeDevice:null,status:'preparing',video:!!data.video,created:clock(),callerSeen:clock(),calleeSeen:clock()};
+   const c={id:randomBytes(16).toString('hex'),caller:uid,callee:peer,chat:chat.id,callerDevice:d,calleeDevice:null,status:'preparing',ringReceipt:randomBytes(24).toString('hex'),video:!!data.video,created:clock(),callerSeen:clock(),calleeSeen:clock()};
    db.prepare('INSERT INTO call_history(id,chat_id,caller,callee,created,status,video) VALUES(?,?,?,?,?,?,?)').run(c.id,c.chat,uid,peer,c.created,c.status,c.video?1:0);
    active.set(c.id,c);json(res,201,view(c,uid,d));return true;
   }
-  const match=url.pathname.match(/^\/api\/calls\/([a-f0-9]{32})\/(offer|accept|answer|screen|camera|end)$/);if(!match)throw fail(404,'Не найдено');
+  const match=url.pathname.match(/^\/api\/calls\/([a-f0-9]{32})\/(offer|ringing|accept|answer|screen|camera|end)$/);if(!match)throw fail(404,'Не найдено');
   const c=active.get(match[1]);if(!c||![c.caller,c.callee].includes(uid))throw fail(404,'Звонок завершён');
   const caller=c.caller===uid,op=match[2];
   if(caller?c.callerDevice!==d:c.calleeDevice&&c.calleeDevice!==d)throw fail(409,'Звонок открыт на другом устройстве');
+  if(op==='ringing'){if(caller||c.status!=='ringing')throw fail(409,'Подтверждение доступно только получателю входящего звонка');c.ringReceived=true;}
   if(op==='end'){finish(c,c.status==='active'?'ended':c.status==='ringing'?(caller?'cancelled':'declined'):'interrupted');json(res,200,{ok:true});return true;}
   if(op==='screen'){
    if(c.status!=='active')throw fail(409,'Сначала соедините звонок');
@@ -91,5 +92,12 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   db.prepare('UPDATE call_history SET status=? WHERE id=?').run(c.status,c.id);
   json(res,200,view(c,uid,d));return true;
  }
- return {handle,list:()=>[...active.values()].map(c=>({id:c.id,chat_id:c.chat,caller:c.caller,callee:c.callee,status:c.status,created:c.created,video:!!c.video})),terminate:id=>{const c=active.get(id);if(!c)throw fail(404,'Активный звонок не найден');finish(c,'interrupted');},close:()=>{clearInterval(timer);for(const c of active.values())finish(c,'interrupted');}};
+ async function receiptHandle(req,res,url){
+  const match=url.pathname.match(/^\/api\/calls\/([a-f0-9]{32})\/ringing-receipt$/);if(!match)return false;
+  if(req.method!=='POST')throw fail(405,'Метод не поддерживается');
+  const data=await body(req),c=active.get(match[1]);
+  if(!c||c.status!=='ringing'||clock()-c.created>=60000||typeof data.receipt!=='string'||data.receipt!==c.ringReceipt)throw fail(404,'Подтверждение недоступно');
+  c.ringReceived=true;json(res,200,{ok:true});return true;
+ }
+ return {handle,receiptHandle,receipt:id=>{const c=active.get(id);return c?.status==='ringing'?c.ringReceipt:null;},list:()=>[...active.values()].map(c=>({id:c.id,chat_id:c.chat,caller:c.caller,callee:c.callee,status:c.status,created:c.created,video:!!c.video})),terminate:id=>{const c=active.get(id);if(!c)throw fail(404,'Активный звонок не найден');finish(c,'interrupted');},close:()=>{clearInterval(timer);for(const c of active.values())finish(c,'interrupted');}};
 }

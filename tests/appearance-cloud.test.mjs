@@ -1,0 +1,28 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createApp,fixtureFetch} from './phone-fixture.mjs';
+test('appearance survives new sessions and server restart, isolates accounts and client platforms',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'volna-appearance-'));let app,base;
+ const start=async()=>{app=createApp({database:join(dir,'account.db')});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));base=`http://127.0.0.1:${app.server.address().port}/api`;};await start();t.after(async()=>{await app.close();rmSync(dir,{recursive:true,force:true});});
+ const call=async(path,token,data)=>{const r=await fixtureFetch(base+path,{method:data===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,data:await r.json()};};
+ const owner=(await call('/register','',{username:'appearance_owner',name:'Владелец'})).data,other=(await call('/register','',{username:'appearance_other',name:'Другой'})).data;
+ assert.equal((await call('/me/appearance/web',owner.token)).data.settings,null);
+ const web={theme:'dark',size:14,font:'compact',accent:'#123456',background:'image',wallpaper:'data:image/png;base64,aGVsbG8='};
+ assert.equal((await call('/me/appearance/web',owner.token,{settings:web})).status,200);
+ assert.equal((await call('/me/appearance/windows',owner.token)).data.settings,null);
+ assert.equal((await call('/me/appearance/web',other.token)).data.settings,null);
+ const android={appearance:{theme:{type:'string',value:'dark'},textScale:{type:'float',value:1.25}},themes:{'chat:9':{type:'string',value:'{}'}},images:{'wallpaper.jpg':'aGVsbG8='}};
+ assert.equal((await call('/me/appearance/android',owner.token,{settings:android})).status,200);
+ await app.close();await start();
+ assert.deepEqual((await call('/me/appearance/web',owner.token)).data.settings,web);
+ assert.deepEqual((await call('/me/appearance/android',owner.token)).data.settings,android);
+ assert.equal((await call('/me/appearance/web','')).status,401);
+ assert.equal((await call('/me/appearance/web',owner.token,{settings:{token:'secret'}})).status,400);
+ assert.equal((await call('/me/appearance/web',owner.token,{settings:{wallpaper:'https://external.test/a.png'}})).status,400);
+ assert.equal((await call('/me/appearance/android',owner.token,{settings:{...android,images:{'../escape.jpg':'aGVsbG8='}}})).status,400);
+ assert.equal((await call('/me/appearance/android',owner.token,{settings:{appearance:{theme:{type:'float',value:'bad'}},themes:{}}})).status,400);
+ assert.deepEqual((await call('/me/appearance/web',owner.token)).data.settings,web);
+});

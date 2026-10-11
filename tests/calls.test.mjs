@@ -22,6 +22,15 @@ test('calls: chat authorization, device claims, lifecycle, busy and private sign
   assert.equal((await req(`/calls/${id}/offer`,a.token,{device:da,description:{...offer,sdp:offer.sdp+'m=application 9 DTLS/SCTP 5000\r\n'}})).status,400);
   assert.equal((await req(`/calls/${id}/offer`,a.token,{device:da,description:offer})).status,200);
   assert.equal((await req(`/calls/${id}/screen`,a.token,{device:da,sharing:true})).status,409);
+  assert.equal((await req('/calls/current?device='+da,a.token)).data.ring_received,false);
+  assert.equal((await req(`/calls/${id}/ringing`,a.token,{device:da})).status,409);
+  assert.equal((await req(`/calls/${id}/ringing`,c.token,{device:dc})).status,404);
+  assert.equal((await req(`/calls/${id}/ringing-receipt`,'',{receipt:'bad'})).status,404);
+  assert.equal((await req(`/calls/${id}/ringing`,b.token,{device:db})).status,200);
+  assert.equal((await req('/calls/current?device='+da,a.token)).data.ring_received,true);
+  assert.equal((await req('/calls/current?device='+da,a.token)).data.status,'ringing');
+  assert.equal((await req('/calls/current?device='+d(),b.token)).data.status,'ringing');
+
   assert.deepEqual((await req('/calls/current?device='+db,b.token)).data.offer,offer);
   assert.equal((await req('/calls/current?device='+dc,c.token)).data,null);
   assert.equal((await req(`/calls/${id}/answer`,b.token,{device:db,description:{...offer,type:'answer'}})).status,409);

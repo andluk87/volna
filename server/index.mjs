@@ -1,3 +1,4 @@
+import {accountAppearance} from './appearance.mjs';
 import {createNewsChannel} from './news.mjs';
 import http from 'node:http';
 import {folders} from './folders.mjs';
@@ -83,7 +84,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(contactService?.personalize(res.volnaViewer,data)||data)); };
   const body = async req => {
     if(req.volnaParsedBody){const data=req.volnaParsedBody;delete req.volnaParsedBody;return data;}
-    let raw = ''; for await (const chunk of req) { raw += chunk; if (Buffer.byteLength(raw) > (req.url?.split('?')[0]==='/api/folders'?262144:req.url?.split('?')[0]==='/api/contacts/sync'?65536:20000)) throw fail(413, 'Слишком большой запрос'); }
+    let raw = ''; for await (const chunk of req) { raw += chunk; if (Buffer.byteLength(raw) > (req.url?.split('?')[0]?.startsWith('/api/me/appearance/')?12582912:req.url?.split('?')[0]==='/api/folders'?262144:req.url?.split('?')[0]==='/api/contacts/sync'?65536:20000)) throw fail(413, 'Слишком большой запрос'); }
     try { const value = JSON.parse(raw || '{}'); if (!value || Array.isArray(value) || typeof value !== 'object') throw Error(); return value; } catch { throw fail(400, 'Некорректный JSON'); }
   };
   const limit = (key, max) => {
@@ -93,6 +94,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   };
   const disconnect=(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();};
   const phoneService=phoneAuth({db,smsOptions,json,body,userById,auth,disconnect,loginCheck:(uid)=>{if(uid&&db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(uid)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');if(!uid&&!readAdminSettings(db).registration_enabled)throw fail(403,'Регистрация новых пользователей временно закрыта');},...phoneAuthOptions});
+  const handleAppearance = accountAppearance({db,body,json});
   const handleFolders = folders({db,body,json,publish});
   const handleProfiles = profiles({db,uploads,auth,publish,userById,json,body});
   usernameService=usernames({db,body,json,userById,publish,uploads});
@@ -102,8 +104,9 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   handleMessaging.cleanupUnused();
   const handleCommunities = communities({db,member,broadcast,publish,json,body,userById,online:id=>!!streams.get(id)?.size});
   const handleTopics=topics({db,body,json,member,broadcast,publish});
-  pushService = notifications({db,auth,body,json,sender:pushSender,contactDisplay:(uid,id,name)=>contactService?.display(uid,id,name)||name});
-  const callService = calls({db,auth,body,json,userById,onRing:pushService.call,onEnd:pushService.endCall});
+  let callService;
+  pushService = notifications({db,auth,body,json,sender:pushSender,callReceipt:id=>callService?.receipt(id),contactDisplay:(uid,id,name)=>contactService?.display(uid,id,name)||name});
+  callService = calls({db,auth,body,json,userById,onRing:pushService.call,onEnd:pushService.endCall});
   mobileService=mobile({db,auth,body,json,userById,online:id=>!!streams.get(id)?.size,
     disconnect:(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();}});
   contactService=contacts({db,body,json,publish,userById});
@@ -128,6 +131,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
       if (['/api/register','/api/login','/api/password'].includes(path) || path.startsWith('/api/auth/telegram/')) throw fail(404,'Этот способ входа удалён');
       if (path.startsWith('/api/auth/') || path.startsWith('/api/v1/auth/otp/')) { if(await phoneService.handle(req,res,url))return; }
       if (url.pathname.startsWith("/api/public/users/")) { limit("public:"+req.socket.remoteAddress,120); if(await usernameService.publicHandle(req,res,url))return; }
+      if(path.endsWith("/ringing-receipt")){limit("receipt:"+req.socket.remoteAddress,120);if(await callService.receiptHandle(req,res,url))return;}
       const session = auth(req), uid = session.user_id;
       res.volnaViewer=uid;
       adminService.guard(req,url,session);
@@ -151,6 +155,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
         res.on('close', () => { clearInterval(heartbeat); list.delete(res); if (!list.size) {streams.delete(uid);db.prepare('UPDATE users SET last_seen=? WHERE id=?').run(Date.now(),uid);presenceChanged(uid);} }); return;
       }
       limit(`user:${uid}`, 240);
+      if(await handleAppearance(req,res,url,uid))return;
       if (await contactService.handle(req,res,url,uid)) return;
       if (await mobileService.handle(req,res,url,session)) return;
       if (await pushService.handle(req,res,url,uid)) return;

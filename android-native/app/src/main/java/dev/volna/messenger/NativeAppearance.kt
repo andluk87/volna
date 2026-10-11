@@ -154,8 +154,8 @@ fun VolnaTheme(appearance: NativeAppearance, updateSystemBars: Boolean = true, c
 }
 
 @Composable
-fun AppearanceDialog(value: NativeAppearance, onChange: (NativeAppearance) -> Unit, onDismiss: () -> Unit, account: Long = 0, chat: Long? = null, onResetChat: (() -> Unit)? = null) {
-    NativeAppearanceEditor(value, onChange, onDismiss, account, chat, onResetChat)
+fun AppearanceDialog(value: NativeAppearance, onChange: (NativeAppearance) -> Unit, onDismiss: () -> Unit, account: Long = 0, chat: Long? = null, onResetChat: (() -> Unit)? = null, cloudError: String = "") {
+    NativeAppearanceEditor(value, onChange, onDismiss, account, chat, onResetChat, cloudError)
 }
 
 internal fun nativeNightAt(minute: Int, start: Int, end: Int): Boolean = if (start == end) true else if (start < end) minute in start until end else minute >= start || minute < end

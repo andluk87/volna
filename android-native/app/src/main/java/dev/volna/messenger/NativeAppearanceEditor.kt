@@ -37,7 +37,7 @@ import kotlin.math.*
 
 @Composable
 internal fun NativeAppearanceEditor(value: NativeAppearance, onChange: (NativeAppearance) -> Unit, onDismiss: () -> Unit,
-    account: Long, chat: Long?, onResetChat: (() -> Unit)?) {
+    account: Long, chat: Long?, onResetChat: (() -> Unit)?, cloudError: String = "") {
     val context = LocalContext.current; val scope = rememberCoroutineScope(); val store = remember(account) { NativeThemeStore(context, account) }
     val design = value.design ?: remember(value.accent, value.outgoing, value.radius, value.background) {
         val default = NativeTheme(id = "current", name = "Моя тема", radius = value.radius.coerceIn(6, 24))
@@ -61,6 +61,7 @@ internal fun NativeAppearanceEditor(value: NativeAppearance, onChange: (NativeAp
     }
     NativeFullScreen(if (chat == null) "Оформление" else "Оформление чата", onDismiss, overlayContent = true) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = LocalNativeScreenTopInset.current + 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if(cloudError.isNotBlank())NativeText("Оформление ещё не сохранено в аккаунте: $cloudError. Повторим автоматически.",color=MaterialTheme.colorScheme.error)
             NativeThemePreview(value.copy(design = design, theme = if (night) "dark" else "light"))
             NativeSettingsCard { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 NativeTypographyControls(value, onChange)

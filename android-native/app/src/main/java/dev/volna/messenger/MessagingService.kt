@@ -152,7 +152,7 @@ class MessagingService : Service() {
                         val pending=PendingIntent.getActivity(this,BACKGROUND_CALL_ID,launch,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                         val notification=builder("${call.peer?.name ?: "Входящий звонок"} · ${account.user.name}",if(call.video)"Входящий видеозвонок · нажмите, чтобы ответить" else "Входящий звонок · нажмите, чтобы ответить",NativeNotificationSounds.backgroundCallChannel(this,stream.userId))
                             .setCategory(Notification.CATEGORY_CALL).setContentIntent(pending).setOngoing(true).setOnlyAlertOnce(true).setTimeoutAfter(45_000).build()
-                        getSystemService(NotificationManager::class.java).notify("volna-call-account-${stream.userId}",BACKGROUND_CALL_ID,notification);alerted=call.id
+                        getSystemService(NotificationManager::class.java).notify("volna-call-account-${stream.userId}",BACKGROUND_CALL_ID,notification);if(getSystemService(NotificationManager::class.java).areNotificationsEnabled())api.callAction(stream.token,device,call.id,"ringing");alerted=call.id
                     }
                 }
             } catch(problem: NativeApiException) { if(problem.status in listOf(401,403)) { invalidSession(stream); break } }

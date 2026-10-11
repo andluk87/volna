@@ -88,7 +88,7 @@ export default function Appearance({settings,onChange,onClose,saveError,inline=f
   <Preview settings={settings}/>
  </>}
  {wallpaperError&&<p className="wk-settings-error" role="alert">{wallpaperError}</p>}
- {saveError&&<p className="wk-settings-error" role="alert">Хранилище недоступно. Настройки действуют до перезагрузки.</p>}
+ {saveError&&<p className="wk-settings-error" role="alert">Не удалось сохранить оформление. Проверьте подключение; синхронизация повторится автоматически.</p>}
  </div>;
  if(inline)return body;
  return <Dialog title={appearancePages[page]} onClose={onClose} className="appearance-dialog wk-appearance-dialog">{page!=='main'&&<button className="wk-modal-back" onClick={()=>navigate(page==='color'?'background':'main')}><Icon name="back"/>Назад</button>}{body}</Dialog>;

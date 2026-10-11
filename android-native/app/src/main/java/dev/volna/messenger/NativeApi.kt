@@ -406,7 +406,7 @@ class NativeApi(baseUrl: String) {
         return if (action == "end") null else parseCall(result)
     }
 
-    private fun parseCall(row: JSONObject) = VolnaCall(row.getString("id"), row.optLong("chat_id"), row.optJSONObject("peer")?.let(::parseUser), row.optBoolean("incoming"), row.getString("status"), row.optJSONObject("offer"), row.optJSONObject("answer"), if (row.has("peer_sharing")) row.optBoolean("peer_sharing") else null, row.optBoolean("video"), row.optBoolean("peer_video"))
+    private fun parseCall(row: JSONObject) = VolnaCall(row.getString("id"), row.optLong("chat_id"), row.optJSONObject("peer")?.let(::parseUser), row.optBoolean("incoming"), row.getString("status"), row.optJSONObject("offer"), row.optJSONObject("answer"), if (row.has("peer_sharing")) row.optBoolean("peer_sharing") else null, row.optBoolean("video"), row.optBoolean("peer_video"), row.optBoolean("ring_received"))
 
     private fun parseCommunity(row: JSONObject): VolnaCommunity {
         fun users(name: String): List<VolnaMember> {
@@ -481,6 +481,6 @@ data class VolnaMember(val id: Long, val name: String, val username: String, val
 data class VolnaCommunity(val id: Long, val kind: String, val title: String, val description: String, val role: String, val memberCount: Int, val members: List<VolnaMember>, val banned: List<VolnaMember>, val invite: JSONObject?, val postingPolicy: String = "all") {
     val canManage: Boolean get() = role == "owner" || role == "admin"
 }
-data class VolnaCall(val id: String, val chatId: Long, val peer: VolnaUser?, val incoming: Boolean, val status: String, val offer: JSONObject?, val answer: JSONObject?, val peerSharing: Boolean? = null, val video: Boolean = false, val peerVideo: Boolean = false)
+data class VolnaCall(val id: String, val chatId: Long, val peer: VolnaUser?, val incoming: Boolean, val status: String, val offer: JSONObject?, val answer: JSONObject?, val peerSharing: Boolean? = null, val video: Boolean = false, val peerVideo: Boolean = false, val ringReceived: Boolean = false)
 data class VolnaCallRecord(val id: String, val chatId: Long, val peer: VolnaUser?, val incoming: Boolean, val created: Long, val status: String, val duration: Int, val screenShared: Boolean, val video: Boolean = false)
 data class VolnaDeviceSession(val id: String, val label: String, val current: Boolean, val lastSeen: Long, val expires: Long)

@@ -35,7 +35,13 @@ test('push: private defaults, ownership, durable queue/key, preview, read suppre
   await req(`/chats/${chat}/preferences`,b.token,{muted:false});
   const read=await send('Уже прочитано');await req(`/chats/${chat}/read`,b.token,{message_id:read.id});await due();assert.equal(sent.length,2);
   status=503;await send('Повтор');await due();assert.equal(app.db.prepare('SELECT attempts FROM push_jobs').get().attempts,1);status=201;await due();assert.equal(sent.at(-1).payload.body,'Повтор');
-  const device=randomBytes(16).toString('hex');const call=(await req('/calls/start',a.token,{device,chat_id:chat})).data;await req(`/calls/${call.id}/offer`,a.token,{device,description:{type:'offer',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n'}});assert.equal(app.db.prepare("SELECT COUNT(*) n FROM push_jobs WHERE kind='call'").get().n,1);await req(`/calls/${call.id}/end`,a.token,{device});assert.equal(app.db.prepare("SELECT COUNT(*) n FROM push_jobs WHERE kind='call'").get().n,0);
+  const device=randomBytes(16).toString('hex');const call=(await req('/calls/start',a.token,{device,chat_id:chat})).data;await req(`/calls/${call.id}/offer`,a.token,{device,description:{type:'offer',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n'}});assert.equal(app.db.prepare("SELECT COUNT(*) n FROM push_jobs WHERE kind='call'").get().n,1);await due();const receipt=sent.at(-1).payload;
+  assert.equal(receipt.kind,'call');assert.equal(receipt.call_id,call.id);assert.match(receipt.ring_receipt,/^[a-f0-9]{48}$/);
+  assert.equal((await req('/calls/current?device='+device,a.token)).data.ring_received,false);
+  assert.equal((await req(`/calls/${call.id}/ringing-receipt`,'',{receipt:receipt.ring_receipt})).status,200);
+  assert.equal((await req('/calls/current?device='+device,a.token)).data.ring_received,true);
+  await req(`/calls/${call.id}/end`,a.token,{device});
+  assert.equal((await req(`/calls/${call.id}/ringing-receipt`,'',{receipt:receipt.ring_receipt})).status,404);assert.equal(app.db.prepare("SELECT COUNT(*) n FROM push_jobs WHERE kind='call'").get().n,0);
   status=410;await send('Удалённая подписка');await due();assert.equal(app.db.prepare('SELECT COUNT(*) n FROM push_subscriptions').get().n,0);status=201;
   await req('/push/subscribe',b.token,{subscription:sub});await send('Не отправлять после выхода');await req('/logout',b.token,{});assert.equal(app.db.prepare('SELECT COUNT(*) n FROM push_subscriptions').get().n,0);assert.equal(app.db.prepare('SELECT COUNT(*) n FROM push_jobs').get().n,0);
   assert.equal(app.db.prepare('PRAGMA user_version').get().user_version,7);

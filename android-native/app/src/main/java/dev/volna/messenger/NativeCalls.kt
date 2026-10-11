@@ -108,8 +108,8 @@ object NativeCalls {
             ?: UUID.randomUUID().toString().replace("-", "").also { prefs.edit().putString("call_device", it).apply() }
         if (token.isBlank()) return
         toneObserver = scope.launch {
-            state.map { it.call?.let { call -> !call.incoming && call.status == "ringing" && !it.connected } == true }
-                .distinctUntilChanged().collect { waiting -> if (waiting) startRingback() else stopRingback() }
+            state.map { nativeOutgoingCallTone(it.call?.incoming ?: true,it.call?.status.orEmpty(),it.call?.ringReceived ?: false,it.connected) }
+                .distinctUntilChanged().collect { tone -> if (tone.isNotEmpty()) startRingback(tone) else stopRingback() }
         }
         clockJob = scope.launch { while (isActive) { updateClock(); delay(1_000) } }
         pollJob = scope.launch {
@@ -140,6 +140,7 @@ object NativeCalls {
             if (current.incoming && current.status == "ringing") {
                 mutableState.value = NativeCallState(call = current, phase = "Входящий звонок")
                 ring(current)
+                withContext(Dispatchers.IO){api.callAction(token,device,current.id,"ringing")}
             } else {
                 // A process restart cannot restore old DTLS keys. Release an abandoned device call.
                 withContext(Dispatchers.IO) { api.callAction(token, device, current.id, "end") }
@@ -147,7 +148,8 @@ object NativeCalls {
             return
         }
         if (existing.id != current.id) { end(notifyServer = false); return }
-        mutableState.update { it.copy(call = current) }
+        if(current.incoming&&current.status=="ringing"&&!current.ringReceived)withContext(Dispatchers.IO){api.callAction(token,device,current.id,"ringing")}
+        mutableState.update { if(!current.incoming&&current.status=="ringing")it.copy(call=current,phase=if(current.ringReceived)"У собеседника входящий звонок…" else "Устанавливаем соединение…") else it.copy(call = current) }
         if (cameraWanted && current.status == "active" && state.value.connected && state.value.screenReady) { cameraWanted = false; setCamera(true) }
         val pc = peer
         if (!current.incoming && current.answer != null && pc != null && pc.remoteDescription == null) {
@@ -189,7 +191,7 @@ object NativeCalls {
                 NativeCallDiagnostics.step("Передача предложения звонка на сервер")
                 val ready = withContext(Dispatchers.IO) { api.callAction(session, device, call.id, "offer", localDescription(pc)) }
                 checkVersion(version)
-                mutableState.update { it.copy(call = ready, phase = "Вызываем…", busy = false) }
+                mutableState.update { it.copy(call = ready, phase = "Устанавливаем соединение…", busy = false) }
                 NativeCallDiagnostics.step("Ожидание ответа собеседника")
             } catch (cancelled: CancellationException) {
                 created?.let { call -> scope.launch(Dispatchers.IO) { runCatching { api.callAction(session, device, call.id, "end") } } }
@@ -673,10 +675,10 @@ object NativeCalls {
         val old = ringtone; ringtone = null; runCatching { old?.stop() }
         runCatching { context?.getSystemService(NotificationManager::class.java)?.cancel(CALL_NOTIFICATION) }
     }
-    private fun startRingback() {
+    private fun startRingback(kind: String) {
         stopRingback()
         ringback = runCatching { ToneGenerator(AudioManager.STREAM_VOICE_CALL, 55) }.getOrNull() ?: return
-        ringbackJob = scope.launch { while (isActive) { runCatching { ringback?.startTone(ToneGenerator.TONE_SUP_RINGTONE, 1_000) }; delay(4_000) } }
+        ringbackJob = scope.launch { while (isActive) { runCatching { ringback?.startTone(if(kind=="ringback")ToneGenerator.TONE_SUP_RINGTONE else ToneGenerator.TONE_PROP_BEEP2, if(kind=="ringback")1_000 else 120) }; delay(if(kind=="ringback")4_000 else 1_500) } }
     }
     private fun stopRingback() {
         ringbackJob?.cancel(); ringbackJob = null

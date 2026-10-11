@@ -19,6 +19,9 @@ self.addEventListener('push',event=>event.waitUntil((async()=>{
   icon:'/icons/icon-192.png',badge:'/icons/badge-96.png',tag:String(payload.tag||'volna').slice(0,80),
   data:{chat_id:chat,account_id:Number.isSafeInteger(payload.account_id)?payload.account_id:null},renotify:true,vibrate:[160,80,160]
  });
+ if(!expiredCall&&payload.kind==='call'&&/^[a-f0-9]{32}$/.test(payload.call_id||'')&&/^[a-f0-9]{48}$/.test(payload.ring_receipt||'')){
+  await fetch('/api/calls/'+payload.call_id+'/ringing-receipt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({receipt:payload.ring_receipt})}).catch(()=>{});
+ }
 })()));
 self.addEventListener('notificationclick',event=>{
  event.notification.close();const id=event.notification.data?.chat_id;
