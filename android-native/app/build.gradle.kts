@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -9,8 +11,8 @@ val apiUrl = (project.findProperty("volnaApiUrl") as String?)
     ?: ""
 require(apiUrl.startsWith("https://")) { "Set ANDROID_API_URL to your Volna HTTPS base URL" }
 val safeApiUrl = apiUrl.trimEnd('/')
-val volnaVersionCode = 12_031
-val volnaVersionName = "0.12.31"
+val volnaVersionCode = 12_032
+val volnaVersionName = "0.12.32"
 val volnaWebRtcVersion = "150.7871.01"
 
 android {
@@ -20,6 +22,7 @@ android {
 
     defaultConfig {
         applicationId = "dev.volna.messenger"
+        manifestPlaceholders["volnaHost"] = URI(apiUrl).host
         minSdk = 26
         targetSdk = 36
         versionCode = volnaVersionCode

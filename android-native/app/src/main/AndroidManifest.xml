@@ -44,6 +44,12 @@
                 <data android:scheme="volna" android:host="login" />
                 <data android:scheme="volna" android:host="profile" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${volnaHost}" android:path="/app" />
+            </intent-filter>
         </activity>
         <activity android:name=".IncomingCallActivity" android:supportsPictureInPicture="true" android:exported="false" android:launchMode="singleTop" android:excludeFromRecents="true" android:showWhenLocked="true" android:turnScreenOn="true" android:configChanges="orientation|screenSize|keyboardHidden|uiMode" />
         <service

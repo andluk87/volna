@@ -86,7 +86,7 @@ internal fun ChatRoomScreen(
     onMessageAction: (VolnaMessage, String, String) -> Unit, onRetry: () -> Unit,
     focusMessageId: Long?, onFocusConsumed: () -> Unit, onJumpToMessage: (Long) -> Unit,
     startSearch: Boolean, onSearchStarted: () -> Unit, onVisibleMessage: (Long) -> Unit, earlierWindow: Boolean, onNewest: () -> Unit,
-    onForwardMany: (List<VolnaMessage>) -> Unit
+    onForwardMany: (List<VolnaMessage>) -> Unit, topicNavigation: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -242,7 +242,7 @@ internal fun ChatRoomScreen(
                     IconButton(onClick = { menu = true }, enabled = !recorder.recording, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.MoreVert, "Действия чата", tint = Muted) }
                     DropdownMenu(menu, { menu = false }) {
                         if (chat.kind == "direct" && !chat.saved) DropdownMenuItem(text = { NativeText("Видеозвонок") }, leadingIcon = { Icon(Icons.Outlined.Videocam, null) }, enabled = !recorder.recording, onClick = { menu = false; onVideo(chat) })
-                        if (chat.kind == "group") DropdownMenuItem(text = { NativeText("Подтемы") }, onClick = { menu = false; onTopics() })
+                        if (chat.kind == "group") DropdownMenuItem(text = { NativeText("Темы") }, onClick = { menu = false; onTopics() })
                         DropdownMenuItem(text = { NativeText("Профиль и информация") }, onClick = { menu = false; if (chat.kind in listOf("group", "channel")) onCommunity() else onOpenProfile(chat.peerId) })
                         DropdownMenuItem(text = { NativeText("Изменить оформление") }, leadingIcon = { Icon(Icons.Outlined.Palette, null) }, onClick = { menu = false; onAppearance() })
                         DropdownMenuItem(text = { NativeText("Поиск") }, onClick = { menu = false; searchOpen = !searchOpen; showPins = false; if (!searchOpen) onSearch("") })
@@ -263,6 +263,7 @@ internal fun ChatRoomScreen(
                 IconButton(onClick = { showPins = true; searchOpen = false; onSearch("") }) { Icon(Icons.Outlined.PushPin, "Все закреплённые сообщения", tint = Muted) }
             }
         }
+        topicNavigation()
         if (searchOpen) NativeSearchField(searchQuery, onSearch, "Найти в переписке")
         if (showPins) Row(Modifier.fillMaxWidth().background(Panel).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) { NativeText("Закреплённые · ${pinnedMessages.size}", Modifier.weight(1f), color = Accent, fontSize = 13.sp); TextButton(onClick = { showPins = false }) { NativeText("Закрыть") } }
         if (error.isNotBlank()) NativeConnectionNotice(error, onRetry)

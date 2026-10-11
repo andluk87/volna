@@ -6,7 +6,8 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
  db.exec('BEGIN IMMEDIATE');
  try{
   const chatColumns=new Set(db.prepare('PRAGMA table_info(chats)').all().map(c=>c.name));
-  for(const [name,type] of Object.entries({kind:"TEXT NOT NULL DEFAULT 'direct'",title:"TEXT NOT NULL DEFAULT ''",description:"TEXT NOT NULL DEFAULT ''",created_by:'INTEGER',posting_policy:"TEXT NOT NULL DEFAULT 'all'",parent_id:"INTEGER REFERENCES chats(id)",topic_icon:"TEXT NOT NULL DEFAULT ''",topic_closed:"INTEGER NOT NULL DEFAULT 0",topic_deleted:"INTEGER NOT NULL DEFAULT 0",topic_create_policy:"TEXT NOT NULL DEFAULT 'admins'"}))if(!chatColumns.has(name))db.exec(`ALTER TABLE chats ADD COLUMN ${name} ${type}`);
+  for(const [name,type] of Object.entries({kind:"TEXT NOT NULL DEFAULT 'direct'",title:"TEXT NOT NULL DEFAULT ''",description:"TEXT NOT NULL DEFAULT ''",created_by:'INTEGER',posting_policy:"TEXT NOT NULL DEFAULT 'all'",parent_id:"INTEGER REFERENCES chats(id)",topic_icon:"TEXT NOT NULL DEFAULT ''",topic_closed:"INTEGER NOT NULL DEFAULT 0",topic_deleted:"INTEGER NOT NULL DEFAULT 0",topic_create_policy:"TEXT NOT NULL DEFAULT 'admins'",topics_enabled:"INTEGER NOT NULL DEFAULT 0",general_name:"TEXT NOT NULL DEFAULT 'Общие вопросы'",general_hidden:"INTEGER NOT NULL DEFAULT 0",topic_pinned:"INTEGER NOT NULL DEFAULT 0",topic_pin_order:"INTEGER NOT NULL DEFAULT 0"}))if(!chatColumns.has(name))db.exec(`ALTER TABLE chats ADD COLUMN ${name} ${type}`);
+  if(!chatColumns.has('topics_enabled'))db.exec("UPDATE chats SET topics_enabled=1 WHERE kind='group' AND parent_id IS NULL AND EXISTS(SELECT 1 FROM chats t WHERE t.parent_id=chats.id AND t.topic_deleted=0)");
   const memberColumns=new Set(db.prepare('PRAGMA table_info(members)').all().map(c=>c.name));
   if(!memberColumns.has('last_delivered'))db.exec('ALTER TABLE members ADD COLUMN last_delivered INTEGER NOT NULL DEFAULT 0');
   if(!memberColumns.has('role'))db.exec("ALTER TABLE members ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");
@@ -42,7 +43,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
  return async(req,res,url,uid)=>{
   const path=url.pathname,method=req.method;
   if(path==='/api/chats'&&method==='GET'){
-   const rows=db.prepare(`SELECT c.id,c.kind,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,me.role,me.last_read,
+   const rows=db.prepare(`SELECT c.id,c.kind,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,c.topics_enabled,c.general_name,me.role,me.last_read,
     COALESCE((SELECT MAX(last_read) FROM members WHERE chat_id=c.id AND user_id<>?),me.last_read) AS peer_read,
     COALESCE((SELECT MAX(MAX(last_read,last_delivered)) FROM members WHERE chat_id=c.id AND user_id<>me.user_id),me.last_read) AS peer_delivered,
     CASE WHEN c.kind IN ('group','channel') THEN c.id ELSE COALESCE(peer.id,?) END AS peer_id,
@@ -50,7 +51,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
     CASE WHEN c.kind='direct' THEN peer.username ELSE c.kind END AS username,
     CASE WHEN c.pair='official-volna-news' THEN '/icons/icon-192.png' WHEN c.kind='direct' AND peer.avatar_hidden=0 THEN CASE WHEN peer.avatar_id IS NOT NULL THEN '/api/files/'||peer.avatar_id ELSE NULL END END AS avatar_url,
     CASE WHEN c.kind='saved' THEN 1 ELSE 0 END AS saved,
-    CASE WHEN c.topic_closed=1 OR c.admin_locked=1 OR COALESCE((SELECT admin_locked FROM chats WHERE id=c.parent_id),0)=1 THEN 0 WHEN (c.kind='channel' OR c.kind='group' AND c.posting_policy='admins') AND me.role NOT IN ('owner','admin') THEN 0 ELSE 1 END AS can_send,
+    CASE WHEN (c.topic_closed=1 AND me.role NOT IN ('owner','admin')) OR c.admin_locked=1 OR COALESCE((SELECT admin_locked FROM chats WHERE id=c.parent_id),0)=1 THEN 0 WHEN (c.kind='channel' OR c.kind='group' AND c.posting_policy='admins') AND me.role NOT IN ('owner','admin') THEN 0 ELSE 1 END AS can_send,
     (SELECT COUNT(*) FROM members WHERE chat_id=c.id) AS member_count,
     (SELECT CASE WHEN deleted_at IS NOT NULL THEN 'Сообщение удалено' WHEN text='' THEN 'Вложение' ELSE text END FROM messages WHERE chat_id=c.id AND id>COALESCE(vis.hidden_before,0) ORDER BY id DESC LIMIT 1) AS last_text,
     (SELECT created_at FROM messages WHERE chat_id=c.id AND id>COALESCE(vis.hidden_before,0) ORDER BY id DESC LIMIT 1) AS last_at,
@@ -62,7 +63,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
     LEFT JOIN chat_visibility vis ON vis.chat_id=c.id AND vis.user_id=me.user_id
     LEFT JOIN chat_preferences pref ON pref.chat_id=c.id AND pref.user_id=me.user_id
     LEFT JOIN users peer ON c.kind='direct' AND peer.id=(SELECT user_id FROM members WHERE chat_id=c.id AND user_id<>? LIMIT 1)
-    WHERE c.topic_deleted=0 AND c.admin_deleted=0 AND (COALESCE(vis.deleted,0)=0 OR EXISTS(SELECT 1 FROM messages WHERE chat_id=c.id AND id>vis.hidden_before))
+    WHERE c.topic_deleted=0 AND c.admin_deleted=0 AND (c.parent_id IS NOT NULL OR COALESCE(vis.deleted,0)=0 OR EXISTS(SELECT 1 FROM messages WHERE chat_id=c.id AND id>vis.hidden_before))
     ORDER BY saved DESC,pinned DESC,COALESCE(last_at,'') DESC,c.id DESC`).all(uid,uid,uid,uid,uid);
    const topicUnread=new Map(),latestTopic=new Map();for(const row of rows)if(row.parent_id){topicUnread.set(row.parent_id,(topicUnread.get(row.parent_id)||0)+row.unread);if(row.last_at&&row.last_at>(latestTopic.get(row.parent_id)?.last_at||''))latestTopic.set(row.parent_id,row);}
    const contactIds=new Set(db.prepare("SELECT linked FROM account_contacts WHERE owner=? AND deleted=0 AND linked IS NOT NULL").all(uid).map(c=>c.linked));

@@ -79,7 +79,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   };
   const presenceChanged=uid=>{const viewers=db.prepare("SELECT DISTINCT other.user_id FROM members me JOIN members other ON me.chat_id=other.chat_id JOIN chats c ON c.id=me.chat_id WHERE c.kind='direct' AND me.user_id=? AND other.user_id<>?").all(uid,uid).map(row=>row.user_id).filter(id=>contactService?.canSeePresence(id,uid));publish(viewers,{type:'chats'});};
   let pushService;
-  const broadcast = (chat, event) => {const users=db.prepare('SELECT user_id FROM members WHERE chat_id=?').all(chat).map(x=>x.user_id);if(['message','message-update'].includes(event.type)){for(const uid of users)publish([uid],{...event,notify:topicNotification(db,chat,uid,event.message.text)});if(event.type==='message')pushService?.message(chat,event.message);}else publish(users,event);};
+  const broadcast = (chat, event) => {const users=db.prepare('SELECT user_id FROM members WHERE chat_id=?').all(chat).map(x=>x.user_id);if(['message','message-update'].includes(event.type)){for(const uid of users)publish([uid],{...event,notify:topicNotification(db,chat,uid,event.message.text,event.message.reply_to)});if(event.type==='message')pushService?.message(chat,event.message);}else publish(users,event);};
   const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(contactService?.personalize(res.volnaViewer,data)||data)); };
   const body = async req => {
     if(req.volnaParsedBody){const data=req.volnaParsedBody;delete req.volnaParsedBody;return data;}

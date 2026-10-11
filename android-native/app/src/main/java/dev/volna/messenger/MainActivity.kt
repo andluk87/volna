@@ -158,7 +158,7 @@ class MainActivity : ComponentActivity() {
         configureCallPip()
         authReturn.value = intent?.dataString
         if (intent?.getBooleanExtra("open_call", false) == true) NativeCalls.minimize(false)
-        openChatRequest.value = intent?.getLongExtra("chat_id", 0L)?.takeIf { it > 0 }
+        openChatRequest.value = intent?.getLongExtra("chat_id", 0L)?.takeIf { it > 0 } ?: nativeLinkedTopicChat(intent?.dataString, BuildConfig.API_BASE_URL)
         openMessageRequest.value = intent?.getLongExtra("message_id", 0L)?.takeIf { it > 0 }
         openAccountRequest.value = intent?.getLongExtra("account_id", 0L)?.takeIf { it > 0 }
         window.statusBarColor = android.graphics.Color.TRANSPARENT
@@ -178,7 +178,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         authReturn.value = intent.dataString
         if (intent.getBooleanExtra("open_call", false)) NativeCalls.minimize(false)
-        openChatRequest.value = intent.getLongExtra("chat_id", 0L).takeIf { it > 0 }
+        openChatRequest.value = intent.getLongExtra("chat_id", 0L).takeIf { it > 0 } ?: nativeLinkedTopicChat(intent.dataString, BuildConfig.API_BASE_URL)
         openMessageRequest.value = intent.getLongExtra("message_id", 0L).takeIf { it > 0 }
         openAccountRequest.value = intent.getLongExtra("account_id", 0L).takeIf { it > 0 }
     }
@@ -627,7 +627,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось открыть избранное" } }
                     },
                     onQuery = { query = it },
-                    onSelect = { chat -> selectedChat = chat; messages.clear(); messageQuery = ""; focusMessageId = null },
+                    onSelect = { chat -> selectedChat = chat; messages.clear(); messageQuery = ""; focusMessageId = null; if(chat.kind=="group"&&chat.parentId==0L&&(chat.topicsEnabled||chats.any{it.parentId==chat.id}))topicsGroup=chat },
                     onChatPreference = { chat, key, value ->
                         scope.launch {
                             try { withContext(Dispatchers.IO) { if (key in listOf("clear-history", "delete-chat")) api.contactRequest("/chats/${chat.id}/$key", token, org.json.JSONObject()) else api.updateChatPreference(token, chat.id, key, value) }; chats.clear(); chats.addAll(withContext(Dispatchers.IO) { api.chats(token) }) }
@@ -700,6 +700,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                         else { pendingCall = chat; callPermission.launch(Manifest.permission.RECORD_AUDIO) }
                     },
                     onCommunity = { if(selectedChat?.parentId != 0L && selectedChat?.parentId != null) topicsGroup=chats.firstOrNull { it.id==selectedChat?.parentId } else manageCommunity = selectedChat },
+                    topicNavigation = { selectedChat?.takeIf { it.kind == "group" }?.let { chat -> NativeTopicTabs(chat,token,api) { id -> selectedChat=chats.firstOrNull{it.id==id};messages.clear() } } },
                     onTopics = { topicsGroup=chats.firstOrNull { it.id==(selectedChat?.parentId?.takeIf { id -> id != 0L } ?: selectedChat?.id) } }, onGallery = { galleryChat = selectedChat },
                     onOpenAttachment = { attachmentPreview = it },
                     error = error,
@@ -829,7 +830,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             } }
             topicsGroup?.let { group -> NativeTopicsDialog(group,token,api,{topicsGroup=null},{
                 scope.launch { try { val current=selectedChat?.id;val rows=withContext(Dispatchers.IO){api.chats(token)};chats.clear();chats.addAll(rows);selectedChat=rows.firstOrNull{it.id==current} } catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(problem:Exception){error=problem.message.orEmpty()} }
-            }) { id -> topicsGroup=null;scope.launch {try {val rows=withContext(Dispatchers.IO){api.chats(token)};chats.clear();chats.addAll(rows);selectedChat=rows.firstOrNull{it.id==id};messages.clear()}catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(problem:Exception){error=problem.message.orEmpty()}} } }
+            }) { id, messageId -> topicsGroup=null;scope.launch {try {val rows=withContext(Dispatchers.IO){api.chats(token)};chats.clear();chats.addAll(rows);selectedChat=rows.firstOrNull{it.id==id};messages.clear();focusMessageId=messageId}catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(problem:Exception){error=problem.message.orEmpty()}} } }
             manageCommunity?.let { chat -> CommunityManageDialog(chat, me, token, api, { manageCommunity = null }, {
                 scope.launch { try { chats.clear(); chats.addAll(withContext(Dispatchers.IO) { api.chats(token) }); selectedChat = chats.firstOrNull { it.id == selectedChat?.id } }
                     catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось обновить чаты" } }

@@ -36,7 +36,7 @@ data class VolnaChat(
     val muted: Boolean = false,
     val pinned: Boolean = false,
     val role: String = "member", val canSend: Boolean = true, val memberCount: Int = 0,
-    val avatarUrl: String? = null, val lastId: Long = 0, val lastSenderId: Long = 0, val peerOnline: Boolean = false, val parentId: Long = 0, val topicClosed: Boolean = false, val isContact: Boolean = false, val manualUnread: Boolean = false, val peerLastSeen: Long = 0
+    val avatarUrl: String? = null, val lastId: Long = 0, val lastSenderId: Long = 0, val peerOnline: Boolean = false, val parentId: Long = 0, val topicClosed: Boolean = false, val isContact: Boolean = false, val manualUnread: Boolean = false, val peerLastSeen: Long = 0, val topicsEnabled: Boolean = false
 )
 data class VolnaReaction(val emoji: String, val userId: Long, val name: String)
 data class VolnaReply(val id: Long, val name: String, val text: String, val deleted: Boolean)
@@ -58,7 +58,7 @@ data class VolnaMessage(
     val forwardedName: String? = null,
     val attachmentSize: Long = 0, val albumId: String? = null, val chatId: Long = 0,
     val expressionKind: String? = null, val expressionId: String? = null,
-    val emojiEntities: List<NativeEmojiEntity> = emptyList()
+    val emojiEntities: List<NativeEmojiEntity> = emptyList(), val topicName: String = ""
 )
 data class VolnaSession(val token: String, val user: VolnaUser, val refreshToken: String = "")
 internal class NativeApiException(val status: Int, message: String, val errorCode: String = "", val retryAt: Long = 0, val serverTime: Long = 0) : IllegalStateException(message)
@@ -226,11 +226,12 @@ class NativeApi(baseUrl: String) {
                     (if (row.isNull("last_text")) "" else row.optString("last_text")), (if (row.isNull("last_at")) "" else row.optString("last_at")), row.optInt("unread"),
                     row.optInt("saved") == 1, row.optLong("peer_id"), row.optLong("peer_read"), row.optLong("peer_delivered", row.optLong("peer_read")),
                     row.optString("kind", "direct"), row.optInt("archived") == 1, row.optInt("muted") == 1, row.optInt("pinned") == 1,
-                    row.optString("role", "member"), row.optInt("can_send", 1) == 1, row.optInt("member_count"), nullableText(row, "avatar_url"), row.optLong("last_id"), row.optLong("last_sender_id"), row.optBoolean("peer_online"), row.optLong("parent_id"), row.optInt("topic_closed")==1, row.optBoolean("is_contact"), row.optInt("manual_unread") == 1, row.optLong("peer_last_seen"))
+                    row.optString("role", "member"), row.optInt("can_send", 1) == 1, row.optInt("member_count"), nullableText(row, "avatar_url"), row.optLong("last_id"), row.optLong("last_sender_id"), row.optBoolean("peer_online"), row.optLong("parent_id"), row.optInt("topic_closed")==1, row.optBoolean("is_contact"), row.optInt("manual_unread") == 1, row.optLong("peer_last_seen"), row.optInt("topics_enabled")==1)
             }
         }
     }
 
+    fun forumMessages(token: String, group: Long, before: Long? = null, query: String = ""): List<VolnaMessage> = arrayCall("/chats/$group/messages?forum=1&q=" + android.net.Uri.encode(query) + (before?.let { "&before=$it" } ?: ""), token).let { rows -> (0 until rows.length()).map { parseMessage(rows.getJSONObject(it)) } }
     fun messages(token: String, chatId: Long, before: Long? = null): List<VolnaMessage> {
         val request = Request.Builder().url("$base/api/chats/$chatId/messages" + if (before != null) "?before=$before" else "")
             .header("Authorization", "Bearer $token").build()
@@ -468,7 +469,7 @@ class NativeApi(baseUrl: String) {
             !row.isNull("edited_at") && row.optString("edited_at").isNotBlank() && row.optString("edited_at") != "null",
             row.optBoolean("pinned"), row.optString("transcript").takeIf { it.isNotBlank() && it != "null" },
             row.optString("forwarded_name").takeIf { it.isNotBlank() && it != "null" }, file?.optLong("size") ?: 0L, nullableText(row, "album_id"), row.optLong("chat_id"), row.optJSONObject("expression")?.optString("kind"), nullableText(row, "expression_id"),
-            row.optJSONArray("emoji_entities")?.let { values -> (0 until values.length()).map { NativeEmojiEntity.parse(values.getJSONObject(it)) } } ?: emptyList())
+            row.optJSONArray("emoji_entities")?.let { values -> (0 until values.length()).map { NativeEmojiEntity.parse(values.getJSONObject(it)) } } ?: emptyList(), topicName = nullableText(row,"topic_name").orEmpty())
     }
     private fun nullableText(row: JSONObject, key: String): String? = row.optString(key).takeIf { it.isNotBlank() && it != "null" }
     private fun apiError(body: String, code: Int): Exception = try {

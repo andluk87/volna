@@ -30,12 +30,12 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     member(chat,uid);
     return db.prepare('SELECT c.kind,c.posting_policy,c.topic_closed,c.admin_locked,COALESCE((SELECT admin_locked FROM chats WHERE id=c.parent_id),0) AS parent_locked,m.role FROM chats c JOIN members m ON m.chat_id=c.id WHERE c.id=? AND m.user_id=?').get(chat,uid);
   };
-  const canPublish=(chat,uid)=>{const c=permission(chat,uid);if(c.admin_locked||c.parent_locked)throw error(403,'Отправка сообщений в этом чате ограничена администратором');if(c.topic_closed)throw error(403,'Подтема закрыта');if((c.kind==='channel'||c.kind==='group'&&c.posting_policy==='admins')&&!['admin','owner'].includes(c.role))throw error(403,'Публиковать могут только администраторы');return c;};
+  const canPublish=(chat,uid)=>{const c=permission(chat,uid);if(c.admin_locked||c.parent_locked)throw error(403,'Отправка сообщений в этом чате ограничена администратором');if(c.topic_closed&&!['owner','admin'].includes(c.role))throw error(403,'Тема закрыта для сообщений участников');if((c.kind==='channel'||c.kind==='group'&&c.posting_policy==='admins')&&!['admin','owner'].includes(c.role))throw error(403,'Публиковать могут только администраторы');return c;};
   const canModerate=(chat,uid)=>{const c=permission(chat,uid);return ['group','channel'].includes(c.kind)&&['admin','owner'].includes(c.role);};
   const get=id=>db.prepare('SELECT * FROM messages WHERE id=?').get(id);
   const hydrate=row=>{
     if(!row)return null;
-    const topic=db.prepare("SELECT c.parent_id,c.title,(SELECT title FROM chats WHERE id=c.parent_id) AS group_title FROM chats c WHERE c.id=?").get(row.chat_id);row={...row,group_id:topic?.parent_id||row.chat_id,topic_id:topic?.parent_id?row.chat_id:null,topic_name:topic?.parent_id?topic.title:null,group_name:topic?.parent_id?topic.group_title:topic?.title||null};
+    const topic=db.prepare("SELECT c.parent_id,c.title,c.general_name,c.topics_enabled,(SELECT title FROM chats WHERE id=c.parent_id) AS group_title FROM chats c WHERE c.id=?").get(row.chat_id);row={...row,group_id:topic?.parent_id||row.chat_id,topic_id:topic?.parent_id||topic?.topics_enabled?row.chat_id:null,message_thread_id:topic?.parent_id||topic?.topics_enabled?row.chat_id:null,topic_name:topic?.parent_id?topic.title:topic?.topics_enabled?topic.general_name:null,group_name:topic?.parent_id?topic.group_title:topic?.title||null};
     if(row.deleted_at)return {...row,text:'',attachment_id:null,expression_id:null,emoji_entities:[],reply_to:null,forwarded_name:null,attachment:null,reply:null,reactions:[],pinned:false,poll:null,checklist:null,interactive:null};
     const reply=row.reply_to?get(row.reply_to):null;
     return {...row,...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_name:userById(row.sender_id)?.name||'Пользователь',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
@@ -195,6 +195,13 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       const chat=Number(messages[1]),action=messages[2];member(chat,uid);
       if(method==='GET'){
         const hidden=cutoff(chat,uid);
+        if(action==='messages'&&url.searchParams.get('forum')==='1'){
+          const group=db.prepare('SELECT kind,parent_id FROM chats WHERE id=?').get(chat);if(group.kind!=='group'||group.parent_id)throw error(400,'Общая лента доступна только для основной группы');
+          const before=Number(url.searchParams.get('before')||Number.MAX_SAFE_INTEGER);if(!Number.isSafeInteger(before)||before<1)throw error(400,'Некорректный курсор');
+          const q=(url.searchParams.get('q')||'').trim().slice(0,200);
+          const rows=db.prepare(`SELECT m.* FROM messages m JOIN chats c ON c.id=m.chat_id JOIN members me ON me.chat_id=c.id AND me.user_id=? LEFT JOIN chat_visibility v ON v.chat_id=c.id AND v.user_id=? WHERE (c.id=? OR c.parent_id=?) AND c.topic_deleted=0 AND c.admin_deleted=0 AND m.id>COALESCE(v.hidden_before,0) AND m.id<? AND m.deleted_at IS NULL AND (?='' OR instr(casefold(m.text),casefold(?))>0) ORDER BY m.id DESC LIMIT 50`).all(uid,uid,chat,chat,before,q,q).reverse();
+          json(res,200,rows.map(row=>visibleHydrate(row,uid)));return true;
+        }
         let rows;
         if(action==='pins')rows=db.prepare('SELECT m.* FROM messages m JOIN pins p ON p.message_id=m.id WHERE p.chat_id=? AND m.id>? AND m.deleted_at IS NULL ORDER BY m.id DESC LIMIT 20').all(chat,hidden);
         else{

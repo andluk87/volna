@@ -28,7 +28,7 @@ export function notifications({db,auth,body,json,contactDisplay=(uid,id,name)=>n
   const add=db.prepare(`INSERT INTO push_jobs(subscription_id,topic,chat_id,kind,message_id,expires,next_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(subscription_id,topic) DO UPDATE SET message_id=excluded.message_id,expires=excluded.expires,next_at=excluded.next_at,attempts=0`);
   for(const uid of new Set(users))for(const sub of db.prepare('SELECT p.id FROM push_subscriptions p JOIN sessions s ON s.token=p.session_token WHERE p.user_id=? AND s.expires>?').all(uid,now))add.run(sub.id,topic,chat,kind,messageId,expires,now+(kind==='message'?1500:0));
  }
- function message(chat,m){const users=db.prepare('SELECT m.user_id FROM members m LEFT JOIN chat_preferences p ON p.chat_id=m.chat_id AND p.user_id=m.user_id WHERE m.chat_id=? AND m.user_id<>? AND COALESCE(p.muted,0)=0').all(chat,m.sender_id).map(r=>r.user_id).filter(uid=>topicNotification(db,chat,uid,m.text));enqueue(users,chat,'message',m.id,'chat-'+chat,Date.now()+24*3600000);}
+ function message(chat,m){const users=db.prepare('SELECT m.user_id FROM members m LEFT JOIN chat_preferences p ON p.chat_id=m.chat_id AND p.user_id=m.user_id WHERE m.chat_id=? AND m.user_id<>? AND COALESCE(p.muted,0)=0').all(chat,m.sender_id).map(r=>r.user_id).filter(uid=>topicNotification(db,chat,uid,m.text,m.reply_to));enqueue(users,chat,'message',m.id,'chat-'+chat,Date.now()+24*3600000);}
  function call(c){enqueue([c.callee],c.chat,'call',null,'call-'+c.id,c.created+60000);}
  async function deliver(job){
   if(closed)return;const row=db.prepare('SELECT p.*,s.expires AS session_expires FROM push_subscriptions p JOIN sessions s ON s.token=p.session_token WHERE p.id=?').get(job.subscription_id);
@@ -38,7 +38,7 @@ export function notifications({db,auth,body,json,contactDisplay=(uid,id,name)=>n
   let title='Волна',text=job.kind==='call'?'Входящий аудиозвонок. Откройте Волну, чтобы ответить.':'Новое сообщение';
   if(job.kind==='message'){
    const m=db.prepare('SELECT m.*,u.name FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=? AND m.chat_id=?').get(job.message_id,job.chat_id);
-   if(!m||m.deleted_at||member.last_read>=m.id||!topicNotification(db,job.chat_id,row.user_id,m.text)){remove(job.id);return;}
+   if(!m||m.deleted_at||member.last_read>=m.id||!topicNotification(db,job.chat_id,row.user_id,m.text,m.reply_to)){remove(job.id);return;}
    if(row.preview){const chat=db.prepare(`SELECT c.kind,CASE WHEN c.parent_id IS NOT NULL THEN (SELECT title FROM chats WHERE id=c.parent_id)||' › '||c.title ELSE c.title END AS title FROM chats c WHERE c.id=?`).get(job.chat_id);title=chat.kind==='direct'?contactDisplay(row.user_id,m.sender_id,m.name):chat.title;text=m.text?.slice(0,160)||'Новое вложение';}
   }
   try{
