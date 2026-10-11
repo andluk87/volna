@@ -1,3 +1,4 @@
+import {createNewsChannel} from './news.mjs';
 import http from 'node:http';
 import {folders} from './folders.mjs';
 import {contacts} from './contacts.mjs';
@@ -21,7 +22,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => Object.assign(new Error(message), { status });
-export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, smsOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', uploads = process.env.UPLOAD_PATH || join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads'), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
+export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, smsOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', newsEnabled = database!==':memory:'&&process.env.VOLNA_NEWS_CHANNEL!=='0', uploads = process.env.UPLOAD_PATH || join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads'), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
   if (database !== ':memory:') mkdirSync(dirname(database), { recursive: true });
   const db = new DatabaseSync(database);
   const legacy = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
@@ -39,12 +40,14 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
     CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires);`);
   // New IDs cannot accidentally reuse legacy Android cache/account IDs.
   if (!db.prepare("SELECT 1 FROM sqlite_sequence WHERE name='users'").get()) db.prepare("INSERT INTO sqlite_sequence(name,seq) VALUES('users',?)").run(randomInt(1000000000,2000000000));
+  if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='last_seen'))db.exec('ALTER TABLE users ADD COLUMN last_seen INTEGER');
   initAdminSchema(db);
   const streams = new Map(), limits = new Map();
+  let newsService;
   const userById = (id,own=false) => {
-    const row=db.prepare('SELECT id,username,name,bio,avatar_id,avatar_hidden,phone FROM users WHERE id=?').get(id);
+    const row=db.prepare('SELECT id,username,name,bio,avatar_id,avatar_hidden,phone,last_seen FROM users WHERE id=?').get(id);
     if(!row)return;
-    const user={id:row.id,username:row.username,name:row.name,bio:row.bio,online:!!streams.get(row.id)?.size};
+    const user={id:row.id,username:row.username,name:row.name,bio:row.bio,online:!!streams.get(row.id)?.size,last_seen:row.last_seen};
     if(own)user.phone=row.phone;
     user.avatar_url=row.avatar_hidden?null:row.avatar_id?`/api/files/${row.avatar_id}`:null;
     return usernameService?.decorate(user)||user;
@@ -57,7 +60,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
     const session = db.prepare('SELECT * FROM sessions WHERE token=? AND expires>?').get(digest(token), Date.now());
     if (!session) throw fail(401, 'Войдите в аккаунт заново');
     if(db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(session.user_id)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');
-    mobileService?.touch(req,session);
+    mobileService?.touch(req,session);newsService?.enroll(session.user_id);
     return session;
   };
   const member = (chat, user) => {
@@ -72,6 +75,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
       if (!res.write(`data: ${JSON.stringify(contactService?.personalize(id,visible)||visible)}\n\n`)) res.end();
     }
   };
+  const presenceChanged=uid=>{const viewers=db.prepare("SELECT DISTINCT other.user_id FROM members me JOIN members other ON me.chat_id=other.chat_id JOIN chats c ON c.id=me.chat_id WHERE c.kind='direct' AND me.user_id=? AND other.user_id<>?").all(uid,uid).map(row=>row.user_id).filter(id=>contactService?.canSeePresence(id,uid));publish(viewers,{type:'chats'});};
   let pushService;
   const broadcast = (chat, event) => {const users=db.prepare('SELECT user_id FROM members WHERE chat_id=?').all(chat).map(x=>x.user_id);if(['message','message-update'].includes(event.type)){for(const uid of users)publish([uid],{...event,notify:topicNotification(db,chat,uid,event.message.text)});if(event.type==='message')pushService?.message(chat,event.message);}else publish(users,event);};
   const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(contactService?.personalize(res.volnaViewer,data)||data)); };
@@ -102,6 +106,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
     disconnect:(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();}});
   contactService=contacts({db,body,json,publish,userById});
   const adminService=createAdminServer({db,smsOptions,uploads,json,body,publish,broadcast,hydrate:handleMessaging.hydrate,userById,disconnectUser:uid=>{for(const stream of streams.get(uid)||[])stream.end();},cleanupFiles:handleMessaging.cleanupUnused,callService,...adminOptions});
+  if(newsEnabled)newsService=createNewsChannel({db,uploads});
   const cleanup = setInterval(() => {
     const now = Date.now(); for (const [key, entry] of limits) if (entry.until < now) limits.delete(key);
     phoneService.cleanup(); adminService.cleanup();
@@ -139,9 +144,9 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
         const list = streams.get(uid) || new Set(); if (list.size >= 8) throw fail(429, 'Слишком много подключений');
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
         res.sessionToken = session.token; res.sessionExpires = session.expires;
-        list.add(res); streams.set(uid, list); res.write('data: {"type":"ready"}\n\n');
+        list.add(res); streams.set(uid, list);if(list.size===1)presenceChanged(uid); db.prepare('UPDATE users SET last_seen=? WHERE id=?').run(Date.now(),uid);res.write('data: {"type":"ready"}\n\n');
         const heartbeat = setInterval(() => { if (!res.write(': heartbeat\n\n')) res.end(); }, 20000);
-        res.on('close', () => { clearInterval(heartbeat); list.delete(res); if (!list.size) streams.delete(uid); }); return;
+        res.on('close', () => { clearInterval(heartbeat); list.delete(res); if (!list.size) {streams.delete(uid);db.prepare('UPDATE users SET last_seen=? WHERE id=?').run(Date.now(),uid);presenceChanged(uid);} }); return;
       }
       limit(`user:${uid}`, 240);
       if (await contactService.handle(req,res,url,uid)) return;

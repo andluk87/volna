@@ -50,9 +50,9 @@ export function contacts({db,body,json,publish,userById}) {
   if(!uid||value==null||typeof value!=='object')return value;
   if(Array.isArray(value))return value.map(x=>personalize(uid,x));
   const result=Object.fromEntries(Object.entries(value).map(([k,v])=>[k,personalize(uid,v)]));
-  if(result.id&&result.username&&typeof result.online==='boolean'&&result.id!==uid){if(!canSeePresence(uid,result.id))result.online=false;}
+  if(result.id&&result.username&&typeof result.online==='boolean'&&result.id!==uid){if(!canSeePresence(uid,result.id)){result.online=false;result.last_seen=null;}}
   if(result.id&&result.username&&typeof result.name==='string'){const name=display(uid,result.id,result.name);if(name!==result.name){result.profile_name=result.name;result.name=name;}}
-  if(result.kind==='direct'&&result.peer_id){if(typeof result.name==='string'){const name=display(uid,result.peer_id,result.name);if(name!==result.name)result.profile_name=result.name;result.name=name;}if(!canSeePresence(uid,result.peer_id))result.peer_online=false;}
+  if(result.kind==='direct'&&result.peer_id){if(typeof result.name==='string'){const name=display(uid,result.peer_id,result.name);if(name!==result.name)result.profile_name=result.name;result.name=name;}if(!canSeePresence(uid,result.peer_id)){result.peer_online=false;result.peer_last_seen=null;}}
   if(result.sender_id&&typeof result.sender_name==='string')result.sender_name=display(uid,result.sender_id,result.sender_name);
   if(result.sender_id&&typeof result.name==='string')result.name=display(uid,result.sender_id,result.name);
   return result;
@@ -143,5 +143,5 @@ export function contacts({db,body,json,publish,userById}) {
   return false;
  }
  const retention=setInterval(()=>{db.prepare('DELETE FROM contact_operations WHERE created<?').run(Date.now()-7*86400000);db.prepare('DELETE FROM contact_queries WHERE created<?').run(Date.now()-86400000);db.prepare('DELETE FROM contact_devices WHERE updated<?').run(Date.now()-180*86400000);},3600000);retention.unref();
- return {handle,personalize,discover,display,close:()=>clearInterval(retention)};
+ return {handle,personalize,discover,display,canSeePresence,close:()=>clearInterval(retention)};
 }

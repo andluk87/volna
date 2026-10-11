@@ -482,9 +482,9 @@ internal fun NativeSettingsCard(content: @Composable ColumnScope.() -> Unit) { N
 
 @Composable
 internal fun NativeSettingRow(icon: ImageVector, title: String, detail: String = "", enabled: Boolean = true, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(36.dp).clip(CircleShape).background(Hover), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Accent, modifier = Modifier.size(21.dp)) }
-        Column(Modifier.weight(1f).padding(start = 12.dp)) { NativeText(title, color = TextMain, fontSize = 15.sp); if (detail.isNotBlank()) NativeText(detail, color = Muted, fontSize = 12.sp) }
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(Hover), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Accent, modifier = Modifier.size(21.dp)) }
+        Column(Modifier.weight(1f).padding(start = 12.dp)) { NativeText(title, color = TextMain, fontSize = 14.sp); if (detail.isNotBlank()) NativeText(detail, color = Muted, fontSize = 12.sp) }
         Icon(Icons.Outlined.ChevronRight, null, tint = Muted, modifier = Modifier.size(20.dp))
     }
 }

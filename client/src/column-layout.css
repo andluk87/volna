@@ -39,3 +39,26 @@
 [data-desktop=true] .main-menu .menu-account small{color:var(--muted)}
 [data-desktop=true] .main-menu .app-menu-content>button:not(.menu-account),[data-desktop=true] .main-menu-more>summary{min-height:40px;padding-top:10px;padding-bottom:10px;font-size:14px}
 [data-desktop=true] .desktop-settings-dialog{width:min(420px,calc(100vw - 32px))}
+
+/* Settings share one navigation surface instead of stacking windows. */
+[data-desktop=true] .settings-row{min-height:40px;padding:8px 20px;margin:0;width:100%;border-radius:0;font-size:14px;gap:18px}
+[data-desktop=true] .settings-row svg{width:20px;height:20px}
+[data-desktop=true] .settings-account strong{font-size:17px}
+[data-desktop=true] .settings-account small{font-size:13px}
+.settings-page{padding:16px 20px;font-size:14px}
+.settings-page p{line-height:1.5;color:var(--muted)}
+.settings-page label{display:flex;gap:10px;margin:14px 0;align-items:center}
+.settings-page button{padding:10px 12px;color:var(--accent);text-align:left}
+.settings-page select{max-width:100%}
+@keyframes volna-menu-enter{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
+@keyframes volna-menu-shade{from{opacity:0}to{opacity:1}}
+html:not([data-animations=false]) .main-menu[open]>.app-menu-content{animation:volna-menu-enter .2s cubic-bezier(.2,.7,.3,1)}
+html:not([data-animations=false]) .main-menu[open]>.desktop-menu-backdrop{animation:volna-menu-shade .2s ease-out}
+@media(prefers-reduced-motion:reduce){.main-menu[open]>.app-menu-content,.main-menu[open]>.desktop-menu-backdrop{animation:none!important}}
+.app-menu-content>button,.message-menu>button,.chat-actions-content>button,.folder-context-menu>button{min-height:34px;padding:7px 12px;font-size:14px;line-height:1.3}
+.app-menu-content>button svg,.chat-actions-content>button svg{width:20px;height:20px}
+[data-desktop=true] .main-menu .app-menu-content>button:not(.menu-account),[data-desktop=true] .main-menu-more>summary{min-height:36px;padding-top:8px;padding-bottom:8px;font-size:14px}
+@media(max-width:760px){[data-desktop=true] .app.chat-open .search-sidebar{display:flex!important;position:fixed;inset:0;z-index:45;width:100%;background:var(--panel)}}
+.call-avatar>.avatar{border:0;box-shadow:none}
+
+.settings-page.user-profile,.settings-page.desktop-calls-dialog{width:100%;max-height:none;overflow:visible}.settings-sidebar .contact-book{width:100%;height:auto;min-height:400px}.settings-sidebar .contact-book>header{display:none}

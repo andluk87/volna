@@ -254,6 +254,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     var updateBusy by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf("") }
     var pendingUpdateFile by remember { mutableStateOf<File?>(null) }
+    val updateOnLaunch = remember { prefs.getLong("update_on_restart", 0) }
     val voicePlayback = remember { NativeVoicePlayback(context) { error = it } }
     var attachmentBatch by remember { mutableStateOf<NativeAttachmentBatch?>(null) }
     var attachmentSending by remember { mutableStateOf(false) }
@@ -290,7 +291,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         else if (release != null && !updateBusy) scope.launch {
             updateBusy = true; updateStatus = "Скачиваем Волна ${release.versionName}…"
             try {
-                val file = File(context.filesDir, "updates/volna-${release.versionCode}.apk")
+                val file = pendingUpdateFile?.takeIf { it.name == "volna-${release.versionCode}.apk" && it.isFile } ?: File(context.filesDir, "updates/volna-${release.versionCode}.apk")
                 withContext(Dispatchers.IO) { api.downloadUpdate(release, file) }
                 pendingUpdateFile = file
                 if (Build.VERSION.SDK_INT >= 26 && !context.packageManager.canRequestPackageInstalls()) {
@@ -303,6 +304,29 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             finally { updateBusy = false }
         }
     }
+    LaunchedEffect(updateAvailable) {
+        val release = updateAvailable ?: return@LaunchedEffect
+        if (updateBusy) return@LaunchedEffect
+        updateBusy = true; updateStatus = "Скачиваем Волна ${release.versionName}…"
+        try {
+            val file = File(context.filesDir, "updates/volna-${release.versionCode}.apk")
+            withContext(Dispatchers.IO) { api.downloadUpdate(release, file) }
+            pendingUpdateFile = file; updateStatus = "Обновление скачано и проверено"
+
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (problem: Exception) { updateStatus = problem.message ?: "Не удалось скачать обновление" }
+        finally { updateBusy = false }
+    }
+
+    LaunchedEffect(pendingUpdateFile, updateBusy, callState.call?.id, attachmentSending) {
+        val release = updateAvailable
+        if (release != null && updateOnLaunch == release.versionCode && prefs.getLong("update_on_restart", 0) == release.versionCode && pendingUpdateFile?.isFile == true && !updateBusy && callState.call == null && !attachmentSending) {
+            prefs.edit().remove("update_on_restart").apply()
+            dismissedUpdate = release.versionCode
+            installUpdate(release)
+        }
+    }
+
     DisposableEffect(Unit) { onDispose { voicePlayback.close() } }
     LaunchedEffect(token, selectedChat?.id) { voicePlayback.stop() }
     LaunchedEffect(callState.call?.id) {
@@ -314,7 +338,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             busy = true; error = ""
             try {
                 val files = withContext(Dispatchers.IO) { selectedAttachments(context.contentResolver, uris) }.map { file ->
-                    if (pickedKind == "sticker") file.copy(name = "Стикер-${file.name}", mime = "image/webp") else file
+                    if (pickedKind == "sticker") file.copy(name = "Стикер-${file.name}", mime = "image/webp") else file.copy(optimizePhoto = pickedKind != "file" && file.mime.startsWith("image/") && file.mime != "image/gif")
                 }
                 if (selectedChat?.id != chatId) throw IllegalStateException("Чат изменился. Выберите вложения ещё раз.")
                 attachmentBatch = NativeAttachmentBatch(chatId, files, pickedCaption, pickedReply, pickedOnSent ?: {})
@@ -348,7 +372,8 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                 batch.files.forEachIndexed { index, file ->
                     attachmentStatus = "Загрузка ${index + 1} из ${batch.files.size}"
                     if (batch.uploads[index] == null) batch.uploads[index] = withContext(Dispatchers.IO) {
-                        api.upload(session, file.name, file.mime, readAttachment(context.contentResolver, file.uri))
+                        if (file.optimizePhoto) api.upload(session, file.name.substringBeforeLast('.', file.name) + ".jpg", "image/jpeg", profilePhoto(context, file.uri, 1600, 80))
+                        else api.upload(session, file.name, file.mime, readAttachment(context.contentResolver, file.uri))
                     }
                     withContext(Dispatchers.IO) { NativeVoiceOutbox.save(batch) }
                 }
@@ -816,10 +841,10 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                 }, confirmButton = { TextButton(onClick = { clipboard.setText(AnnotatedString(callDiagnosticReport)); Toast.makeText(context, "Диагностика скопирована", Toast.LENGTH_SHORT).show() }) { NativeText("Копировать") } },
                     dismissButton = { TextButton(onClick = { callDiagnosticsOpen = false }) { NativeText("Закрыть") } })
             }
-            updateAvailable?.takeIf { it.versionCode != dismissedUpdate && callState.call == null && !attachmentSending && !updateBusy }?.let { release ->
-                AlertDialog(onDismissRequest = { dismissedUpdate = release.versionCode }, title = { NativeText("Вышла новая версия") }, text = { NativeText("Доступна Волна ${release.versionName}. Давайте обновимся? Приложение скачает обновление и откроет установку Android.") },
-                    confirmButton = { TextButton(onClick = { dismissedUpdate = release.versionCode; installUpdate(release) }) { NativeText("Обновить") } },
-                    dismissButton = { TextButton(onClick = { dismissedUpdate = release.versionCode }) { NativeText("Позже") } })
+            updateAvailable?.takeIf { it.versionCode != dismissedUpdate && pendingUpdateFile?.name == "volna-${it.versionCode}.apk" && callState.call == null && !attachmentSending && !updateBusy }?.let { release ->
+                AlertDialog(onDismissRequest = { prefs.edit().putLong("update_on_restart", release.versionCode).apply(); dismissedUpdate = release.versionCode }, title = { NativeText("Вышла новая версия") }, text = { NativeText("Волна ${release.versionName} скачана и проверена. Обновить сейчас или при следующем запуске?") },
+                    confirmButton = { TextButton(onClick = { dismissedUpdate = release.versionCode; installUpdate(release) }) { NativeText("Обновить сейчас") } },
+                    dismissButton = { TextButton(onClick = { prefs.edit().putLong("update_on_restart", release.versionCode).apply(); dismissedUpdate = release.versionCode }) { NativeText("При следующем запуске") } })
             }
             val forwarding = forwardTargetMessage
             if (forwarding != null) {

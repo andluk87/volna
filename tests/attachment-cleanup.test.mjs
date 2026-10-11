@@ -11,7 +11,7 @@ test('startup and subsequent uploads retain old pack, avatar, message and foreig
  const directory=mkdtempSync(join(tmpdir(),'volna-cleanup-')),database=join(directory,'volna.db'),uploads=join(directory,'uploads');
  mkdirSync(uploads);let app;
  try{
-  app=createApp({database,uploads});await listen(app);
+  app=createApp({database,uploads,newsEnabled:false});await listen(app);
   app.db.prepare('INSERT INTO users(id,username,name,phone) VALUES(1,?,?,?)').run('cleanup','Cleanup','+79001234567');
   const old=Date.now()-2*86400000,ids={};let counter=1;
   function attachment(name,created=old){const id=(counter++).toString(16).padStart(48,'0');ids[name]=id;const bytes=Buffer.from('original '+name);writeFileSync(join(uploads,id),bytes);app.db.prepare('INSERT INTO attachments(id,owner_id,name,mime,size,created_at) VALUES(?,?,?,?,?,?)').run(id,1,name,'image/png',bytes.length,created);return id;}
@@ -31,7 +31,7 @@ test('startup and subsequent uploads retain old pack, avatar, message and foreig
   attachment('blocked-path');unlinkSync(join(uploads,ids['blocked-path']));mkdirSync(join(uploads,ids['blocked-path']));
   await app.close();app=null;
   for(let restart=0;restart<2;restart++){
-   app=createApp({database,uploads});const base=await listen(app);
+   app=createApp({database,uploads,newsEnabled:false});const base=await listen(app);
    assert.equal((await fetch(base+'/api/health')).status,200);
    for(const name of ['emoji','sticker','gif','avatar','message','foreign-key','recent']){
     assert.ok(app.db.prepare('SELECT 1 FROM attachments WHERE id=?').get(ids[name]),name+' database row');

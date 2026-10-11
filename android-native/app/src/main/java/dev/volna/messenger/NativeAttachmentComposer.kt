@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import java.util.UUID
 
-internal data class NativeSelectedAttachment(val uri: Uri, val name: String, val mime: String)
+internal data class NativeSelectedAttachment(val uri: Uri, val name: String, val mime: String, val optimizePhoto: Boolean = false)
 internal class NativeAttachmentBatch(val chatId: Long, val files: List<NativeSelectedAttachment>, val initialCaption: String, val replyId: Long?, val onSent: () -> Unit,
     val clientId: String = UUID.randomUUID().toString().replace("-", ""), val voiceFile: java.io.File? = null, val account: Long = 0) {
     val uploads = mutableMapOf<Int, String>()

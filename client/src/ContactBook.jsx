@@ -4,10 +4,10 @@ import {Icon,Avatar} from './ui';
 import Dialog from './Dialog';
 import './contact-book.css';
 import {cachedContactBook,refreshContactBook} from './contact-sync.mjs';
-export default function ContactBook({token,me,onClose,onStart,onProfile,onCall}){
+export default function ContactBook({token,me,onClose,onStart,onProfile,onCall,settingsInitially=false}){
  const key='volna-contact-book:'+me?.id,queueKey=key+':pending';
  const cached=()=>cachedContactBook(me?.id);
- const [book,setBook]=useState(cached),[query,setQuery]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[editing,setEditing]=useState(null),[name,setName]=useState(''),[manual,setManual]=useState(false),[phone,setPhone]=useState(''),[purge,setPurge]=useState(false),[settings,setSettings]=useState(false);
+ const [book,setBook]=useState(cached),[query,setQuery]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[editing,setEditing]=useState(null),[name,setName]=useState(''),[manual,setManual]=useState(false),[phone,setPhone]=useState(''),[purge,setPurge]=useState(false),[settings,setSettings]=useState(settingsInitially);
  useEffect(()=>{let alive=true,running=false;async function refresh(){if(running)return;running=true;try{
   const current=await refreshContactBook(token,me?.id);if(alive){setBook(current);setError('');}
  }catch(e){if(alive){setBook(e.contactBook||cached());setError(e.message);}}finally{running=false;}}

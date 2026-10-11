@@ -35,7 +35,7 @@ data class VolnaChat(
     val muted: Boolean = false,
     val pinned: Boolean = false,
     val role: String = "member", val canSend: Boolean = true, val memberCount: Int = 0,
-    val avatarUrl: String? = null, val lastId: Long = 0, val lastSenderId: Long = 0, val peerOnline: Boolean = false, val parentId: Long = 0, val topicClosed: Boolean = false, val isContact: Boolean = false, val manualUnread: Boolean = false
+    val avatarUrl: String? = null, val lastId: Long = 0, val lastSenderId: Long = 0, val peerOnline: Boolean = false, val parentId: Long = 0, val topicClosed: Boolean = false, val isContact: Boolean = false, val manualUnread: Boolean = false, val peerLastSeen: Long = 0
 )
 data class VolnaReaction(val emoji: String, val userId: Long, val name: String)
 data class VolnaReply(val id: Long, val name: String, val text: String, val deleted: Boolean)
@@ -161,6 +161,12 @@ class NativeApi(baseUrl: String) {
     }
 
     fun downloadUpdate(update: VolnaUpdate, destination: File) {
+        if (destination.isFile && destination.length() > 0) {
+            val digest = MessageDigest.getInstance("SHA-256")
+            destination.inputStream().use { input -> val buffer = ByteArray(64 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; digest.update(buffer, 0, count) } }
+            if (digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) } == update.sha256) return
+            destination.delete()
+        }
         try {
             val request = Request.Builder().url(base + update.apkPath).header("Accept", "application/vnd.android.package-archive").build()
             http.newCall(request).execute().use { response ->
@@ -218,7 +224,7 @@ class NativeApi(baseUrl: String) {
                     (if (row.isNull("last_text")) "" else row.optString("last_text")), (if (row.isNull("last_at")) "" else row.optString("last_at")), row.optInt("unread"),
                     row.optInt("saved") == 1, row.optLong("peer_id"), row.optLong("peer_read"), row.optLong("peer_delivered", row.optLong("peer_read")),
                     row.optString("kind", "direct"), row.optInt("archived") == 1, row.optInt("muted") == 1, row.optInt("pinned") == 1,
-                    row.optString("role", "member"), row.optInt("can_send", 1) == 1, row.optInt("member_count"), nullableText(row, "avatar_url"), row.optLong("last_id"), row.optLong("last_sender_id"), row.optBoolean("peer_online"), row.optLong("parent_id"), row.optInt("topic_closed")==1, row.optBoolean("is_contact"), row.optInt("manual_unread") == 1)
+                    row.optString("role", "member"), row.optInt("can_send", 1) == 1, row.optInt("member_count"), nullableText(row, "avatar_url"), row.optLong("last_id"), row.optLong("last_sender_id"), row.optBoolean("peer_online"), row.optLong("parent_id"), row.optInt("topic_closed")==1, row.optBoolean("is_contact"), row.optInt("manual_unread") == 1, row.optLong("peer_last_seen"))
             }
         }
     }

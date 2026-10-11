@@ -66,11 +66,16 @@ internal fun CallAlertsSettings(automatic: Boolean = false) {
         (manager.getNotificationChannel(MessagingService.CHANNEL_ID)?.importance ?: NotificationManager.IMPORTANCE_HIGH) >= NotificationManager.IMPORTANCE_HIGH &&
         (manager.getNotificationChannel(NativeCalls.CALL_CHANNEL)?.importance ?: NotificationManager.IMPORTANCE_HIGH) >= NotificationManager.IMPORTANCE_HIGH }
     var open by remember { mutableStateOf(false) }
-    var prompted by remember { mutableStateOf(false) }
+    val setup = remember { context.getSharedPreferences("volna-notification-setup", Context.MODE_PRIVATE) }
+    var prompted by remember { mutableStateOf(setup.getBoolean("startup_prompted", setup.getBoolean("requested", false))) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { revision++ }
     LaunchedEffect(revision, automatic) {
-        if (automatic && !ready && !prompted) {
+        if (automatic && ready && !prompted) {
             prompted = true
+            setup.edit().putBoolean("startup_prompted", true).apply()
+        } else if (automatic && !ready && !prompted) {
+            prompted = true
+            setup.edit().putBoolean("startup_prompted", true).apply()
             open = true
         }
     }

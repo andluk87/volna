@@ -3,7 +3,7 @@ import {createApp as realCreateApp} from '../server/index.mjs';
 const apps=new Set();let next=1000000;
 export function createApp(options={}) {
  const sent=new Map();let now=Date.now();
- const app=realCreateApp({...options,phoneAuthOptions:{smsReady:true,sender:async row=>{sent.set(row.id,row.code);return {id:'test'};},clock:()=>now}});
+ const app=realCreateApp({newsEnabled:false,...options,phoneAuthOptions:{smsReady:true,sender:async row=>{sent.set(row.id,row.code);return {id:'test'};},clock:()=>now}});
  app.testPhones=new Map();app.testSent=sent;app.testAdvance=()=>{now+=3600001;};apps.add(app);
  const close=app.close;app.close=async()=>{apps.delete(app);await close();};return app;
 }

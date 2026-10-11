@@ -48,7 +48,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
     CASE WHEN c.kind IN ('group','channel') THEN c.id ELSE COALESCE(peer.id,?) END AS peer_id,
     CASE WHEN c.parent_id IS NOT NULL THEN (SELECT title FROM chats WHERE id=c.parent_id)||' › '||c.title WHEN c.kind='saved' THEN 'Избранное' WHEN c.kind IN ('group','channel') THEN c.title ELSE peer.name END AS name,
     CASE WHEN c.kind='direct' THEN peer.username ELSE c.kind END AS username,
-    CASE WHEN c.kind='direct' AND peer.avatar_hidden=0 THEN CASE WHEN peer.avatar_id IS NOT NULL THEN '/api/files/'||peer.avatar_id ELSE NULL END END AS avatar_url,
+    CASE WHEN c.pair='official-volna-news' THEN '/icons/icon-192.png' WHEN c.kind='direct' AND peer.avatar_hidden=0 THEN CASE WHEN peer.avatar_id IS NOT NULL THEN '/api/files/'||peer.avatar_id ELSE NULL END END AS avatar_url,
     CASE WHEN c.kind='saved' THEN 1 ELSE 0 END AS saved,
     CASE WHEN c.topic_closed=1 OR c.admin_locked=1 OR COALESCE((SELECT admin_locked FROM chats WHERE id=c.parent_id),0)=1 THEN 0 WHEN (c.kind='channel' OR c.kind='group' AND c.posting_policy='admins') AND me.role NOT IN ('owner','admin') THEN 0 ELSE 1 END AS can_send,
     (SELECT COUNT(*) FROM members WHERE chat_id=c.id) AS member_count,
@@ -66,7 +66,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
     ORDER BY saved DESC,pinned DESC,COALESCE(last_at,'') DESC,c.id DESC`).all(uid,uid,uid,uid,uid);
    const topicUnread=new Map(),latestTopic=new Map();for(const row of rows)if(row.parent_id){topicUnread.set(row.parent_id,(topicUnread.get(row.parent_id)||0)+row.unread);if(row.last_at&&row.last_at>(latestTopic.get(row.parent_id)?.last_at||''))latestTopic.set(row.parent_id,row);}
    const contactIds=new Set(db.prepare("SELECT linked FROM account_contacts WHERE owner=? AND deleted=0 AND linked IS NOT NULL").all(uid).map(c=>c.linked));
-   const result=rows.map(row=>{const topic=latestTopic.get(row.id);return {...row,is_contact:contactIds.has(row.peer_id),...(topic&&topic.last_at>(row.last_at||'')?{last_at:topic.last_at,last_id:topic.last_id,last_sender_id:topic.last_sender_id,last_text:topic.topic_name+': '+(topic.last_text||'Вложение'),peer_read:topic.peer_read,peer_delivered:topic.peer_delivered}:{}),unread:row.unread+(topicUnread.get(row.id)||0),peer_online:row.kind==='direct'&&online(row.peer_id)};});
+   const result=rows.map(row=>{const topic=latestTopic.get(row.id);return {...row,is_contact:contactIds.has(row.peer_id),...(topic&&topic.last_at>(row.last_at||'')?{last_at:topic.last_at,last_id:topic.last_id,last_sender_id:topic.last_sender_id,last_text:topic.topic_name+': '+(topic.last_text||'Вложение'),peer_read:topic.peer_read,peer_delivered:topic.peer_delivered}:{}),unread:row.unread+(topicUnread.get(row.id)||0),peer_online:row.kind==='direct'&&online(row.peer_id),peer_last_seen:row.kind==='direct'?userById(row.peer_id)?.last_seen??null:null};});
    result.sort((a,b)=>b.saved-a.saved||b.pinned-a.pinned||(b.last_at||'').localeCompare(a.last_at||'')||b.id-a.id);json(res,200,result);return true;
   }
   const historyMatch=path.match(/^\/api\/chats\/(\d+)\/(clear-history|delete-chat)$/);

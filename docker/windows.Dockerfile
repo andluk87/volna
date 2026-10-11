@@ -12,7 +12,7 @@ COPY client/electron/ ./electron/
 COPY client/scripts/ ./scripts/
 COPY client/public/boot.js client/public/manifest.webmanifest client/public/appearance-sample.wav ./public/
 COPY client/public/icons/ ./public/icons/
-COPY client/public/demo/ ./public/demo/
+COPY client/public/site/ ./public/site/
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 RUN node -e "if(!/^https:\/\//.test(process.env.VITE_API_URL || '')) throw Error('Set VITE_API_URL=https://your-server in .env')"

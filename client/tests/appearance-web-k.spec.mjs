@@ -8,7 +8,7 @@ test.beforeEach(async({page},info)=>{
  await openAppearance(page);
 });
 test.afterEach(async({page})=>expect(errors.get(page)).toEqual([]));
-async function openAppearance(page){await page.getByLabel('Настройки и действия',{exact:true}).click();await page.getByRole('button',{name:'Внешний вид',exact:true}).click();}
+async function openAppearance(page){await page.getByLabel('Настройки и действия',{exact:true}).click();await page.getByLabel('Ещё',{exact:true}).click();await page.getByRole('button',{name:'Внешний вид',exact:true}).click();}
 async function preferences(page){return page.evaluate(()=>JSON.parse(localStorage.getItem('volna.appearance')));}
 async function reopen(page){await page.reload();const demo=page.getByRole('button',{name:'Открыть демо',exact:true});if(await demo.isVisible())await demo.click();await openAppearance(page);}
 async function chat(page){await page.getByRole('button',{name:'Назад к настройкам',exact:true}).click();await page.getByRole('button',{name:'Назад к чатам',exact:true}).click();await page.locator('.chat-row').filter({hasText:'Анна Смирнова'}).first().click();}

@@ -1,34 +1,31 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {request,uploadFile} from './api';
 import Dialog from './Dialog';
+import {preparePhoto} from './prepare-photo.mjs';
 import {Avatar} from './ui';
 import './profile.css';
 
-export default function Profile({id,me,token,revision,onClose,onSaved}){
+export default function Profile({id,me,token,revision,onClose,onSaved,inline=false}){
  const own=id===me.id,[user,setUser]=useState(null),[name,setName]=useState(''),[bio,setBio]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[saved,setSaved]=useState(false);
  const [username,setUsername]=useState(''),[usernameStatus,setUsernameStatus]=useState(null);
  const [phoneChange,setPhoneChange]=useState(false),[newPhone,setNewPhone]=useState(''),[smsCode,setSmsCode]=useState(''),[phoneChallenge,setPhoneChallenge]=useState('');
  const [contact,setContact]=useState(null),[alias,setAlias]=useState('');
- const dirty=useRef(false),usernameDirty=useRef(false),dialog=useRef(null);
+ const dirty=useRef(false),usernameDirty=useRef(false);
  useEffect(()=>{const controller=new AbortController();request('/users/'+id,token,undefined,controller.signal).then(u=>{setUser(u);if(!usernameDirty.current)setUsername(u.username);if(!dirty.current){setName(u.name);setBio(u.bio);}}).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>controller.abort();},[id,token,revision]);
- useEffect(()=>{const before=document.activeElement;dialog.current?.querySelector('button')?.focus();return()=>before?.focus();},[]);
  useEffect(()=>{if(!own||!username)return;const controller=new AbortController();setUsernameStatus(null);const timer=setTimeout(()=>request('/users/username/check?username='+encodeURIComponent(username),token,undefined,controller.signal).then(setUsernameStatus).catch(e=>{if(e.name!=='AbortError')setUsernameStatus({reason:e.message});}),300);return()=>{clearTimeout(timer);controller.abort();};},[own,username,token]);
  async function changeUsername(){setBusy(true);setError('');try{const result=await request('/users/me/username',token,{username},undefined,'PATCH');setUser(result.user);usernameDirty.current=false;setUsername(result.username);onSaved(result.user);}catch(e){setError(e.message);if(e.suggestions)setUsernameStatus({available:false,suggestions:e.suggestions});}finally{setBusy(false);}}
  async function save(e){e.preventDefault();setBusy(true);setError('');setSaved(false);try{const u=await request('/profile',token,{name,bio});setUser(u);setName(u.name);setBio(u.bio);dirty.current=false;setSaved(true);onSaved(u);}catch(e){setError(e.message);}finally{setBusy(false);}}
  async function photo(file,hide=false){
   if(busy||!user)return;setBusy(true);setError('');setSaved(false);let uploaded;
   try{
-   if(file){if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024)throw Error('Фото профиля: PNG, JPEG или WebP, до 5 МБ');uploaded=await uploadFile(file,token);}
+   if(file){if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>30*1024*1024)throw Error('Фото профиля: PNG, JPEG или WebP, до 30 МБ');uploaded=await uploadFile(await preparePhoto(file),token);}
    const updated=await request('/profile',token,{name:user.name,bio:user.bio,avatar_id:uploaded?.id||null,avatar_hidden:hide});setUser(updated);onSaved(updated);
   }catch(e){if(uploaded)request('/uploads/'+uploaded.id+'/discard',token,{}).catch(()=>{});setError(e.message);}finally{setBusy(false);}
  }
  async function changePhone(){setBusy(true);setError('');try{if(!phoneChallenge){const result=await request('/auth/phone/change/request',token,{phone:newPhone});setPhoneChallenge(result.sms_session_id);}else{const result=await request('/auth/phone/change/verify',token,{sms_session_id:phoneChallenge,code:smsCode});setUser(result.user);onSaved(result.user);setPhoneChange(false);}}catch(e){setError(e.message);}finally{setBusy(false);}}
  async function editContact(){try{const row=await request('/contacts/link',token,{user_id:id});setContact(row);setAlias(row.custom_name||'');}catch(e){setError(e.message);}}
  async function saveContact(){setBusy(true);try{await request(`/contacts/${contact.contact_id}/name`,token,{version:contact.version,custom_name:alias});setContact(null);setUser(await request('/users/'+id,token));window.dispatchEvent(new Event('volna-contacts-updated'));}catch(e){setError(e.message);}finally{setBusy(false);}}
- function key(e){if(e.key==='Escape'&&!busy)onClose();if(e.key==='Tab'){const nodes=[...dialog.current.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),a[href],select:not(:disabled)')];const first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}}
- return <div className="modal-backdrop"><section ref={dialog} className="modal user-profile" role="dialog" aria-modal="true" aria-labelledby="profile-title" onKeyDown={key}>
-  <button className="icon-button profile-close" disabled={busy} aria-label="Закрыть профиль" onClick={onClose}>×</button>
-  <h2 id="profile-title">{own?'Мой профиль':'Профиль'}</h2>{error&&<p className="error" role="alert">{error}</p>}
+ return <Dialog inline={inline} title={own?'Мой профиль':'Профиль'} closeLabel="Закрыть профиль" className="user-profile" onClose={()=>{if(!busy)onClose();}}>{error&&<p className="error" role="alert">{error}</p>}
   {user?<>
    <Avatar name={user.name} id={user.id} src={user.avatar_url} token={token}/><h3>{user.name}</h3><p><a href={user.profile_url} target="_blank" rel="noreferrer">@{user.username}</a></p>
    {own&&<div className="profile-photo-actions"><label className="secondary">Выбрать фото<input type="file" aria-label="Фото профиля" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e=>{const file=e.target.files[0];e.target.value='';if(file)photo(file);}}/></label>{user.avatar_url&&<button className="secondary" disabled={busy} onClick={()=>photo(null,true)}>Убрать фото</button>}</div>}
@@ -45,5 +42,5 @@ export default function Profile({id,me,token,revision,onClose,onSaved}){
    {phoneChange&&<Dialog title="Изменить номер телефона" onClose={()=>!busy&&setPhoneChange(false)}><p>История и контакты сохранятся в этом аккаунте. Аккаунты разных номеров не объединяются.</p>{error&&<p role="alert" className="error">{error}</p>}{!phoneChallenge?<input aria-label="Новый номер телефона" placeholder="+7 999 123-45-67" value={newPhone} onChange={e=>setNewPhone(e.target.value)}/>:<input aria-label="Код SMS нового номера" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={smsCode} onChange={e=>setSmsCode(e.target.value.replace(/\D/g,''))}/>}<button className="primary" disabled={busy} onClick={changePhone}>{phoneChallenge?'Подтвердить':'Отправить SMS'}</button></Dialog>}
    {own&&user.phone&&<p>Телефон: {user.phone} · подтверждён</p>}
   </>:!error&&<p>Загрузка…</p>}
- </section></div>;
+ </Dialog>;
 }

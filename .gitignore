@@ -14,3 +14,9 @@ data/
 backups/
 *.before-http-fix
 .tmp/
+
+android-native/build/
+client/.desktop-public/
+client/electron/config.json
+client/electron-builder.windows.json
+android-native/.kotlin/

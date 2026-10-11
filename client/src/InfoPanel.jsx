@@ -1,3 +1,4 @@
+import {presenceLabel} from './presence.mjs';
 import React,{useState,useEffect,useRef} from 'react';
 import {request} from './api';
 import {Avatar,Icon} from './ui';
@@ -13,7 +14,7 @@ export default function InfoPanel({docked=false,chat,token,revision,onClose,onPr
  function keys(e){if(e.key==='Escape'){e.stopPropagation();onClose();}if(e.key==='Tab'&&!docked){const items=[...root.current.querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),video[controls]')];const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}
  return <aside className="info-panel" ref={root} role="dialog" aria-label="Информация о чате" aria-modal={!docked||undefined} onKeyDown={keys}>
  <header><button className="icon-button" aria-label="Закрыть информацию" onClick={onClose}><Icon name="close"/></button><h2>{community?'Информация о сообществе':'Информация'}</h2></header>
- <div className="info-scroll"><section className="info-person"><Avatar name={chat.name} id={chat.peer_id||chat.id} src={profile?.avatar_url||chat.avatar_url} token={token}/><h2>{chat.name}</h2><p>{community?`${chat.member_count} участников`:chat.saved?'Сохранённые сообщения':profile?.online?'В сети':'Был(а) недавно'}</p></section>
+ <div className="info-scroll"><section className="info-person"><Avatar name={chat.name} id={chat.peer_id||chat.id} src={profile?.avatar_url||chat.avatar_url} token={token}/><h2>{chat.name}</h2><p>{community?`${chat.member_count} участников`:chat.saved?'Сохранённые сообщения':presenceLabel(profile?.online,profile?.last_seen)}</p></section>
  {error&&<div className="error" role="alert">{error}<button onClick={()=>setAttempt(v=>v+1)}>Повторить</button></div>}
  <div className="info-facts">{profile?.username&&<a href={profile.profile_url||'/'+profile.username} target="_blank" rel="noreferrer"><strong>@{profile.username}</strong><small>Имя пользователя</small></a>}{profile?.phone&&<div><strong>{profile.phone}</strong><small>Телефон</small></div>}{(profile?.bio||profile?.description)&&<div><p>{profile.bio||profile.description}</p><small>О себе</small></div>}
  <label className="info-notifications"><span><Icon name="bell"/>Уведомления</span><input type="checkbox" checked={!chat.muted} onChange={()=>onPreference(chat,{muted:!chat.muted})}/></label>

@@ -112,7 +112,7 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
                 Spacer(Modifier.weight(.25f))
                 Box(Modifier.size(260.dp), contentAlignment = Alignment.Center) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Column { repeat(3) { Icon(Icons.Outlined.Waves, null, tint = Accent.copy(alpha = .18f), modifier = Modifier.padding(8.dp).size(30.dp)) } }; Column { repeat(3) { Icon(Icons.Outlined.Waves, null, tint = Accent.copy(alpha = .18f), modifier = Modifier.padding(8.dp).size(30.dp)) } } }
-                    Box(Modifier.size(214.dp).clip(CircleShape).background(Accent.copy(alpha = .10f)).border(7.dp, Accent.copy(alpha = .08f), CircleShape), contentAlignment = Alignment.Center) { Avatar(call.peer?.name ?: "В", call.peer?.id ?: 0, call.peer?.avatarUrl, token, size = 190.dp) }
+                    Box(Modifier.size(190.dp), contentAlignment = Alignment.Center) { Avatar(call.peer?.name ?: "В", call.peer?.id ?: 0, call.peer?.avatarUrl, token, size = 190.dp) }
                 }
                 NativeText(call.peer?.name ?: "Собеседник", color = TextMain, fontSize = 32.sp, fontWeight = FontWeight.Normal, modifier = Modifier.padding(top = 4.dp))
                 NativeText(nativeCallStatus(state), color = TextMain.copy(alpha = .95f), fontSize = 18.sp, modifier = Modifier.padding(top = 8.dp))

@@ -297,7 +297,10 @@ object NativeCalls {
         audioSource = source
         val track = mediaFactory.createAudioTrack("volna-audio", source)
         audioTrack = track
-        checkNotNull(pc.addTrack(track, listOf("volna"))) { "Не удалось подключить микрофон к звонку" }
+        val audioSender = checkNotNull(pc.addTrack(track, listOf("volna"))) { "Не удалось подключить микрофон к звонку" }
+        val audioParameters = audioSender.parameters
+        audioParameters.encodings.forEach { it.maxBitrateBps = 24_000 }
+        audioSender.setParameters(audioParameters)
         NativeCallDiagnostics.step("Добавление канала демонстрации экрана")
         if (!incoming) checkNotNull(pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV, listOf("volna")))) { "Не удалось подготовить видеоканал" }
         attemptAt = SystemClock.elapsedRealtime()
@@ -400,7 +403,7 @@ object NativeCalls {
             if (!preview) check(sender.setTrack(track, false)) { "Не удалось включить камеру" }
             localVideoSinks.forEach(track::addSink)
             val parameters = sender.parameters
-            parameters.encodings.forEach { it.maxBitrateBps = 800_000; it.maxFramerate = 24 }; sender.setParameters(parameters)
+            parameters.encodings.forEach { it.maxBitrateBps = 400_000; it.maxFramerate = 15 }; sender.setParameters(parameters)
             mutableState.update { it.copy(cameraEnabled = !preview, cameraPreview = preview, cameraFront = enumerator.isFrontFacing(name), error = "") }
             if (!preview) signalCamera(true)
         } catch (problem: Exception) { stopCamera(); mutableState.update { it.copy(error = problem.message ?: "Не удалось включить камеру") } }
@@ -626,7 +629,7 @@ object NativeCalls {
         return withTimeoutOrNull(15_000) {
             suspendCancellableCoroutine<JSONObject> { result ->
                 val observer = object : SdpObserver {
-                    override fun onCreateSuccess(description: SessionDescription?) { if (result.isActive) { if (description == null) result.resumeWithException(IllegalStateException("Нет SDP")) else result.resume(JSONObject().put("type", description.type.canonicalForm()).put("sdp", description.description)) } }
+                    override fun onCreateSuccess(description: SessionDescription?) { if (result.isActive) { if (description == null) result.resumeWithException(IllegalStateException("Нет SDP")) else result.resume(JSONObject().put("type", description.type.canonicalForm()).put("sdp", economicalAudioSdp(description.description))) } }
                     override fun onCreateFailure(message: String?) { if (result.isActive) result.resumeWithException(IllegalStateException(message ?: "Не удалось подготовить звонок")) }
                     override fun onSetSuccess() { }
                     override fun onSetFailure(message: String?) { }

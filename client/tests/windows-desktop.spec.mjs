@@ -28,7 +28,7 @@ test('Windows has desktop rows, full-width composer and settings without replaci
 });
 test('Windows menu is a left drawer and closes through its backdrop',async({page})=>{
  await page.getByLabel('Настройки и действия',{exact:true}).click();
- const menu=await page.locator('.app-menu-content').boundingBox();expect(menu.x).toBe(0);expect(menu.y).toBe(0);expect(menu.width).toBe(274);
+ await expect.poll(async()=>Math.round((await page.locator('.app-menu-content').boundingBox()).x)).toBe(0);const menu=await page.locator('.app-menu-content').boundingBox();expect(Math.round(menu.x)).toBe(0);expect(menu.y).toBe(0);expect(menu.width).toBe(274);
  await page.mouse.click(page.viewportSize().width-10,200);await expect(page.locator('.main-menu')).not.toHaveAttribute('open','');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

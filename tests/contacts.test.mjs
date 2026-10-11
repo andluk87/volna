@@ -78,9 +78,9 @@ test('contacts: hidden matches become visible only when discovery permits, witho
  await req('/contacts/settings',b.token,{discovery:'everyone'});const book=(await req('/contacts/book',a.token)).data;assert.equal(book.contacts[0].contact_id,row.contact_id);assert.equal(book.contacts[0].linked_user_id,b.user.id);
 });
 test('contacts: unauthenticated requests denied, private presence and stable links require no exposed phone',async t=>{
- const {req,users:[a,b,c]}=await fixture(t);assert.equal((await req('/contacts/book')).status,401);assert.equal((await req('/contacts/sync','',{})).status,401);
+ const {app,req,users:[a,b,c]}=await fixture(t);app.db.prepare('UPDATE users SET last_seen=? WHERE id=?').run(1730000000000,b.user.id);assert.equal((await req(`/users/${b.user.id}`,a.token)).data.last_seen,1730000000000);assert.equal((await req('/contacts/book')).status,401);assert.equal((await req('/contacts/sync','',{})).status,401);
  const row=(await req('/contacts/link',a.token,{user_id:b.user.id})).data;assert.deepEqual(row.phone_numbers,[]);assert.equal(row.linked_user_id,b.user.id);assert.equal((await req('/contacts/link',a.token,{user_id:b.user.id})).data.contact_id,row.contact_id);
- await req('/contacts/settings',b.token,{presence:'nobody'});const visible=(await req(`/users/${b.user.id}`,a.token)).data;assert.equal(visible.online,false);assert.equal(visible.phone,undefined);
+ await req('/contacts/settings',b.token,{presence:'nobody'});const visible=(await req(`/users/${b.user.id}`,a.token)).data;assert.equal(visible.online,false);assert.equal(visible.last_seen,null);assert.equal(visible.phone,undefined);
  assert.equal((await req(`/contacts/${row.contact_id}/delete`,c.token,{version:row.version})).status,404);
 });
 test('contacts: duplicate phone sources share stable records and one device cannot remove another source',async t=>{
@@ -117,4 +117,12 @@ test('contacts: online privacy masks an active SSE connection independently from
  await req('/contacts/settings',a.token,{discovery:'nobody'});const hidden=await manual(req,b,a.user.phone,'Личный контакт');assert.equal(hidden.data.linked_user_id,null);
  assert.equal((await req(`/users/${b.user.id}`,a.token)).data.online,true);assert.equal((await req(`/users/${b.user.id}`,c.token)).data.online,false);
  await req('/contacts/settings',b.token,{presence:'nobody'});assert.equal((await req(`/users/${b.user.id}`,a.token)).data.online,false);controller.abort();
+});
+
+test('presence stays online until the last account connection closes and then records last_seen',async t=>{
+ const {app,req,users:[a,b]}=await fixture(t);await req('/chats',a.token,{user_id:b.user.id});const controllers=[new AbortController(),new AbortController()];t.after(()=>controllers.forEach(c=>c.abort()));
+ for(const controller of controllers){const response=await globalThis.fetch(`http://127.0.0.1:${app.server.address().port}/api/events`,{headers:{Authorization:'Bearer '+b.token},signal:controller.signal});await response.body.getReader().read();}
+ controllers[0].abort();assert.equal((await req(`/users/${b.user.id}`,a.token)).data.online,true);
+ controllers[1].abort();let user;for(let attempt=0;attempt<20;attempt++){user=(await req(`/users/${b.user.id}`,a.token)).data;if(!user.online)break;await new Promise(resolve=>setTimeout(resolve,10));}
+ assert.equal(user.online,false);assert.ok(user.last_seen>Date.now()-5000);await req('/contacts/settings',b.token,{presence:'nobody'});assert.equal((await req(`/users/${b.user.id}`,a.token)).data.last_seen,null);
 });
