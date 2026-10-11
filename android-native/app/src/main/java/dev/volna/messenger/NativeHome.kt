@@ -64,6 +64,46 @@ internal fun ChatListScreen(
     var settings by remember { mutableStateOf("") }
     var accountsOpen by remember { mutableStateOf(false) }
     var folders by remember(user?.id) { mutableStateOf(NativeFolders.load(context, user?.id ?: 0)) }
+    var folderEditing by remember(user?.id) { mutableStateOf(false) }
+    var folderVersion by remember(user?.id) { mutableStateOf(-1L) }
+    var folderBusy by remember(user?.id) { mutableStateOf(false) }
+    var folderError by remember(user?.id) { mutableStateOf("") }
+    suspend fun applyFolderCloud(result: org.json.JSONObject) {
+        val version = result.getLong("version")
+        if (version < folderVersion) return
+        folderVersion = version
+        folders = NativeFolders.decode(result.getJSONArray("folders"))
+        NativeFolders.save(context, user?.id ?: 0, folders)
+    }
+    LaunchedEffect(user?.id, token) {
+        val account = user?.id ?: return@LaunchedEffect
+        val prefs = context.getSharedPreferences("volna-folders-$account", 0)
+        while (true) {
+            if (!folderBusy && !folderEditing) try {
+                var remote = withContext(Dispatchers.IO) { api.folders(token) }
+                if (!prefs.getBoolean("cloud_migrated", false)) {
+                    prefs.edit().putString("legacy_backup", NativeFolders.encode(folders).toString()).apply()
+                    if (remote.getLong("version") == 0L) {
+                        val ids = withContext(Dispatchers.IO) { api.chats(token).map { it.id }.toSet() }
+                        val local = folders.map { it.copy(chats = it.chats.intersect(ids), excluded = it.excluded.intersect(ids), pinned = it.pinned.filter { id -> id in ids }) }
+                        remote = withContext(Dispatchers.IO) { api.saveFolders(token, 0, local) }
+                    }
+                    prefs.edit().putBoolean("cloud_migrated", true).apply()
+                }
+                if (!folderBusy && !folderEditing) applyFolderCloud(remote)
+                folderError = ""
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { if (folderVersion < 0) folderError = e.message ?: "Папки недоступны" }
+            delay(5000)
+        }
+    }
+    suspend fun saveCloudFolders(items: List<NativeFolder>): Boolean {
+        if (folderBusy || folderVersion < 0) return false
+        folderBusy = true
+        return try { val result = withContext(Dispatchers.IO) { api.saveFolders(token, folderVersion, items) }; applyFolderCloud(result); folderError = ""; true }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { folderError = e.message ?: "Не удалось сохранить папки"; if (e is NativeApiException && e.status == 409) runCatching { applyFolderCloud(withContext(Dispatchers.IO) { api.folders(token) }) }; false }
+        finally { folderBusy = false }
+    }
     LaunchedEffect(folders) { if (filter == "all" || filter.startsWith("folder:") && folders.none { "folder:${it.id}" == filter }) filter = folders.firstOrNull()?.let { "folder:${it.id}" } ?: "all" }
     val appearance = LocalNativeAppearance.current
     val motion = LocalMotionEnabled.current
@@ -90,7 +130,7 @@ internal fun ChatListScreen(
                 else -> Column(Modifier.fillMaxSize()) {
                     NativeSearchField(query, onQuery, "Поиск чатов", compact = true)
                     if (query.isBlank()) LazyRow(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(CircleShape).background(Panel.copy(alpha = .64f)), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        items(folders.map { "folder:${it.id}" to it.name }) { (key, label) ->
+                        items(folders.map { "folder:${it.id}" to (it.icon + it.name) }) { (key, label) ->
                             Row(Modifier.clip(CircleShape).background(if (filter == key) Hover else Color.Transparent).clickable { filter = key }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 NativeText(label, color = if (filter == key) Accent else Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                                 val unread = chats.count { it.unread > 0 && if (key.startsWith("folder:")) folders.firstOrNull { f -> "folder:${f.id}" == key }?.let { f -> nativeFolderMatches(f, it) } == true else nativeChatFilter(it, key) }
@@ -101,7 +141,7 @@ internal fun ChatListScreen(
                     if (query.trim().length >= 2) NativeGlobalSearch(query, token, api, chats, people, onSelect, onStartChat, onSearchMessage)
                     else Box(Modifier.weight(1f)) {
                         val folder = folders.firstOrNull { "folder:${it.id}" == filter }
-                        val visible = chats.filter { if (folder != null) nativeFolderMatches(folder, it) else nativeChatFilter(it, filter) }
+                        val visible = chats.filter { if (folder != null) nativeFolderMatches(folder, it) else nativeChatFilter(it, filter) }.let { rows -> if (folder == null) rows else rows.sortedBy { folder.pinned.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE } }
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
                             val archivedCount = chats.count { it.archived }
                             if ((filter == "all" || folder?.rule == "all") && archivedCount > 0) item(key = "archive") {
@@ -211,7 +251,7 @@ internal fun ChatListScreen(
         "notifications" -> NativeNotificationSettings(user?.id ?: 0) { settings = "" }
         "security", "devices" -> NativeSessionsScreen(token, api, onScanQr) { settings = "" }
         "storage" -> NativeStorageScreen { settings = "" }
-        "folders" -> NativeFoldersDialog(user?.id ?: 0, chats, folders, { folders = it; NativeFolders.save(context, user?.id ?: 0, it) }) { settings = "" }
+        "folders" -> NativeFoldersDialog(user?.id ?: 0, chats, folders, { saveCloudFolders(it) }, folderBusy || folderVersion < 0, folderError, { folderEditing = it }) { folderEditing = false; settings = "" }
         "language" -> AlertDialog(onDismissRequest = { settings = "" }, title = { NativeText("Язык") }, text = { NativeText("Русский. Язык клавиатуры и голосового ввода выбирается в настройках Android.") }, confirmButton = { TextButton(onClick = { settings = "" }) { NativeText("Готово") } })
     }
 }

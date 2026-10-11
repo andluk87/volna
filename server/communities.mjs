@@ -63,7 +63,8 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
     WHERE c.topic_deleted=0 AND c.admin_deleted=0
     ORDER BY saved DESC,pinned DESC,COALESCE(last_at,'') DESC,c.id DESC`).all(uid,uid,uid,uid,uid);
    const topicUnread=new Map(),latestTopic=new Map();for(const row of rows)if(row.parent_id){topicUnread.set(row.parent_id,(topicUnread.get(row.parent_id)||0)+row.unread);if(row.last_at&&row.last_at>(latestTopic.get(row.parent_id)?.last_at||''))latestTopic.set(row.parent_id,row);}
-   const result=rows.map(row=>{const topic=latestTopic.get(row.id);return {...row,...(topic&&topic.last_at>(row.last_at||'')?{last_at:topic.last_at,last_id:topic.last_id,last_sender_id:topic.last_sender_id,last_text:topic.topic_name+': '+(topic.last_text||'Вложение'),peer_read:topic.peer_read,peer_delivered:topic.peer_delivered}:{}),unread:row.unread+(topicUnread.get(row.id)||0),peer_online:row.kind==='direct'&&online(row.peer_id)};});
+   const contactIds=new Set(db.prepare("SELECT linked FROM account_contacts WHERE owner=? AND deleted=0 AND linked IS NOT NULL").all(uid).map(c=>c.linked));
+   const result=rows.map(row=>{const topic=latestTopic.get(row.id);return {...row,is_contact:contactIds.has(row.peer_id),...(topic&&topic.last_at>(row.last_at||'')?{last_at:topic.last_at,last_id:topic.last_id,last_sender_id:topic.last_sender_id,last_text:topic.topic_name+': '+(topic.last_text||'Вложение'),peer_read:topic.peer_read,peer_delivered:topic.peer_delivered}:{}),unread:row.unread+(topicUnread.get(row.id)||0),peer_online:row.kind==='direct'&&online(row.peer_id)};});
    result.sort((a,b)=>b.saved-a.saved||b.pinned-a.pinned||(b.last_at||'').localeCompare(a.last_at||'')||b.id-a.id);json(res,200,result);return true;
   }
   const preferenceMatch=path.match(/^\/api\/chats\/(\d+)\/preferences$/);

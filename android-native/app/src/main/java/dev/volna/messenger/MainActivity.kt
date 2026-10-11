@@ -150,7 +150,6 @@ class MainActivity : ComponentActivity() {
     private val openChatRequest = mutableStateOf<Long?>(null)
     private val openMessageRequest = mutableStateOf<Long?>(null)
     private val openAccountRequest = mutableStateOf<Long?>(null)
-    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     override fun onStart() { super.onStart(); isVisible = true }
     override fun onStop() { isVisible = false; super.onStop() }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -164,11 +163,6 @@ class MainActivity : ComponentActivity() {
         openAccountRequest.value = intent?.getLongExtra("account_id", 0L)?.takeIf { it > 0 }
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
-        val notificationSetup = getSharedPreferences("volna-notification-setup", MODE_PRIVATE)
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && !notificationSetup.getBoolean("requested", false)) {
-            notificationSetup.edit().putBoolean("requested", true).apply()
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
         setContent { NativeEmojiProvider {
             Box(Modifier.fillMaxSize()) {
                 VolnaNativeApp(authReturn.value, openChatRequest.value, openMessageRequest.value, openAccountRequest.value) { openChatRequest.value = null; openMessageRequest.value = null; openAccountRequest.value = null }

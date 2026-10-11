@@ -15,7 +15,7 @@ test('contacts: owner isolation, aliases and stable identity survive username ch
  const book=(await req('/contacts/book',a2.token)).data;assert.equal(book.contacts.length,1);assert.equal(book.contacts[0].user.id,b.user.id);assert.equal(book.contacts[0].user.username,'boris_changed');assert.equal(book.contacts[0].user.name,'Инженер');assert.equal(book.contacts[0].user.phone,undefined);
  assert.equal((await req(`/users/${b.user.id}`,c.token)).data.name,'contact_boris');
  const chat=(await req('/chats',a.token,{user_id:b.user.id})).data;
- assert.equal((await req('/chats',a.token)).data.find(x=>x.id===chat.id).name,'Инженер');
+ const privateChat=(await req('/chats',a.token)).data.find(x=>x.id===chat.id);assert.equal(privateChat.name,'Инженер');assert.equal(privateChat.is_contact,true);
  assert.equal((await req('/users?q='+encodeURIComponent('Инженер'),a.token)).data[0].id,b.user.id);
 });
 test('contacts: discovery policies are enforced by exact phone search and import',async t=>{

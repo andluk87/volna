@@ -19,3 +19,24 @@
 @media(max-width:600px){.call-panel.has-video .call-controls .call-control b {width:46px;height:46px}.call-panel.has-video .call-controls .call-control span {font-size:10px}.call-panel.has-video .call-video-stage {bottom:230px}}
 
 .call-video-status {position:absolute;top:12px;left:12px;z-index:3;max-width:calc(100% - 140px);padding:8px 12px;border-radius:12px;background:#102231b0;color:white;font-size:12px;pointer-events:none}
+/* Call chrome follows the account appearance in Web and Windows. */
+.call-panel[role="dialog"],.call-panel.has-video {background:radial-gradient(ellipse at 50% 38%,color-mix(in srgb,var(--accent) 18%,var(--panel)),var(--bg));color:var(--text)}
+.call-panel.call-minimized {background:color-mix(in srgb,var(--panel) 94%,transparent);border-color:var(--border)}
+.call-panel small,.call-panel .call-background-hint {color:var(--muted)}
+.call-panel button,.call-panel .call-minimize,.call-panel .audio-output {background:var(--hover);color:var(--text);border-color:var(--border)}
+.call-panel .call-accept {background:#21845b;color:white}
+.call-panel .call-end,.call-panel .call-mini-hangup {background:#b83e51;color:white}
+.video-placeholder {background:var(--panel);color:var(--text)}
+.folder-editor fieldset {border:0;padding:0;margin:0;min-width:0}
+.folder-editor select {background:var(--input);color:var(--text);padding:10px;max-width:100%}
+.call-panel .call-topbar,.call-panel .call-person time {color:var(--text)}
+.call-panel .call-encryption,.call-panel .call-person p {color:var(--muted)}
+.call-panel .call-control,.call-panel .call-mini-main {color:var(--text)!important}
+.call-panel .call-control {background:transparent!important}
+.call-panel .call-control b {background:var(--hover);color:var(--text)}
+.call-panel .call-control.selected b {background:var(--accent);color:var(--bg)}
+.call-panel .call-control.hangup b,.call-panel .call-control.decline b {background:#d94b55;color:white}
+.call-panel .call-control.accept b {background:#21845b;color:white}
+.call-panel .audio-output select {background:var(--input);color:var(--text);border-color:var(--border)}
+.call-panel .call-background-hint {color:var(--muted)!important}
+.call-panel .call-warning {color:var(--accent)!important}

@@ -1,6 +1,10 @@
 package dev.volna.messenger
 
 import android.app.Notification
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -22,6 +26,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
 internal object CallAlerts {
+    fun settings(context: Context, intent: Intent) { runCatching { context.startActivity(intent) }.onFailure { runCatching { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) } } }
     fun fullScreenAllowed(context: Context): Boolean = Build.VERSION.SDK_INT < 34 || context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
     fun show(context: Context, call: VolnaCall) {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -58,27 +63,41 @@ internal fun CallAlertsSettings(automatic: Boolean = false) {
     }
     val manager = context.getSystemService(NotificationManager::class.java)
     val ready = remember(revision) { CallAlerts.fullScreenAllowed(context) && manager.areNotificationsEnabled() &&
+        (manager.getNotificationChannel(MessagingService.CHANNEL_ID)?.importance ?: NotificationManager.IMPORTANCE_HIGH) >= NotificationManager.IMPORTANCE_HIGH &&
         (manager.getNotificationChannel(NativeCalls.CALL_CHANNEL)?.importance ?: NotificationManager.IMPORTANCE_HIGH) >= NotificationManager.IMPORTANCE_HIGH }
     var open by remember { mutableStateOf(false) }
-    val setup = remember { context.getSharedPreferences("volna-call-setup", Context.MODE_PRIVATE) }
+    var prompted by remember { mutableStateOf(false) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { revision++ }
     LaunchedEffect(revision, automatic) {
-        if (automatic && manager.areNotificationsEnabled() && !CallAlerts.fullScreenAllowed(context) && !setup.getBoolean("fullscreen_prompted", false)) {
-            setup.edit().putBoolean("fullscreen_prompted", true).apply()
+        if (automatic && !ready && !prompted) {
+            prompted = true
             open = true
         }
     }
-    if (!ready) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+    if (!ready && !automatic) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
         TextButton(onClick = { open = true }) { NativeText("Включить экран входящего звонка", fontSize = 12.sp) }
     }
-    if (open) AlertDialog(onDismissRequest = { open = false }, title = { NativeText("Входящие звонки") }, text = {
+    LaunchedEffect(ready) { if (ready) open = false }
+    if (open) AlertDialog(onDismissRequest = { open = false }, title = { NativeText("Уведомления и звонки") }, text = {
         Column {
             NativeText("Разрешите уведомления и полноэкранный показ: при входящем звонке телефон включит экран с кнопками ответа. Переписка остаётся за блокировкой.")
             if (Build.VERSION.SDK_INT >= 34) TextButton(onClick = {
-                context.startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${context.packageName}")))
+                CallAlerts.settings(context, Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${context.packageName}")))
             }) { NativeText(if (CallAlerts.fullScreenAllowed(context)) "Полноэкранный показ разрешён" else "Разрешить полноэкранный показ") }
             TextButton(onClick = {
-                context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
-            }) { NativeText("Настройки уведомлений") }
+                if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && (!context.getSharedPreferences("volna-notification-setup", Context.MODE_PRIVATE).getBoolean("requested", false) || (context as? ComponentActivity)?.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) == true)) {
+                    context.getSharedPreferences("volna-notification-setup", Context.MODE_PRIVATE).edit().putBoolean("requested", true).apply()
+                    permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    CallAlerts.settings(context, Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+                }
+            }) { NativeText("Включить уведомления") }
+            if ((manager.getNotificationChannel(MessagingService.CHANNEL_ID)?.importance ?: NotificationManager.IMPORTANCE_HIGH) < NotificationManager.IMPORTANCE_HIGH) TextButton(onClick = {
+                CallAlerts.settings(context, Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, MessagingService.CHANNEL_ID))
+            }) { NativeText("Включить всплывающие сообщения") }
+            if ((manager.getNotificationChannel(NativeCalls.CALL_CHANNEL)?.importance ?: NotificationManager.IMPORTANCE_HIGH) < NotificationManager.IMPORTANCE_HIGH) TextButton(onClick = {
+                CallAlerts.settings(context, Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, NativeCalls.CALL_CHANNEL))
+            }) { NativeText("Включить всплывающие звонки") }
         }
     }, confirmButton = { TextButton(onClick = { open = false }) { NativeText("Готово") } })
 }

@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {folders} from './folders.mjs';
 import {contacts} from './contacts.mjs';
 import {initAdminSchema,readAdminSettings} from './admin-config.mjs';
 import {createAdminServer} from './admin.mjs';
@@ -74,7 +75,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(contactService?.personalize(res.volnaViewer,data)||data)); };
   const body = async req => {
     if(req.volnaParsedBody){const data=req.volnaParsedBody;delete req.volnaParsedBody;return data;}
-    let raw = ''; for await (const chunk of req) { raw += chunk; if (Buffer.byteLength(raw) > (req.url?.split('?')[0]==='/api/contacts/sync'?65536:20000)) throw fail(413, 'Слишком большой запрос'); }
+    let raw = ''; for await (const chunk of req) { raw += chunk; if (Buffer.byteLength(raw) > (req.url?.split('?')[0]==='/api/folders'?262144:req.url?.split('?')[0]==='/api/contacts/sync'?65536:20000)) throw fail(413, 'Слишком большой запрос'); }
     try { const value = JSON.parse(raw || '{}'); if (!value || Array.isArray(value) || typeof value !== 'object') throw Error(); return value; } catch { throw fail(400, 'Некорректный JSON'); }
   };
   const limit = (key, max) => {
@@ -84,6 +85,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   };
   const disconnect=(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();};
   const phoneService=phoneAuth({db,smsOptions,json,body,userById,auth,disconnect,loginCheck:(uid)=>{if(uid&&db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(uid)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');if(!uid&&!readAdminSettings(db).registration_enabled)throw fail(403,'Регистрация новых пользователей временно закрыта');},...phoneAuthOptions});
+  const handleFolders = folders({db,body,json,publish});
   const handleProfiles = profiles({db,uploads,auth,publish,userById,json,body});
   usernameService=usernames({db,body,json,userById,publish,uploads});
   let expressionService;
@@ -120,6 +122,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
       const session = auth(req), uid = session.user_id;
       res.volnaViewer=uid;
       adminService.guard(req,url,session);
+      if(await handleFolders(req,res,url,uid))return;
       if (path === '/api/me' && method === 'GET') {
         const user=userById(uid,true);
         return json(res, 200, user);

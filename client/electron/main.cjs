@@ -1,4 +1,5 @@
 const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage,screen}=require('electron');
+const {notificationState}=require('./notification-state.cjs');
 const path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
 const {trustedRenderer,externalURL,validateConfig,rendererFile}=require('./desktop-core.cjs');
 const {restoredBounds,readWindowState,trackWindowState,desktopShortcut}=require('./window-state.cjs');
@@ -24,12 +25,12 @@ if(!app.requestSingleInstanceLock())app.quit();else{
  app.whenReady().then(()=>{
   config=validateConfig(JSON.parse(fs.readFileSync(path.join(__dirname,'config.json'),'utf8')));app.setAppUserModelId('dev.volna.messenger');
   const root=path.join(app.getAppPath(),'dist');protocol.handle('app',request=>{const file=rendererFile(root,request.url);return file?net.fetch(pathToFileURL(file).toString()):new Response('Not found',{status:404});});
-  let microphoneAllowed=false;
-  session.defaultSession.setPermissionCheckHandler((_contents,permission,origin,details)=>trustedRenderer(origin)&&(['notifications','display-capture'].includes(permission)||permission==='media'&&microphoneAllowed&&['audio','unknown'].includes(details.mediaType)));
+  let microphoneAllowed=false,cameraAllowed=false;
+  session.defaultSession.setPermissionCheckHandler((_contents,permission,origin,details)=>trustedRenderer(origin)&&(['notifications','display-capture'].includes(permission)||permission==='media'&&(details.mediaType==='audio'&&microphoneAllowed||details.mediaType==='video'&&cameraAllowed)));
   session.defaultSession.setPermissionRequestHandler(async(contents,permission,callback,details)=>{
    if(!trustedRenderer(details.requestingUrl))return callback(false);if(['notifications','display-capture'].includes(permission))return callback(true);
-   if(permission!=='media'||!details.mediaTypes?.length||details.mediaTypes.some(type=>type!=='audio'))return callback(false);if(microphoneAllowed)return callback(true);
-   try{const result=await dialog.showMessageBox(BrowserWindow.fromWebContents(contents),{type:'question',title:'Микрофон',message:'Разрешить микрофон для голосовых сообщений и звонков?',buttons:['Разрешить','Отмена'],defaultId:0,cancelId:1});microphoneAllowed=result.response===0;callback(microphoneAllowed);}catch{callback(false);}
+   if(permission!=='media'||!details.mediaTypes?.length||details.mediaTypes.some(type=>!['audio','video'].includes(type)))return callback(false);const audio=details.mediaTypes.includes('audio'),video=details.mediaTypes.includes('video');if((!audio||microphoneAllowed)&&(!video||cameraAllowed))return callback(true);
+   try{const result=await dialog.showMessageBox(BrowserWindow.fromWebContents(contents),{type:'question',title:video?'Камера и микрофон':'Микрофон',message:video?'Разрешить камеру для видеозвонка?':'Разрешить микрофон для голосовых сообщений и звонков?',buttons:['Разрешить','Отмена'],defaultId:0,cancelId:1});const allowed=result.response===0;if(allowed){if(audio)microphoneAllowed=true;if(video)cameraAllowed=true;}callback(allowed);}catch{callback(false);}
   });
   session.defaultSession.setDisplayMediaRequestHandler(async(request,callback)=>{
    if(!request.frame||request.frame!==win?.webContents.mainFrame||!trustedRenderer(request.securityOrigin)||!request.userGesture||!request.videoRequested)return callback({});
@@ -44,7 +45,9 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   ipc('desktop:save-session',refresh=>{if(typeof refresh!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(refresh))throw Error('Invalid session');if(!safeStorage.isEncryptionAvailable())throw Error('Secure storage unavailable');const temp=sessionFile+'.tmp';fs.writeFileSync(temp,safeStorage.encryptString(refresh),{mode:0o600});fs.renameSync(temp,sessionFile);return true;});
   ipc('desktop:load-session',()=>{try{if(!safeStorage.isEncryptionAvailable())return null;const refresh=safeStorage.decryptString(fs.readFileSync(sessionFile));return /^[A-Za-z0-9_-]{43}$/.test(refresh)?refresh:null;}catch{return null;}});
   ipc('desktop:clear-session',()=>{fs.rmSync(sessionFile,{force:true});return true;});
-  ipc('desktop:notify',value=>{if(!value||!Number.isSafeInteger(value.chatId)||value.chatId<=0||win.isFocused())return;const notification=new Notification({title:String(value.title||'Волна').slice(0,80),body:String(value.body||'Новое сообщение').slice(0,240),icon:path.join(root,'icons/icon-192.png')});notification.on('click',()=>{show();win.webContents.send('desktop:open-chat',value.chatId);});notification.show();});
+  ipc('desktop:notification-settings',()=>shell.openExternal('ms-settings:notifications'));
+  ipc('desktop:notification-status',()=>notificationState(process.platform,Notification.isSupported()));
+  ipc('desktop:notify',value=>{if(!value||!Number.isSafeInteger(value.chatId)||value.chatId<=0||win.isFocused()||!Notification.isSupported())return;const notification=new Notification({title:String(value.title||'Волна').slice(0,80),body:String(value.body||'Новое сообщение').slice(0,240),icon:path.join(root,'icons/icon-192.png')});notification.on('click',()=>{show();win.webContents.send('desktop:open-chat',value.chatId);});notification.show();});
   ipc('desktop:call',value=>{activeCall=value?.active===true;if(!activeCall)lastIncoming='';if(!value?.incoming&&callNotification){callNotification.close();callNotification=undefined;win.flashFrame(false);}if(value?.incoming&&value.id!==lastIncoming&&typeof value.id==='string'){callNotification?.close();lastIncoming=value.id;win.flashFrame(true);const notification=new Notification({title:'Входящий звонок · Волна',body:String(value.name||'Собеседник').slice(0,80),timeoutType:'never',icon:path.join(root,'icons/icon-192.png')});callNotification=notification;notification.on('click',()=>{show();win.webContents.send('desktop:show-call');});notification.show();}});
   setTimeout(()=>updates.check(),5_000).unref();setInterval(()=>updates.check(),6*60*60*1000).unref();
  }).catch(error=>{dialog.showErrorBox('Волна не запустилась',error.message);quitting=true;app.quit();});

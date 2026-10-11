@@ -27,4 +27,22 @@ class NativeFolderPolicyTest {
         assertTrue(nativeFolderMatches(archive, chat(10, archived = true)))
         assertFalse(nativeFolderMatches(archive, chat(11)))
     }
+
+    @Test fun explicitPinsBypassReadMuteAndArchiveFilters() {
+        val f = NativeFolder("a", "Работа", emptySet(), types = setOf("direct"), pinned = listOf(10), excludeRead = true, excludeMuted = true, excludeArchived = true)
+        assertTrue(nativeFolderMatches(f, chat(10, archived = true).copy(muted = true)))
+        assertFalse(nativeFolderMatches(f, chat(11)))
+        assertTrue(nativeFolderMatches(f, chat(11, unread = 1)))
+    }
+    @Test fun exclusionsAndTopicsOverrideExplicitInclusion() {
+        val f = NativeFolder("a", "Работа", setOf(10), excluded = setOf(10), pinned = listOf(10))
+        assertFalse(nativeFolderMatches(f, chat(10)))
+        assertFalse(nativeFolderMatches(f.copy(excluded = emptySet()), chat(10).copy(parentId = 2)))
+    }
+    @Test fun privateContactsSelectOnlyLinkedDirectPeers() {
+        val f = NativeFolder("a", "Контакты", emptySet(), types = setOf("contacts"))
+        assertTrue(nativeFolderMatches(f, chat(10).copy(isContact = true)))
+        assertFalse(nativeFolderMatches(f, chat(10)))
+        assertFalse(nativeFolderMatches(f, chat(10, kind = "group").copy(isContact = true)))
+    }
 }

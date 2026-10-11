@@ -5,11 +5,11 @@ import {filterChats,adjacentMessage} from '../client/src/chat-layout.mjs';
 import {resetDemo,demoRequest} from '../client/src/demo-api.mjs';
 test('local folder corruption, duplicate IDs and unknown folders do not hide the chat list',()=>{
  assert.deepEqual(normalizeFolders(null),[]);
- const input=[{id:'folder-work',name:' Работа ',chats:[1,1,2,'3',null]},{id:'folder-work',name:'Duplicate',chats:[3]},{id:'other',name:'Bad',chats:[3]}];
- const folders=normalizeFolders(input);assert.deepEqual(folders,[{id:'folder-work',name:'Работа',chats:[1,2]}]);assert.equal(input[0].name,' Работа ');
+ const input=[{id:'folder-work',name:' Работа ',chats:[1,1,2,'3',null]},{id:'folder-work',name:'Duplicate',chats:[3]},{id:'bad id',name:'Bad',chats:[3]}];
+ const folders=normalizeFolders(input);assert.equal(folders.length,1);assert.equal(folders[0].name,'Работа');assert.deepEqual(folders[0].chats,[1,2]);assert.equal(input[0].name,' Работа ');
  const chats=[{id:1},{id:2},{id:3}];assert.deepEqual(chatsInFolder(chats,folders,'folder-work'),chats.slice(0,2));assert.equal(chatsInFolder(chats,folders,'removed'),chats);
  assert.equal(filterChats([{id:1,archived:true,kind:'direct'}],'all','',true).length,1);assert.equal(filterChats([{id:1,archived:true,kind:'direct'}]).length,0);
- assert.equal(normalizeFolders(Array.from({length:20},(_,i)=>({id:'folder-'+i,name:'x'.repeat(100),chats:[]}))).length,12);
+ assert.equal(normalizeFolders(Array.from({length:20},(_,i)=>({id:'folder-'+i,name:'x'.repeat(100),chats:[]}))).length,20);
 });
 test('last message grouping safely handles absent next message, reply and day boundaries',()=>{
  const a={id:1,sender_id:2,created_at:'2026-10-09T00:00:00Z'},b={...a,id:2,created_at:'2026-10-09T00:01:00Z'};

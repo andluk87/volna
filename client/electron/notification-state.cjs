@@ -1,0 +1,5 @@
+const {execFile}=require('node:child_process');
+function registryEnabled(output){const match=String(output).match(/\b(?:Enabled|ToastEnabled|NOC_GLOBAL_SETTING_TOASTS_ENABLED)\s+REG_DWORD\s+0x([0-9a-f]+)/i);return match?parseInt(match[1],16)!==0:null;}
+function query(key,value){return new Promise(resolve=>execFile('reg.exe',['query',key,'/v',value],{timeout:3000,windowsHide:true},(error,stdout)=>resolve(error?null:registryEnabled(stdout))));}
+async function notificationState(platform,supported){if(platform!=='win32')return {supported,systemEnabled:null};const values=await Promise.all([query('HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications','ToastEnabled'),query('HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings\\dev.volna.messenger','Enabled'),query('HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings','NOC_GLOBAL_SETTING_TOASTS_ENABLED')]);return {supported,systemEnabled:values.includes(false)?false:values.every(x=>x===true)?true:null};}
+module.exports={registryEnabled,notificationState};
