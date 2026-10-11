@@ -4,6 +4,7 @@ import {API,request,messageId} from './api';
 import {Avatar,Icon} from './ui';
 import {CallTones,callTone} from './call-tones.mjs';
 import './call-video.css';
+import {callDevices,microphoneConstraints,cameraConstraints} from './call-devices.mjs';
 import AudioOutput,{AndroidRoute as NativeCall} from './AudioOutput';
 
 function gather(pc){return new Promise(resolve=>{const done=()=>{clearTimeout(timer);pc.removeEventListener('icegatheringstatechange',check);resolve();};const check=()=>{if(pc.iceGatheringState==='complete')done();};const timer=setTimeout(done,10000);pc.addEventListener('icegatheringstatechange',check);check();});}
@@ -34,7 +35,7 @@ export default forwardRef(function Calls({token,onError,onBeforeCall},ref){
   try {
    if(!enabled){const old=camera.current;camera.current=null;old?.getTracks().forEach(t=>t.stop());if(!screen.current)await videoSender()?.replaceTrack(null);setCameraEnabled(false);if(current.current)await request(`/calls/${current.current.id}/camera`,token,{device:device.current,enabled:false});return;}
    if(screen.current)await stopScreenShare();
-   capture=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing?'user':'environment'},width:{ideal:640},height:{ideal:480}}});
+   capture=await navigator.mediaDevices.getUserMedia({audio:false,video:cameraConstraints(facing)});
    if(version!==generation.current||pc!==peer.current){capture.getTracks().forEach(t=>t.stop());return;}
    const track=capture.getVideoTracks()[0],sender=videoSender();if(!track||!sender)throw Error('Видеоканал недоступен. Обновите приложение у обоих участников.');
    await sender.replaceTrack(track);check(version);const old=camera.current;camera.current=capture;old?.getTracks().forEach(t=>t.stop());setFront(facing);setCameraEnabled(true);setVideoMode(true);
@@ -52,7 +53,7 @@ export default forwardRef(function Calls({token,onError,onBeforeCall},ref){
   onBeforeCall?.();
   if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)throw Error('Для звонка нужен HTTPS и браузер с поддержкой микрофона и WebRTC');
   const config=await request('/calls/config',token);check(version);setRelay(config.relayConfigured);
-  const media=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});if(version!==generation.current){media.getTracks().forEach(t=>t.stop());check(version);}stream.current=media;setHasAudio(true);keepAlive(true);
+  const media=await navigator.mediaDevices.getUserMedia({audio:microphoneConstraints(),video:false});if(version!==generation.current){media.getTracks().forEach(t=>t.stop());check(version);}stream.current=media;setHasAudio(true);keepAlive(true);
   window.dispatchEvent(new CustomEvent('volna-audio-play',{detail:null}));
   const pc=new RTCPeerConnection({iceServers:config.iceServers});peer.current=pc;media.getTracks().forEach(t=>pc.addTrack(t,media));
   if(!incoming&&pc.addTransceiver)pc.addTransceiver('video',{direction:'sendrecv'});
@@ -76,7 +77,7 @@ export default forwardRef(function Calls({token,onError,onBeforeCall},ref){
  useEffect(()=>{
   let disposed=false,polling=false,lastSuccess=Date.now();
   async function poll(){if(disposed||polling||operation.current)return;polling=true;const version=generation.current;
-   try{const c=await request('/calls/current?device='+device.current,token);if(disposed||version!==generation.current||operation.current)return;lastSuccess=Date.now();if(!c){if(current.current){onError('Звонок завершён или собеседник не ответил');cleanup();}return;}if(c.status==='other-device'){if(current.current){cleanup();onError('Звонок принят на другом устройстве');}return;}
+   try{const c=await request('/calls/current?device='+device.current,token);if(disposed||version!==generation.current||operation.current)return;lastSuccess=Date.now();if(!c){if(current.current){onError('Звонок завершён или собеседник не ответил');cleanup();}return;}if(c.incoming&&!current.current&&!callDevices().incoming)return;if(c.status==='other-device'){if(current.current){cleanup();onError('Звонок принят на другом устройстве');}return;}
     if(current.current&&current.current.id!==c.id)cleanup();
     if(!c.incoming&&c.status==='connecting'&&current.current?.status==='ringing'){started.current=Date.now();setPhase('Собеседник отвечает…');}
     if(!current.current){if(c.incoming&&c.status==='ringing'){update(c);setPhase(c.video?'Входящий видеозвонок':'Входящий аудиозвонок');}else return;}else if(current.current.id===c.id)update(c);

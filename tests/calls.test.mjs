@@ -72,3 +72,15 @@ test('calls: two cameras operate independently and chat history is isolated, dir
  assert.deepEqual((await req('/calls/history?chat_id='+other,a.token)).data,[]);assert.equal((await req('/calls/history?chat_id='+chat,c.token)).status,404);assert.equal((await req('/calls/history?chat_id=bad',a.token)).status,400);assert.equal((await req('/calls/history?chat_id='+chat,'')).status,401);
  assert.deepEqual((await req(`/calls/history?chat_id=${chat}&before=${outgoing[0].created}`,a.token)).data,[]);
 });
+
+test('calls: clearing history is private, authenticated and preserves active and newer calls',async t=>{
+ const app=createApp({database:':memory:'});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(()=>app.close());const base='http://127.0.0.1:'+app.server.address().port+'/api';
+ const req=async(path,token,data)=>{const r=await fetch(base+path,{method:data===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,data:await r.json()};};
+ const a=(await req('/register','',{username:'clearalice'})).data,b=(await req('/register','',{username:'clearboris'})).data,c=(await req('/register','',{username:'clearcarol'})).data,chat=(await req('/chats',a.token,{user_id:b.user.id})).data.id;
+ const before=Date.now()-10000;
+ for(const [id,created,ended,status]of[['a',before-1000,before,'ended'],['b',before+1000,before+2000,'declined'],['c',before-500,null,'ringing']])app.db.prepare('INSERT INTO call_history(id,chat_id,caller,callee,created,ended,status,ringed) VALUES(?,?,?,?,?,?,?,1)').run(id.repeat(32),chat,a.user.id,b.user.id,created,ended,status);
+ assert.equal((await req('/calls/history/clear','',{before})).status,401);assert.equal((await req('/calls/history/clear',a.token,{before:'all'})).status,400);assert.equal((await req('/calls/history/clear',a.token,{before:Date.now()+3600000})).status,400);
+ assert.equal((await req('/calls/history/clear',c.token,{before})).status,200);assert.equal((await req('/calls/history',a.token)).data.length,3);
+ assert.equal((await req('/calls/history/clear',a.token,{before})).status,200);assert.equal((await req('/calls/history/clear',a.token,{before})).status,200);
+ assert.deepEqual(new Set((await req('/calls/history',a.token)).data.map(c=>c.id)),new Set(['b'.repeat(32),'c'.repeat(32)]));assert.equal((await req('/calls/history?chat_id='+chat,a.token)).data.length,2);assert.equal((await req('/calls/history',b.token)).data.length,3);assert.equal(app.db.prepare('SELECT COUNT(*) AS n FROM call_history').get().n,3);
+});

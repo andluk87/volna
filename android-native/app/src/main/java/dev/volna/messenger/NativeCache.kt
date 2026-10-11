@@ -63,16 +63,29 @@ internal class NativeDrafts(context: Context, private val account: Long) {
         set(chat, value.text)
         prefs.edit().putInt("selection-start:$chat", value.selection.start).putInt("selection-end:$chat", value.selection.end).putString("entities:$chat", JSONArray(entities.map { it.json() }).toString()).apply()
     }
+    private fun failedRows(chat: Long): JSONArray = runCatching { JSONArray(prefs.getString("failed:$chat", "[]")) }.getOrDefault(JSONArray())
+    fun failed(chat: Long): Pair<androidx.compose.ui.text.input.TextFieldValue, List<NativeEmojiEntity>>? = runCatching {
+        val row = failedRows(chat).optJSONObject(0) ?: return@runCatching null
+        val array = row.getJSONArray("entities")
+        androidx.compose.ui.text.input.TextFieldValue(row.getString("text")) to (0 until array.length()).map { NativeEmojiEntity.parse(array.getJSONObject(it)) }
+    }.getOrNull()
+    fun saveFailed(chat: Long, value: androidx.compose.ui.text.input.TextFieldValue, entities: List<NativeEmojiEntity>) {
+        val rows = failedRows(chat)
+        val row = JSONObject().put("text", value.text).put("entities", JSONArray(entities.map { it.json() }))
+        if ((0 until rows.length()).none { rows.getJSONObject(it).toString() == row.toString() }) rows.put(row)
+        prefs.edit().putString("failed:$chat", rows.toString()).apply()
+    }
+    fun clearFailed(chat: Long) { val rows = failedRows(chat); val rest = JSONArray((1 until rows.length()).map { rows.getJSONObject(it) }); prefs.edit().apply { if (rest.length() == 0) remove("failed:$chat") else putString("failed:$chat", rest.toString()) }.apply() }
     fun clear() { prefs.edit().clear().apply() }
 }
 
 internal data class NativeAccount(val user: VolnaUser, val token: String)
 internal object NativeAccounts {
-    fun list(context: Context): List<NativeAccount> = runCatching {
+    @Synchronized fun list(context: Context): List<NativeAccount> = runCatching {
         val rows = JSONArray(context.getSharedPreferences("volna-accounts", 0).getString("accounts", "[]"))
         (0 until rows.length()).map { i -> rows.getJSONObject(i).let { NativeAccount(NativeCodec.user(it.getJSONObject("user")), NativeCredentials.access(it.getJSONObject("user").getLong("id"))) } }
     }.getOrDefault(emptyList()).filter { it.token.isNotBlank() }
-    fun remember(context: Context, user: VolnaUser, token: String) = save(context, list(context).filter { it.user.id != user.id } + NativeAccount(user, token))
-    fun remove(context: Context, id: Long) { NativeCredentials.remove(id); save(context, list(context).filter { it.user.id != id }) }
+    @Synchronized fun remember(context: Context, user: VolnaUser, token: String) = save(context, list(context).filter { it.user.id != user.id } + NativeAccount(user, token))
+    @Synchronized fun remove(context: Context, id: Long) { NativeCredentials.remove(id); save(context, list(context).filter { it.user.id != id }) }
     private fun save(context: Context, accounts: List<NativeAccount>) { context.getSharedPreferences("volna-accounts", 0).edit().putString("accounts", JSONArray(accounts.takeLast(5).map { JSONObject().put("user", NativeCodec.user(it.user)) }).toString()).apply() }
 }

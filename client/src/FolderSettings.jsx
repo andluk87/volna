@@ -2,9 +2,10 @@ import React,{useState,useEffect} from 'react';
 import {Icon,Avatar} from './ui';
 import {normalizeFolders,defaultFolders,folderMatches,FOLDER_LIMIT,SIDEBAR_STORAGE} from './sidebar-state.mjs';
 const types=[['all','Все'],['direct','Личные'],['contacts','Контакты'],['non_contacts','Не контакты'],['group','Группы'],['channel','Каналы'],['archived','Архив']];
-export default function FolderSettings({chats,folders,onChange,token,busy=false,onEditing}){
+export default function FolderSettings({chats,folders,onChange,token,busy=false,onEditing,initialFolderId}){
  const [draft,setDraft]=useState(null),[mode,setMode]=useState('chats');
  useEffect(()=>{onEditing?.(!!draft);return()=>onEditing?.(false);},[!!draft]);
+ useEffect(()=>{if(initialFolderId){const folder=folders.find(f=>f.id===initialFolderId);if(folder)edit(folder);}},[initialFolderId]);
  const available=chats.filter(c=>!c.parent_id);
  function edit(f){setDraft(f?{...f}:normalizeFolders([{id:'folder-'+crypto.randomUUID(),name:'Новая папка'}])[0]);setMode('chats');}
  function patch(p){setDraft(f=>({...f,...p}));}

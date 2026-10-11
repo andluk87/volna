@@ -29,6 +29,15 @@ internal object NativeNotificationSounds {
     fun callSoundAllowed(context: Context) = callAlertsAllowed(context) &&
         context.getSystemService(AudioManager::class.java).ringerMode == AudioManager.RINGER_MODE_NORMAL && NativeNotificationPolicy.prefs(context, account(context)).getBoolean("call_sound", true)
     fun callVibrationAllowed(context: Context) = callAlertsAllowed(context) && NativeNotificationPolicy.prefs(context, account(context)).getBoolean("call_vibration", true)
+    fun backgroundCallChannel(context: Context, account: Long): String {
+        val prefs = NativeNotificationPolicy.prefs(context, account)
+        val selected = if(prefs.getBoolean("call_sound",true)) uri(context,account,"call_sound_uri",RingtoneManager.TYPE_RINGTONE) else null
+        val vibration=prefs.getBoolean("call_vibration",true)
+        val digest=MessageDigest.getInstance("SHA-256").digest("$selected:$vibration".toByteArray()).take(6).joinToString(""){"%02x".format(it)}
+        val id="volna-background-call-$account-$digest"
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(id,"Звонки другого аккаунта Волны",NotificationManager.IMPORTANCE_HIGH).apply { setSound(selected,AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build());enableVibration(vibration);if(vibration)vibrationPattern=longArrayOf(0,700,700) })
+        return id
+    }
     fun messageChannel(context: Context, account: Long): String {
         val prefs = NativeNotificationPolicy.prefs(context, account)
         val sound = prefs.getBoolean("sound", true)

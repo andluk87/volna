@@ -1,14 +1,16 @@
 import React,{useEffect,useState} from 'react';
 import {Capacitor,registerPlugin} from '@capacitor/core';
+import {callDevices} from './call-devices.mjs';
 import {Icon} from './ui';
 export const AndroidRoute=registerPlugin('VolnaAudio');
 export default function AudioOutput({audioRef,active}){
- const [devices,setDevices]=useState([]),[selected,setSelected]=useState('default'),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const [devices,setDevices]=useState([]),[selected,setSelected]=useState(()=>callDevices().output||'default'),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const native=Capacitor.getPlatform()==='android';
  const supported=native||typeof HTMLMediaElement.prototype.setSinkId==='function';
  useEffect(()=>{if(!active)return;let gone=false;
   async function refresh(){try{if(native){const r=await AndroidRoute.devices();if(!gone){setDevices(r.devices);setSelected(r.current||'default');}}else if(supported){const list=await navigator.mediaDevices.enumerateDevices();if(gone)return;const out=list.filter(d=>d.kind==='audiooutput'&&d.deviceId&&d.deviceId!=='default');setDevices(out.map((d,i)=>({id:d.deviceId,label:d.label||'Устройство '+(i+1)})));if(audioRef.current?.sinkId&&!out.some(d=>d.deviceId===audioRef.current.sinkId)){await audioRef.current.setSinkId('');if(!gone)setSelected('default');}}}catch{if(!gone)setError('Не удалось получить список аудиоустройств');}}
   if(native)AndroidRoute.start().catch(()=>{});
+  if(!native&&supported&&callDevices().output)audioRef.current?.setSinkId(callDevices().output).catch(()=>{if(!gone)setError('Выбранное устройство вывода звука недоступно');});
   refresh();navigator.mediaDevices?.addEventListener('devicechange',refresh);const timer=native?setInterval(refresh,3000):null;
   return()=>{gone=true;clearInterval(timer);navigator.mediaDevices?.removeEventListener('devicechange',refresh);if(native)AndroidRoute.reset().catch(()=>{});};
  },[active,native,supported]);

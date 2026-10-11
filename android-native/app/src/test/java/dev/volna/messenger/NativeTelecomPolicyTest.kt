@@ -16,4 +16,10 @@ class NativeTelecomPolicyTest {
         assertFalse(nativeTelecomActionAllowed(state(incoming = false), "new", true))
         assertFalse(nativeTelecomActionAllowed(state(status = "active"), "new", true))
     }
+    @Test fun systemFocusIsUsedOnlyForTheAnnouncedRegisteredCall() {
+        assertTrue(nativeTelecomUsesSystemFocus(36,true,"new","new"));assertFalse(nativeTelecomUsesSystemFocus(27,true,"new","new"));assertFalse(nativeTelecomUsesSystemFocus(36,false,"new","new"));assertFalse(nativeTelecomUsesSystemFocus(36,true,"old","new"))
+    }
+    @Test fun acceptedIncomingCallActivatesBeforeIceCanNeedAudio() {
+        assertFalse(nativeTelecomShouldActivate(state()));assertTrue(nativeTelecomShouldActivate(state(status="connecting")));assertFalse(nativeTelecomShouldActivate(state(incoming=false,status="preparing")));assertTrue(nativeTelecomShouldActivate(state(incoming=false).copy(connected=true)))
+    }
 }

@@ -7,6 +7,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   answered INTEGER,ended INTEGER,status TEXT NOT NULL,screen_shared INTEGER NOT NULL DEFAULT 0,ringed INTEGER NOT NULL DEFAULT 0);
   CREATE INDEX IF NOT EXISTS call_history_caller ON call_history(caller,created);
   CREATE INDEX IF NOT EXISTS call_history_callee ON call_history(callee,created);`);
+ db.exec('CREATE TABLE IF NOT EXISTS call_history_hidden(user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,call_id TEXT NOT NULL REFERENCES call_history(id) ON DELETE CASCADE,PRIMARY KEY(user_id,call_id))');
  if(!db.prepare('PRAGMA table_info(call_history)').all().some(column=>column.name==='video'))db.exec('ALTER TABLE call_history ADD COLUMN video INTEGER NOT NULL DEFAULT 0');
  if(!db.prepare('PRAGMA table_info(call_history)').all().some(column=>column.name==='ringed'))db.exec('ALTER TABLE call_history ADD COLUMN ringed INTEGER NOT NULL DEFAULT 1');
  db.prepare("UPDATE call_history SET ended=?,status='interrupted' WHERE ended IS NULL").run(clock());
@@ -30,9 +31,15 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
    const chatId=url.searchParams.has('chat_id')?Number(url.searchParams.get('chat_id')):null;
    if(chatId!==null&&(!Number.isSafeInteger(chatId)||chatId<1))throw fail(400,'Некорректный чат');
    if(chatId!==null&&!db.prepare("SELECT 1 FROM chats c JOIN members m ON c.id=m.chat_id WHERE c.id=? AND m.user_id=? AND c.kind='direct' AND c.admin_deleted=0").get(chatId,uid))throw fail(404,'Личный чат не найден');
-   const rows=db.prepare('SELECT * FROM call_history WHERE (caller=? OR (callee=? AND ringed=1)) AND created<?'+(chatId===null?'':' AND chat_id=?')+' ORDER BY created DESC,id DESC LIMIT 50').all(uid,uid,before,...(chatId===null?[]:[chatId]));
+   const rows=db.prepare('SELECT * FROM call_history WHERE (caller=? OR (callee=? AND ringed=1)) AND created<? AND NOT EXISTS (SELECT 1 FROM call_history_hidden h WHERE h.call_id=call_history.id AND h.user_id=?)'+(chatId===null?'':' AND chat_id=?')+' ORDER BY created DESC,id DESC LIMIT 50').all(uid,uid,before,uid,...(chatId===null?[]:[chatId]));
    json(res,200,rows.map(c=>({id:c.id,chat_id:c.chat_id,peer:userById(c.caller===uid?c.callee:c.caller),incoming:c.callee===uid,created:c.created,
     ended:c.ended,status:c.status,duration:c.answered?Math.max(0,Math.floor(((c.ended??clock())-c.answered)/1000)):0,screen_shared:!!c.screen_shared,video:!!c.video})));return true;
+  }
+  if(url.pathname==='/api/calls/history/clear'&&req.method==='POST'){
+   const data=await body(req);auth(req);const before=data.before;
+   if(!Number.isSafeInteger(before)||before<1||before>clock())throw fail(400,'Некорректный момент очистки');
+   db.prepare('INSERT OR IGNORE INTO call_history_hidden(user_id,call_id) SELECT ?,id FROM call_history WHERE (caller=? OR (callee=? AND ringed=1)) AND ended IS NOT NULL AND created<=?').run(uid,uid,uid,before);
+   json(res,200,{ok:true});return true;
   }
   if(url.pathname==='/api/calls/config'&&req.method==='GET'){
    const iceServers=[];

@@ -183,7 +183,7 @@ class MainActivity : ComponentActivity() {
         openAccountRequest.value = intent.getLongExtra("account_id", 0L).takeIf { it > 0 }
     }
 
-    companion object { @Volatile var isVisible: Boolean = false; @Volatile var visibleChatId: Long = 0 }
+    companion object { @Volatile var isVisible: Boolean = false; @Volatile var visibleChatId: Long = 0; @Volatile var visibleAccountId: Long = 0 }
 }
 
 @Composable
@@ -228,7 +228,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         chats.indices.forEach { index -> val row = chats[index]; val alias = contactNames[row.peerId]; if (row.kind == "direct" && alias != null && alias != row.name) chats[index] = row.copy(name = alias) }
         selectedChat?.let { row -> contactNames[row.peerId]?.let { selectedChat = row.copy(name = it) } }
     }
-    androidx.compose.runtime.SideEffect { MainActivity.visibleChatId = selectedChat?.id ?: 0 }
+    androidx.compose.runtime.SideEffect { MainActivity.visibleChatId = selectedChat?.id ?: 0; MainActivity.visibleAccountId = me?.id ?: 0 }
     var moreHistory by remember { mutableStateOf(false) }
     var retryGeneration by remember { mutableStateOf(0) }
     var focusMessageId by remember { mutableStateOf<Long?>(null) }
@@ -691,15 +691,15 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                         val chatId = selectedChat!!.id
                         val session = token
                         scope.launch {
-                            busy = true
+                            busy = true; error = ""
                             try {
                                 val key = "$appearanceAccount:$chatId:$replyId:${text.hashCode()}:${entities.hashCode()}"
                                 val nonce = sendNonces.getOrPut(key) { UUID.randomUUID().toString() }
                                 val created = withContext(Dispatchers.IO) { if (editId != null) api.updateRichMessage(session, editId, text, entities) else api.send(session, chatId, text, replyId, clientId = nonce, emojiEntities = entities) }
                                 sendNonces.remove(key)
                                 if (editId != null && token == session && selectedChat?.id == chatId) { val position = messages.indexOfFirst { it.id == created.id }; if (position >= 0) messages[position] = created }
-                                if (token == session && selectedChat?.id == chatId) { if (earlierWindow) { earlierWindow = false; messages.clear() }; if (messages.none { it.id == created.id }) messages.add(created); focusMessageId = created.id; onSent() }
-                            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось отправить сообщение" }
+                                if (token == session && selectedChat?.id == chatId) { if (earlierWindow) { earlierWindow = false; messages.clear() }; if (messages.none { it.id == created.id }) messages.add(created) }; onSent(true)
+                            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { if (token == session) error = problem.message ?: "Не удалось отправить сообщение"; onSent(false) }
                             finally { busy = false }
                         }
                     },

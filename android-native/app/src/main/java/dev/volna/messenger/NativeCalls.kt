@@ -52,7 +52,8 @@ object NativeCalls {
     val state: StateFlow<NativeCallState> = mutableState
     private var context: Context? = null
     private val api by lazy { NativeApi(BuildConfig.API_BASE_URL) }
-    private var token = ""
+    @Volatile private var token = ""
+    internal fun configuredFor(session: String) = token.isNotBlank() && NativeCredentials.resolve(token) == NativeCredentials.resolve(session)
     private var device = ""
     private var generation = 0
     private var pollJob: Job? = null
@@ -534,24 +535,43 @@ object NativeCalls {
         AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_DEVICE -> "USB-гарнитура"
         else -> "Аудиоустройство"
     }
-    private fun beginAudio(app: Context) {
+    private suspend fun beginAudio(app: Context) {
         val version = generation
         val manager = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val callId = state.value.call?.id ?: throw CancellationException("Звонок отменён")
+        NativeCallDiagnostics.step("Ожидание системного аудиофокуса Telecom")
+        if (NativeTelecom.audioFocus(callId)) {
+            checkVersion(version)
+            telecomAudio = true
+            if (Build.VERSION.SDK_INT >= 31) mutableState.update { it.copy(route = runCatching { manager.communicationDevice?.let(::routeName) }.getOrNull() ?: "Телефон") }
+            return
+        }
+        checkVersion(version)
+        NativeCallDiagnostics.step("Получение аудиофокуса приложения")
+        val granted = CompletableDeferred<Boolean>()
         originalMode = manager.mode; originalSpeaker = manager.isSpeakerphoneOn
         val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+            .setAcceptsDelayedFocusGain(true)
             .setOnAudioFocusChangeListener { value -> scope.launch {
                 if (version != generation) return@launch
                 when (value) {
-                    AudioManager.AUDIOFOCUS_LOSS -> end("Звук занят другим звонком")
+                    AudioManager.AUDIOFOCUS_LOSS -> { granted.complete(false); end("Звук занят другим звонком") }
                     AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> { audioTrack?.setEnabled(false); mutableState.update { it.copy(phase = "Звук временно занят") } }
-                    AudioManager.AUDIOFOCUS_GAIN -> { audioTrack?.setEnabled(!state.value.muted); if (state.value.connected) mutableState.update { it.copy(phase = "Разговор") } }
+                    AudioManager.AUDIOFOCUS_GAIN -> { granted.complete(true); audioTrack?.setEnabled(!state.value.muted); if (state.value.connected) mutableState.update { it.copy(phase = "Разговор") } }
                 }
             } }.build()
-        if (manager.requestAudioFocus(request) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) error("Не удалось получить доступ к звуку")
-        focus = request; manager.mode = AudioManager.MODE_IN_COMMUNICATION
+        focus = request
+        val result = manager.requestAudioFocus(request)
+        val ready = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED || result == AudioManager.AUDIOFOCUS_REQUEST_DELAYED && withTimeoutOrNull(8_000) { granted.await() } == true
+        checkVersion(version)
+        check(ready) { "Android не разрешил доступ к звуку. Завершите другой звонок и повторите вызов." }
+        manager.mode = AudioManager.MODE_IN_COMMUNICATION
         if (Build.VERSION.SDK_INT >= 31) mutableState.update { it.copy(route = runCatching { manager.communicationDevice?.let(::routeName) }.getOrNull() ?: "Телефон") }
     }
+
+    private var telecomAudio = false
+    internal fun systemAudioLost() { if (telecomAudio && state.value.call != null) end("Звук передан другому системному звонку") }
 
     fun end(message: String = "", notifyServer: Boolean = true) {
         val call = state.value.call; val session = token
@@ -571,14 +591,14 @@ object NativeCalls {
         NativeCallDiagnostics.step("Освобождение аудиоустройства")
         val module = audioModule; audioModule = null; runCatching { module?.release() }
         (context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.let { manager ->
+            if ((focus != null || telecomAudio) && Build.VERSION.SDK_INT >= 31) runCatching { manager.clearCommunicationDevice() }
             focus?.let { request ->
                 runCatching { manager.abandonAudioFocusRequest(request) }
-                if (Build.VERSION.SDK_INT >= 31) runCatching { manager.clearCommunicationDevice() }
                 runCatching { manager.isSpeakerphoneOn = originalSpeaker }
                 runCatching { manager.mode = originalMode }
             }
         }
-        focus = null; connectedAt = 0L; disconnectedAt = 0L; lastVideoFrame = 0L
+        focus = null; telecomAudio = false; connectedAt = 0L; disconnectedAt = 0L; lastVideoFrame = 0L
         mutableState.value = NativeCallState(error = message)
         NativeCallDiagnostics.finish(message)
         context?.let { runCatching { CallService.stop(it) } }

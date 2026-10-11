@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.telecom.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
@@ -17,6 +18,8 @@ internal object NativeTelecom {
     private var account: PhoneAccountHandle? = null
     private var announced: String? = null
     private var connection: VolnaConnection? = null
+    private var systemFocused = false
+    private var failed: String? = null
 
     fun configure(context: Context) {
         if (app != null) return
@@ -36,13 +39,13 @@ internal object NativeTelecom {
         val call = state.call
         if (call == null || call.id != announced) {
             runCatching { connection?.finish() }; connection = null
-            announced = null
+            announced = null; systemFocused = false; failed = null
         }
         if (call == null) return
         if (announced == null) {
             val context = app ?: return
             val handle = account ?: return
-            announced = call.id
+            announced = call.id; failed = null
             try {
                 val extras = Bundle().apply { putString(CALL_ID, call.id) }
                 val telecom = context.getSystemService(TelecomManager::class.java)
@@ -51,15 +54,40 @@ internal object NativeTelecom {
                     putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
                     putBundle(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, extras)
                 })
-            } catch (_: RuntimeException) { /* No repeated registration or disruption of the call. */ }
+            } catch (_: RuntimeException) { failed = call.id }
         }
         runCatching { connection?.update(state) }
     }
 
+    /** Telecom owns audio focus for a self-managed call; do not request it a second time. */
+    suspend fun audioFocus(id: String): Boolean {
+        if (!nativeTelecomUsesSystemFocus(Build.VERSION.SDK_INT, account != null, announced, id)) return false
+        val available = withTimeoutOrNull(8_000) {
+            while (NativeCalls.state.value.call?.id == id && announced == id && failed != id) {
+                if (connection != null && systemFocused) return@withTimeoutOrNull true
+                delay(40)
+            }
+            false
+        }
+        if (available == true) return true
+        if (NativeCalls.state.value.call?.id != id) throw CancellationException("Звонок отменён")
+        if (failed == id || connection == null) {
+            // A late Connection must not seize audio after the manual fallback starts.
+            failed = id; systemFocused = false
+            return false
+        }
+        error("Android не передал звук системному звонку. Завершите другой звонок и повторите вызов.")
+    }
+    fun focusChanged(gained: Boolean) {
+        systemFocused = gained
+        if (!gained) NativeCalls.systemAudioLost()
+    }
+    fun creationFailed(id: String?) { if (id == announced) failed = id }
+
     fun create(id: String?): Connection {
         val state = NativeCalls.state.value
         val call = state.call
-        if (id == null || call == null || id != call.id || id != announced)
+        if (id == null || call == null || id != call.id || id != announced || failed == id)
             return Connection.createFailedConnection(DisconnectCause(DisconnectCause.CANCELED))
         return VolnaConnection(id).also { created ->
             connection?.finish(); connection = created
@@ -97,7 +125,7 @@ internal class VolnaConnection(private val id: String) : Connection() {
     fun update(state: NativeCallState) {
         if (state.call?.id != id) { finish(); return }
         when {
-            state.connected -> if (this.state != STATE_ACTIVE) setActive()
+            nativeTelecomShouldActivate(state) -> if (this.state != STATE_ACTIVE) setActive()
             state.call.incoming && state.call.status == "ringing" -> if (this.state != STATE_RINGING) setRinging()
             else -> if (this.state != STATE_DIALING) setDialing()
         }
@@ -117,6 +145,16 @@ internal class VolnaConnection(private val id: String) : Connection() {
 }
 
 class VolnaConnectionService : ConnectionService() {
+    override fun onConnectionServiceFocusGained() { super.onConnectionServiceFocusGained(); NativeTelecom.focusChanged(true) }
+    override fun onConnectionServiceFocusLost() {
+        NativeTelecom.focusChanged(false)
+        // All microphone/camera/WebRTC resources are released before acknowledging Telecom.
+        connectionServiceFocusReleased()
+        super.onConnectionServiceFocusLost()
+    }
+    override fun onCreateIncomingConnectionFailed(handle: PhoneAccountHandle?, request: ConnectionRequest) { NativeTelecom.creationFailed(requestId(request)) }
+    override fun onCreateOutgoingConnectionFailed(handle: PhoneAccountHandle?, request: ConnectionRequest) { NativeTelecom.creationFailed(requestId(request)) }
+
     private fun requestId(request: ConnectionRequest): String? = request.extras?.getString(NativeTelecom.CALL_ID)
         ?: request.extras?.getBundle(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS)?.getString(NativeTelecom.CALL_ID)
         ?: request.address?.takeIf { it.scheme == "volna" }?.schemeSpecificPart

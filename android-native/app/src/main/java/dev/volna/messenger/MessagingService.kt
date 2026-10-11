@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import java.util.concurrent.ConcurrentHashMap
 import android.os.Build
 import android.os.IBinder
 import android.os.Handler
@@ -26,10 +28,18 @@ internal data class NativeMessagingEvent(val account: Long, val type: String, va
 class MessagingService : Service() {
     private val prefs by lazy { getSharedPreferences("volna-native", Context.MODE_PRIVATE) }
     @Volatile private var stopped = false
-    @Volatile private var streamCall: okhttp3.Call? = null
-    private var worker: Thread? = null
-    @Volatile private var generation = 0
-    @Volatile private var activeToken = ""
+    private class AccountStream(val userId: Long, val token: String) {
+        @Volatile var stopped = false
+        @Volatile var call: okhttp3.Call? = null
+        var worker: Thread? = null
+        var callsWorker: Thread? = null
+        fun stop() { stopped = true; call?.cancel(); worker?.interrupt(); callsWorker?.interrupt() }
+    }
+    private val streams = ConcurrentHashMap<Long, AccountStream>()
+    private val main = Handler(Looper.getMainLooper())
+    private val reconcile = object : Runnable {
+        override fun run() { if (!stopped) { syncAccounts(); main.postDelayed(this, 6_000) } }
+    }
     private val cache by lazy { NativeCache(this) }
     private val api by lazy { NativeApi(BuildConfig.API_BASE_URL) }
     private val client by lazy {
@@ -44,85 +54,119 @@ class MessagingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            NativeCalls.configure(this, "")
-            stopped = true
-            streamCall?.cancel()
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            NativeCalls.configure(this, ""); stopped = true
+            streams.values.forEach { it.stop() }; streams.clear()
+            main.removeCallbacks(reconcile); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
             return START_NOT_STICKY
         }
-        val token = intent?.getStringExtra(EXTRA_TOKEN)?.takeIf { it.isNotBlank() }
-            ?: NativeCredentials.access(prefs.getLong("user_id",0))
-        val userId = intent?.getLongExtra(EXTRA_USER_ID, 0L)?.takeIf { it > 0 }
-            ?: prefs.getLong("user_id", 0L)
-        if (token.isBlank()) {
-            NativeCalls.configure(this, "")
-            stopSelf()
-            return START_NOT_STICKY
-        }
-        if (activeToken != token) { generation++; streamCall?.cancel(); worker?.interrupt(); worker = null; activeToken = token }
-        prefs.edit().remove("token").putLong("user_id", userId).apply()
+        stopped = false
+        val selectedId = intent?.getLongExtra(EXTRA_USER_ID, 0L)?.takeIf { it > 0 } ?: prefs.getLong("user_id", 0L)
+        val selectedToken = intent?.getStringExtra(EXTRA_TOKEN)?.takeIf { it.isNotBlank() } ?: NativeCredentials.access(selectedId)
+        if (intent?.action == ACTION_SYNC) NativeCalls.configure(this, "")
+        else if (selectedToken.isNotBlank()) { prefs.edit().remove("token").putLong("user_id", selectedId).apply(); NativeCalls.configure(this, selectedToken) }
         startForeground(FOREGROUND_ID, serviceNotification())
-        NativeCalls.configure(this, token)
-        if (worker?.isAlive != true) {
-            stopped = false
-            val version = generation
-            worker = thread(name = "volna-events", isDaemon = true) { consume(token, userId, version) }
-        }
-        return START_STICKY
+        syncAccounts()
+        main.removeCallbacks(reconcile); if (!stopped) main.postDelayed(reconcile, 6_000)
+        return if (stopped) START_NOT_STICKY else START_STICKY
     }
 
-    private fun consume(token: String, userId: Long, version: Int) {
+    private fun syncAccounts() {
+        val accounts = NativeAccounts.list(this).associateBy { it.user.id }
+        val obsolete = nativeStreamsToStop(accounts.mapValues { it.value.token },streams.mapValues { it.value.token })
+        streams.entries.toList().forEach { (id, stream) ->
+            if (id in obsolete || stream.worker?.isAlive != true) { streams.remove(id, stream); stream.stop(); clearBackgroundCall(id) }
+        }
+        accounts.values.forEach { account ->
+            if (!streams.containsKey(account.user.id)) {
+                val stream = AccountStream(account.user.id, account.token)
+                streams[account.user.id] = stream
+                stream.worker = thread(name = "volna-events-${account.user.id}", isDaemon = true) { consume(stream) }
+                stream.callsWorker = thread(name = "volna-call-alerts-${account.user.id}", isDaemon = true) { watchCalls(stream) }
+            }
+        }
+        if (accounts.isEmpty()) { stopped = true; NativeCalls.configure(this, ""); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+    }
+    private fun current(stream: AccountStream) = !stopped && !stream.stopped && streams[stream.userId] === stream
+    private fun invalidSession(stream: AccountStream) {
+        if (!current(stream)) return
+        NativeAccounts.remove(this, stream.userId)
+        stream.stop(); streams.remove(stream.userId, stream); clearBackgroundCall(stream.userId)
+        main.post {
+            if (prefs.getLong("user_id", 0L) == stream.userId) { prefs.edit().remove("user_id").apply(); NativeCalls.configure(this, "") }
+            syncAccounts()
+        }
+    }
+    private fun consume(stream: AccountStream) {
         val url = BuildConfig.API_BASE_URL.trimEnd('/') + "/api/events"
-        while (!stopped && version == generation) {
+        while (current(stream)) {
             try {
                 val request = Request.Builder().url(url).header("Accept", "text/event-stream")
-                    .header("Authorization", "Bearer ${NativeCredentials.resolve(token)}").build()
-                val call = client.newCall(request)
-                streamCall = call
+                    .header("Authorization", "Bearer ${NativeCredentials.resolve(stream.token)}").build()
+                val call = client.newCall(request); stream.call = call
                 call.execute().use { response ->
-                    if (stopped || version != generation || activeToken != token) return@use
+                    if (!current(stream)) return@use
                     if (!response.isSuccessful) {
-                        if (response.code == 401 && NativeCredentials.refresh(token) != null) {
+                        if (response.code == 401 && NativeCredentials.refresh(stream.token) != null) {
                             response.close()
-                            try { api.me(token); return@use } catch (problem: NativeApiException) {
-                                if (problem.status == 401 || problem.status == 403) { NativeCredentials.remove(userId); stopped = true; Handler(Looper.getMainLooper()).post { NativeCalls.configure(this, "") }; stopSelf() }; return@use
-                            } catch (_: Exception) {
-                                // Retry transient connectivity failures without discarding credentials.
-                                Thread.sleep(1800); return@use
+                            try { api.me(stream.token); return@use } catch (problem: NativeApiException) {
+                                if (problem.status == 401 || problem.status == 403) invalidSession(stream)
+                                else throw problem
+                                return@use
                             }
                         }
-                        if (response.code == 401 || response.code == 403) {
-                            prefs.edit().remove("token").remove("user_id").apply()
-                            Handler(Looper.getMainLooper()).post { NativeCalls.configure(this, "") }
-                            stopped = true
-                            stopSelf()
-                            return@use
-                        }
+                        if (response.code == 401 || response.code == 403) { invalidSession(stream); return@use }
                         throw IllegalStateException("events ${response.code}")
                     }
                     val source = response.body?.source() ?: return@use
                     var eventData = StringBuilder()
-                    while (!stopped && version == generation && !source.exhausted()) {
+                    while (current(stream) && !source.exhausted()) {
                         val line = source.readUtf8Line() ?: break
                         if (line.startsWith("data:")) eventData.append(line.removePrefix("data:").trim())
                         if (line.isEmpty() && eventData.isNotEmpty()) {
-                            if (version == generation) handleEvent(eventData.toString(), userId)
+                            if (current(stream)) handleEvent(eventData.toString(), stream.userId, stream.token)
                             eventData = StringBuilder()
                         }
                     }
                 }
             } catch (_: Exception) {
-                if (!stopped && version == generation) try { Thread.sleep(1800) } catch (_: InterruptedException) { break }
+                if (current(stream)) try { Thread.sleep(1800) } catch (_: InterruptedException) { break }
             }
         }
     }
 
-    private fun handleEvent(raw: String, userId: Long) {
+    private fun clearBackgroundCall(account: Long) { getSystemService(NotificationManager::class.java).cancel("volna-call-account-$account", BACKGROUND_CALL_ID) }
+    private fun watchCalls(stream: AccountStream) {
+        var alerted: String? = null
+        val device = prefs.getString("call_device",null)?.takeIf { it.matches(Regex("[a-f0-9]{32}")) } ?: "0".repeat(32)
+        while(current(stream)) {
+            try {
+                if(NativeCalls.configuredFor(stream.token)) { clearBackgroundCall(stream.userId); alerted=null }
+                else {
+                    val call=api.currentCall(stream.token,device)
+                    if(!current(stream)) break
+                    if(call == null || !call.incoming || call.status != "ringing") { clearBackgroundCall(stream.userId);alerted=null }
+                    else if(call.id != alerted) {
+                        val account=NativeAccounts.list(this).firstOrNull { it.user.id == stream.userId } ?: break
+                        val launch=Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).setData(Uri.parse("volna://call-notification/${stream.userId}/${call.id}"))
+                            .putExtra("account_id",stream.userId).putExtra("chat_id",call.chatId)
+                        val pending=PendingIntent.getActivity(this,BACKGROUND_CALL_ID,launch,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                        val notification=builder("${call.peer?.name ?: "Входящий звонок"} · ${account.user.name}",if(call.video)"Входящий видеозвонок · нажмите, чтобы ответить" else "Входящий звонок · нажмите, чтобы ответить",NativeNotificationSounds.backgroundCallChannel(this,stream.userId))
+                            .setCategory(Notification.CATEGORY_CALL).setContentIntent(pending).setOngoing(true).setOnlyAlertOnce(true).setTimeoutAfter(45_000).build()
+                        getSystemService(NotificationManager::class.java).notify("volna-call-account-${stream.userId}",BACKGROUND_CALL_ID,notification);alerted=call.id
+                    }
+                }
+            } catch(problem: NativeApiException) { if(problem.status in listOf(401,403)) { invalidSession(stream); break } }
+            catch(_:Exception) { }
+            try { Thread.sleep(2_000) } catch(_:InterruptedException) { break }
+        }
+        if (streams[stream.userId] == null || streams[stream.userId] === stream) clearBackgroundCall(stream.userId)
+    }
+
+    private fun handleEvent(raw: String, userId: Long, token: String) {
         try {
             val event = JSONObject(raw)
             val type = event.optString("type")
-            if (type in listOf("profile","topics","community","removed","chats")) { if(type=="profile" && event.optLong("user_id")==userId) runCatching { val user=api.me(activeToken);NativeAccounts.remember(this,user,activeToken);cache.saveMe(user) };signals.tryEmit(NativeSessionSignal(userId,type,event.optLong("chat_id"),event.optLong("user_id")));return }
+            if (type in listOf("profile","topics","community","removed","chats")) { if(type=="profile" && event.optLong("user_id")==userId) runCatching { val user=api.me(token);NativeAccounts.remember(this,user,token);cache.saveMe(user) };signals.tryEmit(NativeSessionSignal(userId,type,event.optLong("chat_id"),event.optLong("user_id")));return }
             if (type !in listOf("message", "message-update")) return
             val message = event.optJSONObject("message") ?: return
             val chatId = message.optLong("chat_id")
@@ -144,20 +188,21 @@ class MessagingService : Service() {
                 val allowed = if (replyToMe) settings.getBoolean("replies", true) else if (mentioned) settings.getBoolean("mentions", true) else settings.getBoolean("messages", true)
                 if (!allowed) return
             }
-            if (MainActivity.isVisible && MainActivity.visibleChatId == chatId) return
+            if (nativeNotificationChatVisible(MainActivity.isVisible, MainActivity.visibleAccountId, MainActivity.visibleChatId, userId, chatId)) return
             val id = message.optLong("id")
             val title = if (isReaction) "Новая реакция" else if(!message.isNull("topic_id")) "${message.optString("group_name")} › ${message.optString("topic_name")}" else message.optString("sender_name", "Волна").ifBlank { "Волна" }
             val preview = if (isReaction) "${reaction?.optString("emoji")} на ваше сообщение" else message.optString("text").ifBlank { message.optJSONObject("attachment")?.optString("name") ?: "Вложение" }
             val body = if (settings.getBoolean("preview", true)) preview else if (isReaction) "Реакция на сообщение" else "Новое сообщение"
             val launch = packageManager.getLaunchIntentForPackage(packageName) ?: Intent(this, MainActivity::class.java)
             launch.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            launch.data = Uri.parse("volna://notification/$userId/$id/${if (isReaction) "reaction" else "message"}")
             launch.putExtra("chat_id", chatId).putExtra("message_id", id).putExtra("account_id", userId)
             val notificationId = ((id xor (id ushr 32)).toInt() and 0x1fffffff) + if (isReaction) 0x20000000 else 0
             val pending = PendingIntent.getActivity(this, notificationId, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val channel = NativeNotificationSounds.messageChannel(this, userId)
-            val notification = builder(title, body, channel).setContentIntent(pending).setAutoCancel(true)
+            val notification = builder(if (NativeAccounts.list(this).size > 1) "$title · ${NativeAccounts.list(this).firstOrNull { it.user.id == userId }?.user?.name.orEmpty()}" else title, body, channel).setContentIntent(pending).setAutoCancel(true)
                 .setGroup("volna-messages-$userId").setOnlyAlertOnce(false).build()
-            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(notificationId, notification)
+            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify("volna-account-$userId", notificationId, notification)
         } catch (_: Exception) { }
     }
 
@@ -184,9 +229,8 @@ class MessagingService : Service() {
 
     override fun onDestroy() {
         stopped = true
-        generation++
-        streamCall?.cancel()
-        worker?.interrupt()
+        main.removeCallbacks(reconcile)
+        streams.values.forEach { it.stop() }; streams.clear()
         client.dispatcher.cancelAll()
         super.onDestroy()
     }
@@ -196,6 +240,8 @@ class MessagingService : Service() {
     companion object {
         internal val signals = MutableSharedFlow<NativeSessionSignal>(extraBufferCapacity = 64)
         internal val events = MutableSharedFlow<NativeMessagingEvent>(extraBufferCapacity = 64)
+        private const val BACKGROUND_CALL_ID = 11035
+        private const val ACTION_SYNC = "dev.volna.messenger.SYNC_MESSAGING"
         const val ACTION_STOP = "dev.volna.messenger.STOP_MESSAGING"
         const val EXTRA_TOKEN = "token"
         const val EXTRA_USER_ID = "user_id"
@@ -212,7 +258,11 @@ class MessagingService : Service() {
 
         fun stop(context: Context) {
             NativeCalls.configure(context, "")
-            context.stopService(Intent(context, MessagingService::class.java))
+            if (NativeAccounts.list(context).isEmpty()) context.stopService(Intent(context, MessagingService::class.java))
+            else {
+                val intent = Intent(context, MessagingService::class.java).setAction(ACTION_SYNC)
+                if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
+            }
         }
     }
 }

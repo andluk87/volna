@@ -45,3 +45,74 @@
 [data-desktop=true] .chat-row-wrap .chat-row,[data-desktop=true] .chat-row-wrap .chat-row:hover,[data-desktop=true] .chat-row-wrap .chat-row.active{border-radius:0;padding:8px 10px;width:100%}
 [data-desktop=true] .chat-row-wrap .chat-actions{position:absolute;right:4px;top:7px}
 [data-desktop=true] .chat-actions>summary{opacity:0}[data-desktop=true] .chat-row-wrap:hover .chat-actions>summary,[data-desktop=true] .chat-actions[open]>summary,[data-desktop=true] .chat-actions:focus-within>summary{opacity:1}
+
+/* Folder rail and desktop dialogs share the application's live theme. */
+@media(min-width:761px){
+ :root[data-desktop=true]{--sidebar-width:clamp(330px,34vw,510px)}
+ [data-desktop=true] .sidebar.desktop-folder-sidebar{position:relative;display:grid;grid-template-columns:72px minmax(0,1fr);grid-template-rows:48px auto minmax(0,1fr)}
+ [data-desktop=true] .desktop-folder-sidebar>.sidebar-head{grid-column:2;grid-row:1;padding-left:10px}
+ [data-desktop=true] .desktop-folder-sidebar>.sidebar-head .main-menu{position:absolute;left:0;top:8px;width:72px;display:flex;justify-content:center;z-index:110}
+ [data-desktop=true] .desktop-folder-sidebar>.chat-list{grid-column:2;grid-row:3;min-height:0}
+ [data-desktop=true] .desktop-folder-sidebar>.search-tabs{grid-column:2;grid-row:2}
+ [data-desktop=true] .desktop-folder-rail{grid-column:1;grid-row:2/4;display:flex;flex-direction:column;overflow:auto;background:color-mix(in srgb,var(--bg) 70%,var(--panel));padding:4px 0;scrollbar-width:none}
+ [data-desktop=true] .desktop-folder-rail>button{position:relative;min-height:64px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:0;border-radius:0;background:transparent;color:var(--muted);padding:6px 3px;font-size:11px;overflow-wrap:anywhere}
+ [data-desktop=true] .desktop-folder-rail>button.selected{background:var(--input);color:var(--accent)}
+ [data-desktop=true] .folder-rail-icon{position:relative;height:26px;font-size:23px;display:grid;place-items:center}
+ [data-desktop=true] .folder-rail-icon>svg,[data-desktop=true] .desktop-folder-rail>button>svg{width:26px;height:26px}
+ [data-desktop=true] .folder-unread:not(:empty){position:absolute;left:14px;top:-5px;border-radius:9px;background:var(--accent);color:white;font-size:10px;min-width:16px;padding:1px 4px;line-height:15px}
+ [data-desktop=true] .sidebar-head>.search{border-radius:20px;flex:1;min-width:0}
+ [data-desktop=true] .app.desktop-emoji-docked{padding-right:300px}
+ [data-desktop=true] .composer>.emoji-panel.emoji-docked{position:fixed;right:0;top:0;bottom:0;width:300px;height:100dvh;max-height:100dvh;border-radius:0;border-left:1px solid var(--border);box-shadow:none;z-index:90}
+}
+[data-desktop=true] .composer>.emoji-panel{border-radius:8px;background:var(--panel)}
+[data-desktop=true] .emoji-panel .expression-tabs{order:-1;min-height:44px;border-bottom:1px solid var(--border)}
+[data-desktop=true] .emoji-panel .emoji-section-heading{justify-content:space-between;text-align:left;font-size:13px}
+[data-desktop=true] .emoji-panel .emoji-grid{grid-template-columns:repeat(8,minmax(0,1fr));padding:4px 6px}
+[data-desktop=true] .emoji-docked .emoji-grid{grid-template-columns:repeat(7,minmax(0,1fr))}
+[data-desktop=true] .desktop-contacts-dialog,[data-desktop=true] .desktop-calls-dialog{width:min(390px,calc(100vw - 32px));height:min(720px,calc(100dvh - 48px));padding:0;overflow:hidden;border-radius:8px;display:flex;flex-direction:column}
+[data-desktop=true] .desktop-contacts-dialog>header{display:none}
+[data-desktop=true] .desktop-contacts-dialog .contact-book{width:100%;height:100%;border:0}
+[data-desktop=true] .desktop-contacts-dialog .sidebar-page-head{min-height:54px;flex-shrink:0}
+[data-desktop=true] .contact-list article{padding:8px 12px;gap:12px}
+[data-desktop=true] .contact-list article>.avatar{width:42px;height:42px;flex:0 0 42px}
+[data-desktop=true] .desktop-call-list{overflow:auto;min-height:0;flex:1;padding:4px 0}
+[data-desktop=true] .desktop-calls-dialog>header,[data-desktop=true] .desktop-call-settings>header{padding:14px 20px}
+.call-history-row{display:flex;width:100%;align-items:center;gap:12px;padding:10px 18px;background:transparent;border:0;color:var(--text);text-align:left}
+.call-history-row:hover{background:var(--hover)}
+.call-history-row>.avatar{width:42px;height:42px;flex:0 0 42px}
+.call-history-row>span:not(.avatar){flex:1;min-width:0}
+.call-history-row strong,.call-history-row small{display:block}
+.call-history-row small{color:var(--muted);font-size:12px;margin-top:4px}
+.call-history-row>svg{width:22px;height:22px;color:var(--accent)}
+.call-history-bubble{min-width:240px;max-width:min(310px,85%);padding:0!important}
+.call-history-bubble>button{border:0;background:transparent;color:var(--text);width:100%;display:flex;gap:18px;align-items:center;text-align:left;padding:12px 16px}
+.call-history-bubble span{flex:1}.call-history-bubble strong,.call-history-bubble small{display:block}
+.call-history-bubble small{color:var(--muted);margin-top:6px;font-size:12px}.call-history-bubble small.missed{color:#ed7777}
+.call-history-bubble svg{width:26px;height:26px;color:var(--accent)}
+.desktop-pins-head{display:flex;align-items:center;gap:12px;background:var(--panel);padding:6px 12px;min-height:48px;border-bottom:1px solid var(--border)}
+.desktop-unpin-all{border:0;border-top:1px solid var(--border);background:var(--panel);color:var(--accent);padding:16px;width:100%}
+.desktop-call-settings{width:min(410px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overflow:auto}
+.desktop-call-settings>label:not(.setting-check){display:flex;flex-direction:column;gap:10px;padding:18px 0;border-bottom:1px solid var(--border);color:var(--accent)}
+.desktop-call-settings select{width:100%;background:var(--input);color:var(--text);border:1px solid var(--border);padding:10px;border-radius:6px}
+.desktop-call-settings meter{display:block;width:100%;height:20px;margin:12px 0}
+.desktop-call-settings p{font-size:12px;line-height:1.6;color:var(--muted)}
+[data-desktop=true] .desktop-settings-dialog{width:min(410px,calc(100vw - 32px))}
+[data-desktop=true] .settings-account{display:grid;grid-template-columns:72px 1fr;text-align:left;gap:4px 14px;padding:16px 20px!important}
+[data-desktop=true] .settings-account>.avatar{grid-row:1/3;width:64px;height:64px}
+[data-desktop=true] .settings-account strong{align-self:end}[data-desktop=true] .settings-account small{align-self:start}
+[data-desktop=true] .emoji-panel .expression-tabs{order:-4}
+[data-desktop=true] .emoji-panel>header{order:-3;flex-shrink:0}
+[data-desktop=true] .emoji-panel .emoji-categories{order:-2;flex-shrink:0}
+[data-desktop=true] .emoji-panel .expression-tabs button[role=tab]{font-size:12px;font-weight:500;min-width:0;flex:1;padding:6px}
+[data-desktop=true] .emoji-panel .expression-tabs [aria-selected=true]{color:var(--accent);border-bottom:2px solid var(--accent)}
+[data-desktop=true] .user-profile{width:min(410px,calc(100vw - 32px));border-radius:8px}
+@media(max-width:760px){[data-desktop=true] .desktop-folder-rail{display:flex;overflow-x:auto;flex-shrink:0}[data-desktop=true] .desktop-folder-rail>button{display:flex;align-items:center;gap:6px;white-space:nowrap}[data-desktop=true] .folder-rail-icon>svg{width:18px;height:18px}[data-desktop=true] .folder-unread{font-size:10px}}
+.folder-context-menu{position:fixed;width:200px;border-radius:8px;background:var(--panel);box-shadow:0 4px 20px #0005;border:1px solid var(--border);padding:6px;z-index:120}
+.folder-context-menu>button{display:flex;align-items:center;gap:12px;padding:10px;width:100%;background:transparent;color:var(--text);border:0;text-align:left}
+.folder-context-menu>button.danger{color:#ed7777}.folder-context-menu svg{width:20px;height:20px}
+.chat-folder-submenu>summary{display:flex;align-items:center;gap:12px;padding:10px;cursor:pointer}
+.chat-folder-submenu>summary>svg{width:20px;height:20px}.chat-folder-submenu>div{max-height:220px;overflow:auto}
+.chat-folder-submenu button{display:flex;align-items:center;gap:12px;width:100%;padding:10px;background:var(--panel);color:var(--text);border:0;text-align:left}
+.chat-folder-submenu button>svg{width:20px;height:20px}
+.call-history-bubble small>svg,.call-history-row small>svg{width:14px;height:14px;vertical-align:-2px;margin-right:4px;color:inherit}
+[data-desktop=true] .composer>.emoji-panel .expression-tabs button[aria-selected=true]{color:var(--accent);border-bottom:2px solid var(--accent)}

@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,6 +49,9 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,7 +77,7 @@ internal fun ChatRoomScreen(
     token: String, callActive: Boolean, onCall: (VolnaChat) -> Unit, onVideo: (VolnaChat) -> Unit, onCommunity: () -> Unit, onTopics: () -> Unit,
     moreHistory: Boolean, loadingHistory: Boolean, onLoadOlder: () -> Unit, transcribingMessages: Set<Long>,
     onGallery: () -> Unit, onOpenAttachment: (VolnaMessage) -> Unit,
-    onBack: () -> Unit, onSend: (String, Long?, List<NativeEmojiEntity>, Long?, () -> Unit) -> Unit,
+    onBack: () -> Unit, onSend: (String, Long?, List<NativeEmojiEntity>, Long?, (Boolean) -> Unit) -> Unit,
     api: NativeApi, onSendExpression: (NativeExpression, Long?, () -> Unit) -> Unit, onAppearance: () -> Unit,
     onPickFiles: (Boolean, String, Long?, () -> Unit) -> Unit,
     onPickExtra: (String, String, Long?, () -> Unit) -> Unit,
@@ -89,6 +93,7 @@ internal fun ChatRoomScreen(
     val clipboard = LocalClipboardManager.current
     val drafts = remember(user?.id) { NativeDrafts(context, user?.id ?: 0) }
     var input by remember(chat.id, user?.id) { mutableStateOf(drafts.input(chat.id)) }
+    var failedDraft by remember(chat.id, user?.id) { mutableStateOf(drafts.failed(chat.id)) }
     var entities by remember(chat.id, user?.id) { mutableStateOf(drafts.entities(chat.id)) }
     val panel = remember(chat.id, user?.id) { NativePanelState().apply { tab = NativeExpressionStore(context, user?.id ?: 0).lastTab } }
     val inputFocus = remember { FocusRequester() }
@@ -111,6 +116,15 @@ internal fun ChatRoomScreen(
     var searchOpen by remember(chat.id) { mutableStateOf(false) }
     var showPins by remember(chat.id) { mutableStateOf(false) }
     var menu by remember(chat.id) { mutableStateOf(false) }
+    var formattingMenu by remember(chat.id) { mutableStateOf(false) }
+    var formattingDialog by remember(chat.id) { mutableStateOf<String?>(null) }
+    var formattingOption by remember(chat.id) { mutableStateOf("") }
+    var formattingError by remember(chat.id) { mutableStateOf("") }
+    fun applyFormat(kind: String, option: String? = null) {
+        formattingMenu = false
+        if (kind in listOf("link", "code") && option == null) { formattingDialog = kind; formattingOption = if (kind == "link") "https://" else "js"; formattingError = ""; return }
+        try { val result = nativeFormatSelection(input.text, entities, input.selection.min, input.selection.max, kind, option.orEmpty()); input = TextFieldValue(result.text, TextRange(result.start,result.end)); entities = result.entities; drafts.setInput(chat.id,input,entities); formattingDialog = null; inputFocus.requestFocus() } catch (problem: IllegalArgumentException) { formattingError = problem.message.orEmpty(); if (formattingDialog == null) Toast.makeText(context,formattingError,Toast.LENGTH_SHORT).show() }
+    }
     var attachmentMenu by remember(chat.id) { mutableStateOf(false) }
     var selection by remember(chat.id) { mutableStateOf(emptySet<Long>()) }
     var deleteSelected by remember { mutableStateOf(false) }
@@ -142,7 +156,8 @@ internal fun ChatRoomScreen(
     DisposableEffect(chat.id) { onDispose { if (editTarget == null) drafts.setInput(chat.id, input, entities) } }
     LaunchedEffect(startSearch) { if (startSearch) { searchOpen = true; showPins = false; onSearchStarted() } }
     BackHandler { when { selection.isNotEmpty() -> selection = emptySet(); recorder.recording -> recorder.cancel(); panel.open -> { if (panel.searching || panel.query.isNotEmpty()) { panel.searching = false; panel.query = ""; focus.clearFocus(); keyboard?.hide() } else if (panel.expanded) panel.expanded = false else panel.open = false }; searchOpen -> { searchOpen = false; onSearch("") }; else -> onBack() } }
-    val visible = when { searchQuery.isNotBlank() -> searchResults; showPins -> pinnedMessages; else -> messages }
+    var outgoing by remember(chat.id, user?.id) { mutableStateOf<VolnaMessage?>(null) }
+    val visible = when { searchQuery.isNotBlank() -> searchResults; showPins -> pinnedMessages; else -> messages + listOfNotNull(outgoing) }
     val groups = remember(visible) { nativeMessageGroups(visible) }
     var callPages by remember(chat.id) { mutableStateOf(1) }
     val chatCalls = rememberNativeChatCalls(token, user?.id ?: 0, chat, if (moreHistory || earlierWindow) messages.firstOrNull()?.createdAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } else null, !searchOpen && !showPins, callPages)
@@ -173,13 +188,26 @@ internal fun ChatRoomScreen(
     val reportVisible by rememberUpdatedState(onVisibleMessage)
     LaunchedEffect(chat.id, listState) {
         snapshotFlow { val index = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1; currentGroups.take((index - currentOffset + 1).coerceAtLeast(0)).lastOrNull { it.messages.isNotEmpty() }?.messages?.lastOrNull()?.id }.distinctUntilChanged().debounce(400).collect { id ->
-            if (!searchOpen && !showPins && MainActivity.isVisible) id?.let(reportVisible)
+            if (!searchOpen && !showPins && MainActivity.isVisible) id?.takeIf { it > 0 }?.let(reportVisible)
         }
     }
     fun select(message: VolnaMessage) { selection = if (message.id in selection) selection - message.id else if (selection.size < 50) selection + message.id else selection }
     fun submit() {
         if (input.text.isBlank() || busy || recorder.recording) return
-        onSend(input.text, replyTo?.id, entities, editTarget?.id) { clearInput(); editTarget = null; replyTo = null; jumpBottom() }
+        val submitted = input
+        val submittedEntities = entities
+        val submittedReply = replyTo
+        val submittedEdit = editTarget
+        if (submittedEdit == null) outgoing = VolnaMessage(-System.currentTimeMillis(), user?.id ?: 0, user?.name ?: "", submitted.text, java.time.Instant.now().toString(), false, null, chatId = chat.id, emojiEntities = submittedEntities, reply = submittedReply?.let { VolnaReply(it.id, it.senderName, it.text, it.deleted) })
+        clearInput(); editTarget = null; replyTo = null
+        inputFocus.requestFocus()
+        onSend(submitted.text, submittedReply?.id, submittedEntities, submittedEdit?.id) { success ->
+            outgoing = null
+            if (!success) {
+                if (input.text.isEmpty()) { input = submitted; entities = submittedEntities; replyTo = submittedReply; editTarget = submittedEdit; drafts.setInput(chat.id, input, entities) }
+                else { drafts.saveFailed(chat.id, submitted, submittedEntities); failedDraft = drafts.failed(chat.id) }
+            }
+        }
     }
     val selected = (messages + searchResults + pinnedMessages).distinctBy { it.id }.filter { it.id in selection }.sortedBy { it.id }
     val backdrop = remember(chat.id) { HazeState() }
@@ -250,7 +278,7 @@ internal fun ChatRoomScreen(
                     } else {
                     val message = group.first()
                     val previous = previousEntry?.messages?.lastOrNull()
-                    MessageBubble(message, group, message.senderId == user?.id, group.last().id <= chat.peerDelivered, group.last().id <= chat.peerRead, canModerate, canPin, message.id in transcribingMessages,
+                    MessageBubble(message, group, message.senderId == user?.id, group.last().id > 0 && group.last().id <= chat.peerDelivered, group.last().id > 0 && group.last().id <= chat.peerRead, canModerate, canPin, message.id in transcribingMessages,
                         onReply = { replyTo = it; editTarget = null; panel.open = false }, onEdit = { editTarget = it; panel.tab = "emoji"; replyTo = null; input = TextFieldValue(it.text, TextRange(it.text.length)); entities = it.emojiEntities }, onForward = onForward,
                         onCopy = { clipboard.setText(AnnotatedString(it.text)); Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show() }, onAction = onMessageAction,
                         onPlayAudio = onPlayAudio, voicePlayback = voicePlayback, token = token, onOpenAttachment = onOpenAttachment,
@@ -279,9 +307,19 @@ internal fun ChatRoomScreen(
                     NativeText(if (recorder.locked) "Запись закреплена · нажмите для отправки" else "← отмена · ↑ закрепить", color = Muted, fontSize = 10.sp, maxLines = 1)
                 }
             } else {
+                if (failedDraft != null) TextButton(onClick = {
+                    val saved = failedDraft!!
+                    val current = input to entities
+                    input = saved.first; entities = saved.second
+                    drafts.clearFailed(chat.id)
+                    if (current.first.text.isNotEmpty()) drafts.saveFailed(chat.id, current.first, current.second)
+                    failedDraft = drafts.failed(chat.id)
+                    drafts.setInput(chat.id, input, entities); inputFocus.requestFocus()
+                }) { NativeText("Вернуть неотправленный текст") }
                 NativeRichComposer(input, ::changeInput, entities, user?.id ?: 0, token, api,
-                    Modifier.weight(1f).focusRequester(inputFocus).onFocusChanged { if (it.isFocused && panel.open && !panel.searching) panel.open = false },
-                    enabled = !busy, maxLines = if (LocalConfiguration.current.screenHeightDp < 480) 3 else 6)
+                    Modifier.weight(1f).focusRequester(inputFocus).onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.isCtrlPressed || event.isMetaPressed)) { val kind = when(event.key){Key.B -> "bold";Key.I -> "italic";Key.U -> "underline";Key.K -> "link";else -> null}; if(kind != null){applyFormat(kind);true}else false } else false }.onFocusChanged { if (it.isFocused && panel.open && !panel.searching) panel.open = false },
+                    enabled = true, maxLines = if (LocalConfiguration.current.screenHeightDp < 480) 3 else 6)
+                if (!recorder.recording) IconButton(onClick = { formattingMenu = true }) { Icon(Icons.Outlined.TextFormat, "Форматирование текста", tint = Muted) }
                 if (!recorder.recording) IconButton(onClick = { attachmentMenu = true }, enabled = !busy && editTarget == null) { Icon(Icons.Outlined.AttachFile, "Вложение", tint = Muted) }
             }
             if (input.text.isBlank() && editTarget == null || recorder.recording) NativeRecordButton(recorder, enabled = !busy && !callActive) { micPermission.launch(Manifest.permission.RECORD_AUDIO) }
@@ -301,6 +339,10 @@ internal fun ChatRoomScreen(
         } else Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime))
     }
     } }
+    if (formattingMenu) ModalBottomSheet(onDismissRequest = { formattingMenu = false }, containerColor = Panel) {
+        Column(Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp)) { NativeText("Форматирование текста", fontWeight = FontWeight.Bold); NativeText("Выделите текст или вставьте заготовку", color = Muted, fontSize = 12.sp); nativeFormatOptions.forEach { (kind,label) -> TextButton(onClick = { applyFormat(kind) }, modifier = Modifier.fillMaxWidth()) { NativeText(label) } } }
+    }
+    if (formattingDialog != null) AlertDialog(onDismissRequest = { formattingDialog = null; inputFocus.requestFocus() }, title = { NativeText(if(formattingDialog == "link") "Гиперссылка" else "Блок кода") }, text = { Column { OutlinedTextField(value = formattingOption, onValueChange = { formattingOption = it }, label = { NativeText(if(formattingDialog == "link") "Адрес ссылки" else "Язык кода") }, singleLine = true); NativeText(if(formattingDialog == "link") "Полный адрес http:// или https://" else "Например: js, python, json, sql. Можно оставить пустым.", color = Muted, fontSize = 12.sp); if(formattingError.isNotBlank()) NativeText(formattingError,color = MaterialTheme.colorScheme.error) } }, confirmButton = { TextButton(onClick = { applyFormat(formattingDialog!!,formattingOption) }) { NativeText("Применить") } }, dismissButton = { TextButton(onClick = { formattingDialog = null; inputFocus.requestFocus() }) { NativeText("Отмена") } })
     if (attachmentMenu) ModalBottomSheet(onDismissRequest = { attachmentMenu = false }, containerColor = Panel) {
         NativeText("Вложение", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         val options = listOf(Triple("gallery", "Галерея", Icons.Outlined.PhotoLibrary), Triple("camera", "Камера", Icons.Outlined.PhotoCamera), Triple("file", "Файл", Icons.Outlined.Description), Triple("location", "Местоположение", Icons.Outlined.LocationOn), Triple("contact", "Контакт", Icons.Outlined.PersonOutline), Triple("music", "Музыка", Icons.Outlined.MusicNote))
@@ -344,11 +386,11 @@ private fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isMi
     val compactText = message.text.isNotBlank() && message.text.length * LocalDensity.current.fontScale <= 32f && '\n' !in message.text && message.attachmentId == null && message.reply == null && message.forwardedName == null && !message.deleted && !message.edited && message.reactions.isEmpty() && message.emojiEntities.isEmpty() && group.size == 1 && !(showAuthor && !isMine)
     val sticker = message.expressionKind == "sticker" || message.attachmentMime == "image/webp" && message.attachmentName.orEmpty().startsWith("Стикер-")
     NativeMessageContent(isMine) { Row(Modifier.fillMaxWidth().background(if (selected || highlighted) Accent.copy(alpha = .12f) else Color.Transparent), horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
-        if (selectionMode) Checkbox(selected, { onSelectGroup() }, modifier = Modifier.size(44.dp))
+        if (selectionMode) Checkbox(selected, { onSelectGroup() }, enabled = message.id > 0, modifier = Modifier.size(44.dp))
         if (appearance.avatars && showAuthor && !isMine) Box(Modifier.width(36.dp).heightIn(min = 32.dp), contentAlignment = Alignment.BottomCenter) { if (!joined) Box(Modifier.clickable { onProfile(message.senderId) }) { Avatar(message.senderName, message.senderId, size = 28.dp) } }
         val shape = RoundedCornerShape(topStart = if (joined && !isMine) 6.dp else appearance.radius.dp, topEnd = if (joined && isMine) 6.dp else appearance.radius.dp, bottomEnd = appearance.radius.dp, bottomStart = appearance.radius.dp)
         Column(Modifier.widthIn(min = if (message.attachmentMime?.startsWith("audio/") == true && !message.deleted) (screenWidth * .58f).coerceIn(200.dp.coerceAtMost(maxWidth), maxWidth).coerceAtMost(300.dp) else 0.dp, max = maxWidth).clip(shape).background(if (sticker && !message.deleted) androidx.compose.ui.graphics.SolidColor(Color.Transparent) else nativeMessageBrush(isMine))
-            .combinedClickable(onClick = { if (selectionMode) onSelectGroup() else detail = !detail }, onLongClick = { if (selectionMode) onSelectGroup() else { targetId = message.id; menu = true } })
+            .combinedClickable(enabled = message.id > 0, onClick = { if (selectionMode) onSelectGroup() else detail = !detail }, onLongClick = { if (selectionMode) onSelectGroup() else { targetId = message.id; menu = true } })
             .padding(horizontal = if (appearance.density == "minimal") 7.dp else 10.dp, vertical = (if (compactText) appearance.padding.coerceAtMost(4) else appearance.padding).dp)) {
             if (showAuthor && !isMine && !joined && !message.deleted) NativeText(message.senderName, Modifier.clickable { onProfile(message.senderId) }, color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             if (message.forwardedName != null) NativeText("Переслано от ${message.forwardedName}", color = Muted, fontSize = 11.sp)
@@ -411,22 +453,38 @@ private fun NativeMessageReactions(message: VolnaMessage, me: Long?, onReact: (S
 @Composable
 internal fun NativeLinkedText(text: String, modifier: Modifier = Modifier, entities: List<NativeEmojiEntity> = emptyList(), token: String = "", account: Long = 0) {
     val accent = Accent
-    val linked = remember(text, accent) { buildAnnotatedString { append(text); Regex("https?://[^\\s<>]+", RegexOption.IGNORE_CASE).findAll(text).forEach { match -> addLink(LinkAnnotation.Url(match.value.trimEnd('.', ',', ')'), TextLinkStyles(style = SpanStyle(color = accent, textDecoration = TextDecoration.Underline))), match.range.first, match.range.last + 1) } } }
-    if (entities.isEmpty()) NativeText(linked, modifier, color = TextMain, fontSize = 15.sp, lineHeight = 20.sp)
+    val formatted = remember(text) { nativeFormatted(text) }
+    var revealed by remember(text) { mutableStateOf(emptySet<Int>()) }
+    val body = formatted.text
+    val renderedEntities = remember(text,entities) { entities.mapNotNull { e -> val start = formatted.offsets.getOrNull(e.start) ?: -1; val end = formatted.offsets.getOrNull(e.start+e.length) ?: -1; if(start >= 0 && end-start == e.length)e.copy(start=start) else null } }
+    val linked = buildAnnotatedString {
+        val masked = body.toCharArray()
+        formatted.spans.filter { it.kind == "spoiler" && it.start !in revealed }.forEach { span -> for(i in span.start until span.end) if(!masked[i].isWhitespace()) masked[i] = '•' }
+        append(String(masked))
+        Regex("https?://[^\\s<>]+", RegexOption.IGNORE_CASE).findAll(body).forEach { match -> if(formatted.spans.none { it.kind in listOf("inline","code","link","spoiler") && match.range.first >= it.start && match.range.first < it.end }) addLink(LinkAnnotation.Url(match.value.trimEnd('.', ',', ')'), TextLinkStyles(style = SpanStyle(color = accent, textDecoration = TextDecoration.Underline))), match.range.first, match.range.last + 1) }
+        formatted.spans.forEach { span -> if(span.start < span.end) {
+            val style = when(span.kind){"bold" -> SpanStyle(fontWeight=FontWeight.Bold); "italic" -> SpanStyle(fontStyle=FontStyle.Italic); "underline" -> SpanStyle(textDecoration=TextDecoration.Underline); "strike" -> SpanStyle(textDecoration=TextDecoration.LineThrough); "inline","code" -> SpanStyle(fontFamily=FontFamily.Monospace,background=Muted.copy(alpha=0.12f)); "quote" -> SpanStyle(background=accent.copy(alpha=0.10f)); "syntax-keyword" -> SpanStyle(color=accent); "syntax-string" -> SpanStyle(color=Color(0xff33966b)); "syntax-number" -> SpanStyle(color=Color(0xffc27727)); "syntax-comment" -> SpanStyle(color=Muted,fontStyle=FontStyle.Italic); else -> SpanStyle() }
+            addStyle(style,span.start,span.end)
+            if(span.kind == "link") addLink(LinkAnnotation.Url(span.url,TextLinkStyles(style=SpanStyle(color=accent,textDecoration=TextDecoration.Underline))),span.start,span.end)
+            if(span.kind == "spoiler") { val visible=span.start in revealed; addStyle(SpanStyle(color=if(visible)TextMain else Color.Transparent,background=Muted.copy(alpha=if(visible)0.12f else 0.65f)),span.start,span.end); addLink(LinkAnnotation.Clickable("spoiler-${span.start}",linkInteractionListener={ revealed=if(visible)revealed-span.start else revealed+span.start }),span.start,span.end) }
+        } }
+    }
+
+    if (renderedEntities.isEmpty()) NativeText(linked, modifier, color = TextMain, fontSize = 15.sp, lineHeight = 20.sp)
     else {
         val context = LocalContext.current; val api = NativeExpressionHttp.api; val store = remember(account) { NativeExpressionStore(context, account) }
         val builder = androidx.compose.ui.text.AnnotatedString.Builder()
         var cursor = 0
         val inline = mutableMapOf<String, androidx.compose.foundation.text.InlineTextContent>()
-        entities.sortedBy { it.start }.forEach { e -> if (e.start >= cursor && e.length > 0 && e.start + e.length <= text.length && e.attachmentId.matches(Regex("[a-f0-9]{48}"))) {
+        renderedEntities.filter { e -> formatted.spans.none { it.kind == "spoiler" && it.start !in revealed && e.start >= it.start && e.start < it.end } }.sortedBy { it.start }.forEach { e -> if (e.start >= cursor && e.length > 0 && e.start + e.length <= body.length && e.attachmentId.matches(Regex("[a-f0-9]{48}"))) {
             builder.append(linked.subSequence(cursor, e.start))
-            val key = "emoji-${e.start}"; builder.appendInlineContent(key, text.substring(e.start, e.start + e.length))
+            val key = "emoji-${e.start}"; builder.appendInlineContent(key, body.substring(e.start, e.start + e.length))
             inline[key] = androidx.compose.foundation.text.InlineTextContent(androidx.compose.ui.text.Placeholder(1.2.em, 1.2.em, androidx.compose.ui.text.PlaceholderVerticalAlign.TextCenter)) {
-                val item = NativeExpression(e.id, "", "emoji", "Пользовательский эмодзи", emptyList(), text.substring(e.start, e.start + e.length), e.attachmentId, e.mime, 0, "")
+                val item = NativeExpression(e.id, "", "emoji", "Пользовательский эмодзи", emptyList(), body.substring(e.start, e.start + e.length), e.attachmentId, e.mime, 0, "")
                 NativeExpressionImage(item, token, api, store, Modifier.fillMaxSize(), play = true)
             }; cursor = e.start + e.length
         } }
-        builder.append(linked.subSequence(cursor, text.length))
+        builder.append(linked.subSequence(cursor, body.length))
         val annotated = emojiAnnotated(builder.toAnnotatedString(), LocalEmojiCatalog.current, LocalEmojiFont.current)
         androidx.compose.material3.Text(annotated, modifier, color = TextMain, fontSize = 15.sp, lineHeight = 20.sp,
             style = nativeEmojiTextStyle(LocalTextStyle.current), inlineContent = inline)
@@ -438,6 +496,6 @@ private fun NativeMessageStamp(message: VolnaMessage, isMine: Boolean, delivered
     if (visible) Row(verticalAlignment = Alignment.CenterVertically) {
         if (edited) NativeText("изменено · ", color = Muted, fontSize = 10.sp)
         NativeText(nativeClock(message.createdAt), color = Muted, fontSize = 11.sp)
-        if (isMine) Icon(if (delivered) Icons.Outlined.DoneAll else Icons.Outlined.Done, if (read) "Прочитано" else if (delivered) "Доставлено" else "Отправлено", tint = if (read) Accent else Muted, modifier = Modifier.padding(start = 3.dp).size(15.dp))
+        if (isMine) Icon(if (message.id < 0) Icons.Outlined.Schedule else if (delivered) Icons.Outlined.DoneAll else Icons.Outlined.Done, if (message.id < 0) "Отправляется" else if (read) "Прочитано" else if (delivered) "Доставлено" else "Отправлено", tint = if (read) Accent else Muted, modifier = Modifier.padding(start = 3.dp).size(15.dp))
     }
 }
