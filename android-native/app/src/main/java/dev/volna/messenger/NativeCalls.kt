@@ -93,6 +93,7 @@ object NativeCalls {
     private val frameObserver = VideoSink { lastVideoFrame = SystemClock.elapsedRealtime() }
 
     fun configure(appContext: Context, sessionToken: String) {
+        NativeTelecom.configure(appContext)
         if (context != null && token == sessionToken) return
         end()
         pollJob?.cancel()

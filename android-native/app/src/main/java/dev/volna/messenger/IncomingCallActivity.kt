@@ -47,7 +47,8 @@ class IncomingCallActivity : ComponentActivity() {
         receive(intent)
         setContent { NativeEmojiProvider {
             val state by NativeCalls.state.collectAsState()
-            val appearance = remember { val account = getSharedPreferences("volna-native", MODE_PRIVATE).getLong("user_id", 0); val prefs = getSharedPreferences("volna-appearance-$account", MODE_PRIVATE); NativeAppearance.load(if (prefs.all.isEmpty()) getSharedPreferences("volna-appearance", MODE_PRIVATE) else prefs) }
+            val account = getSharedPreferences("volna-native", MODE_PRIVATE).getLong("user_id", 0)
+            val appearance = rememberNativeCallAppearance(account)
             LaunchedEffect(state.call?.id, resolved, expectedId) {
                 if (resolved && state.call?.id != expectedId) finish()
             }

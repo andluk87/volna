@@ -172,7 +172,7 @@ class MainActivity : ComponentActivity() {
         setContent { NativeEmojiProvider {
             Box(Modifier.fillMaxSize()) {
                 VolnaNativeApp(authReturn.value, openChatRequest.value, openMessageRequest.value, openAccountRequest.value) { openChatRequest.value = null; openMessageRequest.value = null; openAccountRequest.value = null }
-                if (NativeCallLayout.inPip) { val state by NativeCalls.state.collectAsState(); val account = getSharedPreferences("volna-native", MODE_PRIVATE).getLong("user_id", 0); NativeCallScreen(state, NativeCredentials.access(account), standalone = true, pip = true) }
+                if (NativeCallLayout.inPip) { val state by NativeCalls.state.collectAsState(); val account = getSharedPreferences("volna-native", MODE_PRIVATE).getLong("user_id", 0); VolnaTheme(rememberNativeCallAppearance(account)) { NativeCallScreen(state, NativeCredentials.access(account), standalone = true, pip = true) } }
             }
         } }
     }
