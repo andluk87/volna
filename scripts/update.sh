@@ -35,6 +35,7 @@ calls=$(compose config --format json | python3 scripts/calls-config.py)
 if [ "$calls" -eq 0 ]; then
   echo 'TURN is not configured. To enable calls across networks: sh scripts/enable-calls.sh'
 fi
+python3 scripts/clean-windows-downloads.py
 compose build server web transcription
 sh scripts/backup.sh
 set -- server web transcription

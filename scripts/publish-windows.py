@@ -19,3 +19,6 @@ def copy(source,destination):
 for filename in [name,name+'.blockmap']:copy(release/filename,feed/filename)
 copy(release/name,public/'volna-windows.exe');copy(release/'latest.yml',feed/'latest.yml')
 print(f'Published Windows {version}: download and update feed.')
+
+from runpy import run_path
+run_path(str(root/"scripts/clean-windows-downloads.py"))["clean"](root)
