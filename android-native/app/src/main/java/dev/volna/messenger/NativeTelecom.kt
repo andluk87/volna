@@ -29,7 +29,7 @@ internal object NativeTelecom {
             val telecom = context.getSystemService(TelecomManager::class.java) ?: return
             telecom.registerPhoneAccount(PhoneAccount.builder(handle, "Волна")
                 .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED or PhoneAccount.CAPABILITY_VIDEO_CALLING)
-                .setSupportedUriSchemes(listOf("volna")).build())
+                .setSupportedUriSchemes(listOf("volna", "tel", "sip")).build())
             account = handle
         } catch (_: RuntimeException) { /* Calls continue through the existing app UI. */ }
         scope.launch { NativeCalls.state.collect { sync(it) } }
@@ -47,7 +47,7 @@ internal object NativeTelecom {
             val handle = account ?: return
             announced = call.id; failed = null
             try {
-                val extras = Bundle().apply { putString(CALL_ID, call.id) }
+                val extras = Bundle().apply { putString(CALL_ID, call.id); putParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, callerAddress(call)) }
                 val telecom = context.getSystemService(TelecomManager::class.java)
                 if (call.incoming) telecom.addNewIncomingCall(handle, extras)
                 else telecom.placeCall(Uri.fromParts("volna", call.id, null), Bundle().apply {
@@ -91,11 +91,22 @@ internal object NativeTelecom {
             return Connection.createFailedConnection(DisconnectCause(DisconnectCause.CANCELED))
         return VolnaConnection(id).also { created ->
             connection?.finish(); connection = created
+            created.setAddress(callerAddress(call),TelecomManager.PRESENTATION_ALLOWED)
             created.setCallerDisplayName(call.peer?.name ?: "Волна", TelecomManager.PRESENTATION_ALLOWED)
             created.update(state)
         }
     }
 
+    fun callerAddress(call:VolnaCall):Uri {
+        val address=nativeCallerAddress(call.peer?.phone.orEmpty(),call.peer?.username.orEmpty(),call.peer?.id?:0)
+        return Uri.parse(address)
+    }
+    fun routes():List<NativeAudioRoute>? = if(systemFocused)connection?.routes() else null
+    fun selectRoute(id:Int):Boolean {
+        if(!systemFocused)return false
+        val current=connection?:return false
+        current.selectRoute(id);return true
+    }
     fun answer(id: String, video: Boolean) {
         val context = app ?: return
         val call = NativeCalls.state.value.call ?: return
@@ -104,7 +115,7 @@ internal object NativeTelecom {
             NativeCalls.accept(video = video && call.video && context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
         } else {
             // The normal activity requests microphone permission; no background recording.
-            runCatching { IncomingCallActivity.pending(context, id, answer = true).send() }
+            runCatching { IncomingCallActivity.pending(context, id, answer = true, account=NativeCalls.accountId()).send() }
         }
     }
 
@@ -117,6 +128,31 @@ internal object NativeTelecom {
 
 internal class VolnaConnection(private val id: String) : Connection() {
     private var lastSystemMuted: Boolean? = null
+    private var audioState:CallAudioState?=null
+    private var endpoints:List<CallEndpoint> = emptyList()
+    fun routes():List<NativeAudioRoute> {
+        if(Build.VERSION.SDK_INT>=34 && endpoints.isNotEmpty())return endpoints.map{NativeAudioRoute(it.identifier.hashCode() or Int.MIN_VALUE,endpointLabel(it))}
+        val mask=audioState?.supportedRouteMask?: (CallAudioState.ROUTE_EARPIECE or CallAudioState.ROUTE_SPEAKER)
+        return listOf(-1 to CallAudioState.ROUTE_EARPIECE,-2 to CallAudioState.ROUTE_SPEAKER,-3 to CallAudioState.ROUTE_BLUETOOTH,-4 to CallAudioState.ROUTE_WIRED_HEADSET).filter{mask and it.second!=0}.map{NativeAudioRoute(it.first,legacyLabel(it.second))}
+    }
+    fun selectRoute(route:Int) {
+        if(Build.VERSION.SDK_INT>=34 && endpoints.isNotEmpty()) {
+            val target=endpoints.firstOrNull{(it.identifier.hashCode() or Int.MIN_VALUE)==route}?:error("Устройство отключено")
+            requestCallEndpointChange(target,java.util.concurrent.Executor{it.run()},object:android.os.OutcomeReceiver<Void,CallEndpointException>{
+                @androidx.annotation.RequiresApi(34)
+                override fun onResult(result:Void?){if(NativeCalls.state.value.call?.id==id)NativeCalls.audioRouteChanged(endpointLabel(target))}
+                override fun onError(error:CallEndpointException){if(NativeCalls.state.value.call?.id==id)NativeCalls.audioRouteFailed(error.message?:"Не удалось переключить звук")}
+            })
+        }else setAudioRoute(when(route){-2->CallAudioState.ROUTE_SPEAKER;-3->CallAudioState.ROUTE_BLUETOOTH;-4->CallAudioState.ROUTE_WIRED_HEADSET;else->CallAudioState.ROUTE_EARPIECE})
+    }
+    private fun legacyLabel(route:Int)=when(route){CallAudioState.ROUTE_SPEAKER->"Динамик";CallAudioState.ROUTE_BLUETOOTH->"Bluetooth";CallAudioState.ROUTE_WIRED_HEADSET->"Гарнитура";else->"Телефон"}
+    @androidx.annotation.RequiresApi(34)
+    private fun endpointLabel(endpoint:CallEndpoint)=when(endpoint.endpointType){CallEndpoint.TYPE_SPEAKER->"Динамик";CallEndpoint.TYPE_BLUETOOTH->"Bluetooth · ${endpoint.endpointName}";CallEndpoint.TYPE_WIRED_HEADSET->"Гарнитура";CallEndpoint.TYPE_EARPIECE->"Телефон";else->endpoint.endpointName.toString()}
+    @androidx.annotation.RequiresApi(34)
+    override fun onAvailableCallEndpointsChanged(availableEndpoints:MutableList<CallEndpoint>){endpoints=availableEndpoints.toList()}
+    @androidx.annotation.RequiresApi(34)
+    override fun onCallEndpointChanged(callEndpoint:CallEndpoint){if(NativeCalls.state.value.call?.id==id)NativeCalls.audioRouteChanged(endpointLabel(callEndpoint))}
+
     init {
         connectionProperties = PROPERTY_SELF_MANAGED
         audioModeIsVoip = true
@@ -124,6 +160,10 @@ internal class VolnaConnection(private val id: String) : Connection() {
     }
     fun update(state: NativeCallState) {
         if (state.call?.id != id) { finish(); return }
+        val callerUri=NativeTelecom.callerAddress(state.call)
+        if(address!=callerUri)setAddress(callerUri,TelecomManager.PRESENTATION_ALLOWED)
+        val callerName=state.call.peer?.name?:"Волна"
+        if(callerDisplayName!=callerName)setCallerDisplayName(callerName,TelecomManager.PRESENTATION_ALLOWED)
         when {
             nativeTelecomShouldActivate(state) -> if (this.state != STATE_ACTIVE) setActive()
             state.call.incoming && state.call.status == "ringing" -> if (this.state != STATE_RINGING) setRinging()
@@ -139,6 +179,8 @@ internal class VolnaConnection(private val id: String) : Connection() {
     override fun onAbort() = NativeTelecom.end(id)
     override fun onMuteStateChanged(isMuted: Boolean) { NativeTelecom.mute(id, isMuted); lastSystemMuted = isMuted }
     override fun onCallAudioStateChanged(state: CallAudioState) {
+        audioState=state
+        if(NativeCalls.state.value.call?.id==id&&(Build.VERSION.SDK_INT<34||endpoints.isEmpty()))NativeCalls.audioRouteChanged(legacyLabel(state.route))
         if (lastSystemMuted != null && lastSystemMuted != state.isMuted || lastSystemMuted == null && state.isMuted) NativeTelecom.mute(id, state.isMuted)
         lastSystemMuted = state.isMuted
     }

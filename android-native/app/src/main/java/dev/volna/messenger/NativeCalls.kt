@@ -37,7 +37,7 @@ data class NativeCallState(
     val call: VolnaCall? = null, val phase: String = "", val error: String = "",
     val muted: Boolean = false, val sharing: Boolean = false, val remoteSharing: Boolean = false,
     val minimized: Boolean = false, val connected: Boolean = false, val screenReady: Boolean = false,
-    val elapsed: Int = 0, val relay: Boolean = true, val route: String = "Телефон", val busy: Boolean = false,
+    val elapsed: Int = 0, val relay: Boolean = true, val route: String = "Телефон", val routePending:Boolean=false, val busy: Boolean = false,
     val cameraPreview: Boolean = false, val cameraEnabled: Boolean = false, val cameraFront: Boolean = true, val remoteVideo: Boolean = false
 )
 data class NativeAudioRoute(val id: Int, val label: String)
@@ -519,7 +519,10 @@ object NativeCalls {
         mutableState.update { it.copy(screenReady = video?.currentDirection in listOf(RtpTransceiver.RtpTransceiverDirection.SEND_RECV, RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)) }
     }
 
+    fun audioRouteChanged(label:String){mutableState.update{it.copy(route=label,routePending=false)}}
+    fun audioRouteFailed(message:String){mutableState.update{it.copy(error=message,routePending=false)}}
     fun routes(): List<NativeAudioRoute> {
+        NativeTelecom.routes()?.let{return it}
         val manager = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return emptyList()
         if (Build.VERSION.SDK_INT >= 31) return runCatching { manager.availableCommunicationDevices.map { NativeAudioRoute(it.id, routeName(it)) } }.getOrDefault(emptyList())
         return listOf(NativeAudioRoute(-1, "Телефон / гарнитура"), NativeAudioRoute(-2, "Динамик"))
@@ -527,12 +530,16 @@ object NativeCalls {
     fun selectRoute(id: Int) {
         val manager = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         try {
+            mutableState.update{it.copy(routePending=true,error="")}
+            val callId=state.value.call?.id
+            scope.launch{delay(5_000);if(state.value.call?.id==callId&&state.value.routePending)audioRouteFailed("Android не подтвердил переключение звука. Повторите выбор устройства.")}
+            if(NativeTelecom.selectRoute(id))return
             if (Build.VERSION.SDK_INT >= 31) {
                 val route = manager.availableCommunicationDevices.firstOrNull { it.id == id } ?: error("Устройство отключено")
                 if (!manager.setCommunicationDevice(route)) error("Не удалось переключить аудиовыход")
-                mutableState.update { it.copy(route = routeName(route)) }
-            } else { manager.isSpeakerphoneOn = id == -2; mutableState.update { it.copy(route = if (id == -2) "Динамик" else "Телефон / гарнитура") } }
-        } catch (problem: Exception) { mutableState.update { it.copy(error = problem.message ?: "Не удалось выбрать динамик") } }
+                mutableState.update { it.copy(route = routeName(route),routePending=false) }
+            } else { manager.isSpeakerphoneOn = id == -2; mutableState.update { it.copy(route = if (id == -2) "Динамик" else "Телефон / гарнитура",routePending=false) } }
+        } catch (problem: Exception) { mutableState.update { it.copy(error = problem.message ?: "Не удалось выбрать динамик",routePending=false) } }
     }
     private fun routeName(device: AudioDeviceInfo): String = when (device.type) {
         AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Динамик"
@@ -550,7 +557,6 @@ object NativeCalls {
         if (NativeTelecom.audioFocus(callId)) {
             checkVersion(version)
             telecomAudio = true
-            if (Build.VERSION.SDK_INT >= 31) mutableState.update { it.copy(route = runCatching { manager.communicationDevice?.let(::routeName) }.getOrNull() ?: "Телефон") }
             return
         }
         checkVersion(version)

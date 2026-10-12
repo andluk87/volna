@@ -1,5 +1,9 @@
 package dev.volna.messenger
 
+import androidx.compose.animation.animateColorAsState
+import kotlinx.coroutines.delay
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -53,6 +57,7 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
     val videoMode = (layout.video || call.video || state.remoteVideo || state.cameraEnabled || state.remoteSharing) && call.status == "active"
     var routesOpen by remember { mutableStateOf(false) }
     var routes by remember { mutableStateOf(emptyList<NativeAudioRoute>()) }
+    LaunchedEffect(routesOpen){while(routesOpen){routes=NativeCalls.routes();delay(1_000)}}
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted -> if (granted[Manifest.permission.RECORD_AUDIO] == true && NativeCalls.state.value.call?.id == call.id) NativeCalls.accept(video = call.video && granted[Manifest.permission.CAMERA] == true) }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (it && NativeCalls.state.value.call?.id == call.id) NativeCalls.previewCamera() }
     val bluetoothPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { routes = NativeCalls.routes(); routesOpen = true }
@@ -132,7 +137,7 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
             CallControl(Icons.Outlined.CallEnd, "Отклонить", Color(0xFFF32638), size = 72.dp) { NativeCalls.end() }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                CallControl(Icons.Outlined.VolumeUp, "Динамик", Panel.copy(alpha = .85f)) {
+                CallControl(nativeRouteIcon(state.route), if(state.routePending)"Переключаем…" else state.route, if(state.route.startsWith("Динамик"))Accent else Panel.copy(alpha=.85f),enabled=!state.routePending) {
                     if (Build.VERSION.SDK_INT >= 31 && context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
                     else { routes = NativeCalls.routes(); routesOpen = true }
                 }
@@ -155,15 +160,18 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
     }
     if (standalone) content() else Dialog(onDismissRequest = { minimize() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { NativeDialogSystemBars(); content() }
     if (routesOpen) AlertDialog(onDismissRequest = { routesOpen = false }, title = { NativeText("Аудиовыход") }, text = {
-        Column { routes.forEach { route -> TextButton(onClick = { NativeCalls.selectRoute(route.id); routesOpen = false }) { NativeText(route.label) } }; if (routes.isEmpty()) NativeText("Аудиоустройства не найдены") }
+        Column { Crossfade(state.route,animationSpec=tween(180),label="active-audio-route"){label->Row(verticalAlignment=Alignment.CenterVertically){Icon(nativeRouteIcon(label),null,tint=Accent,modifier=Modifier.size(32.dp));NativeText("Сейчас: $label",modifier=Modifier.padding(12.dp))}}
+            routes.forEach { route -> val selected=route.label==state.route;TextButton(enabled=!state.routePending,onClick = { NativeCalls.selectRoute(route.id) }) { Icon(nativeRouteIcon(route.label),null,tint=if(selected)Accent else Muted);NativeText(route.label,modifier=Modifier.weight(1f).padding(12.dp));if(selected)Icon(Icons.Outlined.Check,"Выбрано",tint=Accent) } }; if(state.routePending)LinearProgressIndicator(Modifier.fillMaxWidth());if (routes.isEmpty()) NativeText("Аудиоустройства не найдены") }
     }, confirmButton = { TextButton(onClick = { routesOpen = false }) { NativeText("Закрыть") } })
 }
 
 @Composable
 private fun CallControl(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, color: Color, enabled: Boolean = true, size: androidx.compose.ui.unit.Dp = 60.dp, onClick: () -> Unit) {
+    val duration=if(LocalMotionEnabled.current)180 else 0
+    val animatedColor by animateColorAsState(if(enabled)color else Hover,tween(duration),label="call-control-color")
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        IconButton(onClick, enabled = enabled, modifier = Modifier.size(size).clip(CircleShape).background(if (enabled) color else Hover)) {
-            Icon(icon, label, tint = nativeReadableText(listOf(if (enabled) color else Hover)).copy(alpha = if (enabled) 1f else .45f), modifier = Modifier.size(if (size > 60.dp) 34.dp else 28.dp))
+        IconButton(onClick, enabled = enabled, modifier = Modifier.size(size).clip(CircleShape).background(animatedColor)) {
+            Crossfade(icon,animationSpec=tween(duration),label="call-control-icon"){currentIcon->Icon(currentIcon, label, tint = nativeReadableText(listOf(animatedColor)).copy(alpha = if (enabled) 1f else .45f), modifier = Modifier.size(if (size > 60.dp) 34.dp else 28.dp))}
         }
         NativeText(label, color = TextMain, fontSize = 11.sp, modifier = Modifier.padding(top = 7.dp))
     }
@@ -243,3 +251,5 @@ private fun NativeCameraPreviewScreen(state: NativeCallState, onScreen: () -> Un
         }
     }
 }
+
+private fun nativeRouteIcon(label:String)=when{label.startsWith("Динамик")->Icons.Outlined.VolumeUp;label.startsWith("Bluetooth")->Icons.Outlined.Bluetooth;label.contains("гарнитура",ignoreCase=true)->Icons.Outlined.Headphones;else->Icons.Outlined.PhoneAndroid}
