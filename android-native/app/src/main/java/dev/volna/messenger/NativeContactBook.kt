@@ -250,3 +250,12 @@ internal fun NativePrivateContactName(account: Long, userId: Long, token: String
     if (error.isNotBlank()) NativeText(error, color = MaterialTheme.colorScheme.error)
     editing?.let { row -> AlertDialog(onDismissRequest = { editing = null }, title = { NativeText("Изменить имя") }, text = { Column { NativeText("Это имя видно только вам на всех ваших устройствах"); NativeOutlinedTextField(name, { name = it.take(100) }); TextButton(onClick = { name = "" }) { NativeText("Вернуть исходное имя") } } }, confirmButton = { TextButton(onClick = { store.queue(row.getString("contact_id"), row.getLong("version"), name); editing = null; scope.launch { try { NativeContactSync.refresh(context, account, token, api); onSaved() } catch (problem: Exception) { error = problem.message.orEmpty() } } }) { NativeText("Сохранить") } }, dismissButton = { TextButton(onClick = { editing = null }) { NativeText("Отмена") } }) }
 }
+
+internal fun nativeContactCallerName(context:Context,account:Long,peer:VolnaUser?):String {
+ val contacts=NativeContactBook(context,account).cached().optJSONArray("contacts")?:JSONArray()
+ for(i in 0 until contacts.length()){
+  val row=contacts.getJSONObject(i)
+  if(!row.optBoolean("deleted")&&row.optLong("linked_user_id")==peer?.id)return nativeCallerName(row.optString("custom_name"),row.optString("phonebook_name"),peer?.name.orEmpty())
+ }
+ return nativeCallerName("","",peer?.name.orEmpty())
+}

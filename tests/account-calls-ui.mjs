@@ -25,6 +25,10 @@ try{
   assert.equal((await request('/calls/current?device='+device,accounts[2].token)).id,call.id);
   await dialog.getByRole('button',{name:'Отклонить звонок',exact:true}).click();await dialog.waitFor({state:'hidden'});
   await page.waitForTimeout(100);assert.equal(await request('/calls/current?device='+device,accounts[2].token),null);
+  const again=await request('/calls/start',accounts[2].token,{device,chat_id:chat.id});
+  await request(`/calls/${again.id}/offer`,accounts[2].token,{device,description:{type:'offer',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n'}});
+  await dialog.waitFor({state:'visible'});await request(`/calls/${again.id}/end`,accounts[2].token,{device});await dialog.waitFor({state:'hidden'});
+  assert.equal(await page.locator('output').textContent(),'','ordinary remote hangup must not display an error banner');
   await context.close();
  }
  assert.deepEqual(errors,[]);console.log('PASS: background account immediately displays Web/Windows call controls; account switching preserves the call; decline uses the recipient account');

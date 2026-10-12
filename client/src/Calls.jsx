@@ -78,7 +78,7 @@ export default forwardRef(function Calls({token,onError,onBeforeCall,accountName
  useEffect(()=>{
   let disposed=false,polling=false,lastSuccess=Date.now();
   async function poll(){if(disposed||polling||operation.current)return;polling=true;const version=generation.current;
-   try{const c=await request('/calls/current?device='+device.current,token);if(disposed||version!==generation.current||operation.current)return;lastSuccess=Date.now();if(!c){if(current.current){onError('Звонок завершён или собеседник не ответил');cleanup();}return;}if(c.incoming&&!current.current&&!callDevices().incoming)return;if(c.status==='other-device'){if(current.current){cleanup();onError('Звонок принят на другом устройстве');}return;}
+   try{const c=await request('/calls/current?device='+device.current,token);if(disposed||version!==generation.current||operation.current)return;lastSuccess=Date.now();if(!c){if(current.current)cleanup();return;}if(c.incoming&&!current.current&&!callDevices().incoming)return;if(c.status==='other-device'){if(current.current){cleanup();onError('Звонок принят на другом устройстве');}return;}
     if(current.current&&current.current.id!==c.id)cleanup();
     if(!c.incoming&&c.status==='ringing')setPhase(c.ring_received?'У собеседника входящий звонок…':'Устанавливаем соединение…');
     if(!c.incoming&&c.status==='connecting'&&current.current?.status==='ringing'){started.current=Date.now();setPhase('Собеседник отвечает…');}

@@ -47,7 +47,7 @@ internal object NativeTelecom {
             val handle = account ?: return
             announced = call.id; failed = null
             try {
-                val extras = Bundle().apply { putString(CALL_ID, call.id); putParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, callerAddress(call)) }
+                val extras = Bundle().apply { putString(CALL_ID, call.id) }
                 val telecom = context.getSystemService(TelecomManager::class.java)
                 if (call.incoming) telecom.addNewIncomingCall(handle, extras)
                 else telecom.placeCall(Uri.fromParts("volna", call.id, null), Bundle().apply {
@@ -91,16 +91,13 @@ internal object NativeTelecom {
             return Connection.createFailedConnection(DisconnectCause(DisconnectCause.CANCELED))
         return VolnaConnection(id).also { created ->
             connection?.finish(); connection = created
-            created.setAddress(callerAddress(call),TelecomManager.PRESENTATION_ALLOWED)
-            created.setCallerDisplayName(call.peer?.name ?: "Волна", TelecomManager.PRESENTATION_ALLOWED)
+            created.setAddress(null,TelecomManager.PRESENTATION_ALLOWED)
+            created.setCallerDisplayName(callerName(call), TelecomManager.PRESENTATION_ALLOWED)
             created.update(state)
         }
     }
 
-    fun callerAddress(call:VolnaCall):Uri {
-        val address=nativeCallerAddress(call.peer?.phone.orEmpty(),call.peer?.username.orEmpty(),call.peer?.id?:0)
-        return Uri.parse(address)
-    }
+    fun callerName(call:VolnaCall):String = app?.let{nativeContactCallerName(it,NativeCalls.accountId(),call.peer)}?:nativeCallerName("","",call.peer?.name.orEmpty())
     fun routes():List<NativeAudioRoute>? = if(systemFocused)connection?.routes() else null
     fun selectRoute(id:Int):Boolean {
         if(!systemFocused)return false
@@ -160,9 +157,8 @@ internal class VolnaConnection(private val id: String) : Connection() {
     }
     fun update(state: NativeCallState) {
         if (state.call?.id != id) { finish(); return }
-        val callerUri=NativeTelecom.callerAddress(state.call)
-        if(address!=callerUri)setAddress(callerUri,TelecomManager.PRESENTATION_ALLOWED)
-        val callerName=state.call.peer?.name?:"Волна"
+        if(address!=null)setAddress(null,TelecomManager.PRESENTATION_ALLOWED)
+        val callerName=NativeTelecom.callerName(state.call)
         if(callerDisplayName!=callerName)setCallerDisplayName(callerName,TelecomManager.PRESENTATION_ALLOWED)
         when {
             nativeTelecomShouldActivate(state) -> if (this.state != STATE_ACTIVE) setActive()
