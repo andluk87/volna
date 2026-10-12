@@ -72,7 +72,7 @@ internal fun NativeInitialProfile(user: VolnaUser, token: String, api: NativeApi
 }
 
 @Composable
-internal fun NativeUpdatesScreen(update: VolnaUpdate?, busy: Boolean, status: String, automatic: Boolean, onAutomatic: (Boolean) -> Unit, ready: Boolean, onCheck: () -> Unit, onInstall: () -> Unit, onLater: () -> Unit, onDismiss: () -> Unit) {
+internal fun NativeUpdatesScreen(update: VolnaUpdate?, busy: Boolean, status: String, automatic: Boolean, onAutomatic: (Boolean) -> Unit,idle:Boolean,onIdle:(Boolean)->Unit, ready: Boolean, onCheck: () -> Unit, onInstall: () -> Unit, onLater: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
     NativeFullScreen("Обновления", onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -81,6 +81,8 @@ internal fun NativeUpdatesScreen(update: VolnaUpdate?, busy: Boolean, status: St
                 Column(Modifier.weight(1f)) { NativeText("Скачивать автоматически"); NativeText("Новая версия загружается и проверяется заранее", color = Muted) }
                 Switch(checked = automatic, onCheckedChange = onAutomatic, enabled = !busy)
             }
+            Row(Modifier.fillMaxWidth()){Column(Modifier.weight(1f)){NativeText("Обновлять при простое");NativeText("После 10 минут с выключенным или заблокированным экраном, без звонков и отправки вложений",color=Muted)};Switch(checked=idle,onCheckedChange=onIdle,enabled=!busy)}
+            NativeText("Если Android разрешает, обновление установится автоматически. Иначе подтвердите установку вручную.",color=Muted)
             NativeText("После загрузки выберите: обновить сейчас или при следующем запуске. Android попросит подтвердить установку.", color = Muted)
             if (status.isNotBlank()) NativeText(status)
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())

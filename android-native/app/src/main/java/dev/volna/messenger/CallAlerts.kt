@@ -46,7 +46,7 @@ internal object CallAlerts {
             .setContentIntent(open).setVisibility(Notification.VISIBILITY_PUBLIC).setOngoing(true).setOnlyAlertOnce(true)
         if (fullScreenAllowed(context)) notification.setFullScreenIntent(open, true)
         if (Build.VERSION.SDK_INT >= 31) notification.setStyle(Notification.CallStyle.forIncomingCall(
-            Person.Builder().setName(callerName).setImportant(true).build(), decline, answer))
+            Person.Builder().setName(callerName).apply{nativeContactCallerPhone(context,account.takeIf{it>0}?:NativeCalls.accountId(),call.peer)?.let{setUri("tel:$it")}}.setImportant(true).build(), decline, answer))
         else notification.addAction(Notification.Action.Builder(null, "Отклонить", decline).build())
             .addAction(Notification.Action.Builder(null, "Ответить", answer).build())
         if(background)manager.notify("volna-call-account-$account",NativeCalls.CALL_NOTIFICATION,notification.build()) else manager.notify(NativeCalls.CALL_NOTIFICATION, notification.build())

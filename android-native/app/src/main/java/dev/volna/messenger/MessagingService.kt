@@ -50,6 +50,7 @@ class MessagingService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
+        NativeIdleUpdater.start(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -226,6 +227,7 @@ class MessagingService : Service() {
     }
 
     override fun onDestroy() {
+        NativeIdleUpdater.stop()
         stopped = true
         main.removeCallbacks(reconcile)
         streams.values.forEach { it.stop() }; streams.clear()

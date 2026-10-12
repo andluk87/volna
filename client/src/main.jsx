@@ -119,6 +119,7 @@ function App({demo=false}){
  useEffect(()=>{if(!me?.id||!token||demo)return;let live=true;const apply=book=>{if(live)setPrivateNames(contactNames(book));};apply(cachedContactBook(me.id));const sync=()=>refreshContactBook(token,me.id).then(apply).catch(e=>apply(e.contactBook||cachedContactBook(me.id)));sync();const timer=setInterval(sync,15000);window.addEventListener('online',sync);window.addEventListener('volna-contacts-updated',sync);return()=>{live=false;clearInterval(timer);window.removeEventListener('online',sync);window.removeEventListener('volna-contacts-updated',sync);};},[token,me?.id,demo]);
  useEffect(()=>{setChats(old=>old.map(c=>c.kind==='direct'?{...c,name:privateNames.get(c.peer_id)||c.profile_name||c.name}:c));},[privateNames]);
  const [uploading,setUploading]=useState(false),[recording,setRecording]=useState(false),[recordSeconds,setRecordSeconds]=useState(0);
+ useEffect(()=>{window.volnaDesktop?.transferState?.(uploading||recording||busy).catch(()=>{});return()=>{window.volnaDesktop?.transferState?.(false).catch(()=>{});};},[uploading,recording,busy]);
  const [panel,setPanel]=useState(null),[search,setSearch]=useState(''),[results,setResults]=useState([]),[searchMore,setSearchMore]=useState(false),[searchBusy,setSearchBusy]=useState(false),[forward,setForward]=useState(null),[deleting,setDeleting]=useState(null),[focused,setFocused]=useState(null);
  const [historyAction,setHistoryAction]=useState(null);
  const [folderInvite,setFolderInvite]=useState(()=>new URLSearchParams(location.search).get('folder_invite')||'');

@@ -1,6 +1,6 @@
 {
   "name": "volna-client",
-  "version": "0.12.37",
+  "version": "0.12.38",
   "private": true,
   "type": "module",
   "description": "Volna desktop and mobile messenger",
@@ -49,7 +49,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true
     }
   }
 }

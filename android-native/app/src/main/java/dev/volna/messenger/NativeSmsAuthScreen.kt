@@ -167,7 +167,7 @@ internal fun NativeSmsLogin(api: NativeApi, update: VolnaUpdate?, updateBusy: Bo
             }
             if (state.error.isNotBlank()) NativeText(state.error, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
             if (!codeScreen) NativeText(stringResource(R.string.sms_auth_privacy), color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
-            if (update != null) UpdateBanner(update, updateBusy, updateStatus, onUpdate)
+
             Spacer(Modifier.height(28.dp))
         }
     }

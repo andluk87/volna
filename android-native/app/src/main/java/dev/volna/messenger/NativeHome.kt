@@ -50,7 +50,7 @@ internal fun ChatListScreen(
     user: VolnaUser?, chats: List<VolnaChat>, query: String, people: List<VolnaUser>, error: String, token: String,
     onQuery: (String) -> Unit, onSelect: (VolnaChat) -> Unit, onChatPreference: (VolnaChat, String, Boolean) -> Unit,
     onStartChat: (VolnaUser) -> Unit, update: VolnaUpdate?, updateBusy: Boolean, updateStatus: String,
-    autoUpdateDownload: Boolean, onAutoUpdateDownload: (Boolean) -> Unit, updateReady: Boolean, onUpdateLater: () -> Unit, onCheckUpdate: () -> Unit,
+    autoInstallIdle:Boolean,onAutoInstallIdle:(Boolean)->Unit,autoUpdateDownload: Boolean, onAutoUpdateDownload: (Boolean) -> Unit, updateReady: Boolean, onUpdateLater: () -> Unit, onCheckUpdate: () -> Unit,
     onUpdate: () -> Unit, onScanQr: () -> Unit, onOpenProfile: (Long) -> Unit, onLogout: () -> Unit,
     onAppearance: () -> Unit, onCommunityEntry: (String) -> Unit, onSavedMessages: () -> Unit,
     api: NativeApi, cache: NativeCache, onCall: (VolnaChat) -> Unit, onVideo: (VolnaChat) -> Unit, onSearchMessage: (VolnaMessage) -> Unit,
@@ -120,7 +120,7 @@ internal fun ChatListScreen(
     NativeWallpaperView(if (appearance.design != null) LocalThemeVariant.current.wallpaper else NativeWallpaper(colors = listOf(Panel.toArgb().toLong() and 0xFFFFFFFFL)), Modifier.matchParentSize().hazeSource(backdrop))
     Column(Modifier.fillMaxSize().padding(top = if (tab == "profile") 0.dp else headerHeight)) {
         CallAlertsSettings(automatic = true)
-        if (update != null) UpdateBanner(update, updateBusy, updateStatus, onUpdate, Modifier.fillMaxWidth().padding(8.dp))
+
         if (error.isNotBlank()) NativeConnectionNotice(error, onRetry)
         Crossfade(tab, animationSpec = tween(if (motion) 180 else 0), label = "main-section", modifier = Modifier.weight(1f).hazeSource(backdrop, zIndex = 1f, key = "home-content")) { page ->
             pageState.SaveableStateProvider("${user?.id}:$page") {
@@ -249,7 +249,7 @@ internal fun ChatListScreen(
         Spacer(Modifier.height(24.dp))
     }
     when (settings) {
-        "updates" -> NativeUpdatesScreen(update, updateBusy, updateStatus, autoUpdateDownload, onAutoUpdateDownload, updateReady, onCheckUpdate, onUpdate, onUpdateLater) { settings = "" }
+        "updates" -> NativeUpdatesScreen(update, updateBusy, updateStatus, autoUpdateDownload, onAutoUpdateDownload, autoInstallIdle,onAutoInstallIdle,updateReady, onCheckUpdate, onUpdate, onUpdateLater) { settings = "" }
         "notifications" -> NativeNotificationSettings(user?.id ?: 0) { settings = "" }
         "security", "devices" -> NativeSessionsScreen(token, api, onScanQr) { settings = "" }
         "storage" -> NativeStorageScreen { settings = "" }

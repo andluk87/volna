@@ -135,14 +135,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private fun startApkInstaller(context: Context, file: File) {
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    val intent = Intent(Intent.ACTION_INSTALL_PACKAGE)
-        .setDataAndType(uri, "application/vnd.android.package-archive")
-        .putExtra(Intent.EXTRA_RETURN_RESULT, true)
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    context.startActivity(intent)
-}
+private suspend fun startApkInstaller(context: Context, file: File) { installVolnaApk(context,file) }
 private val QuickEmoji = listOf("👍", "❤️", "😂", "🔥", "🎉", "😮", "😢", "🙏", "👏", "😍", "🤔", "💯", "🥰", "👎", "✨", "💙", "😎", "🤝", "👋", "💪", "😭", "😡", "🤗", "🤣")
 
 class MainActivity : ComponentActivity() {
@@ -208,6 +201,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     var galleryChat by remember { mutableStateOf<VolnaChat?>(null) }
     var attachmentPreview by remember { mutableStateOf<VolnaMessage?>(null) }
     val callState by NativeCalls.state.collectAsState()
+    val incomingAccountCalls by NativeBackgroundCalls.calls.collectAsState()
     val callDiagnosticReport by NativeCallDiagnostics.report.collectAsState()
     var callDiagnosticsOpen by remember { mutableStateOf(false) }
     var pendingCall by remember { mutableStateOf<VolnaChat?>(null) }
@@ -251,15 +245,24 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     var profileRevision by remember { mutableStateOf(0) }
     var profileTargetId by remember { mutableStateOf<Long?>(null) }
     var updateAvailable by remember { mutableStateOf<VolnaUpdate?>(null) }
-    var dismissedUpdate by remember { mutableStateOf<Long?>(null) }
+    var dismissedUpdate by remember { mutableStateOf<Long?>(prefs.getLong("update_notice_dismissed",0).takeIf{it>0}) }
     var updateBusy by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf("") }
     var pendingUpdateFile by remember { mutableStateOf<File?>(null) }
-    var autoUpdateDownload by remember { mutableStateOf(prefs.getBoolean("updates_auto_download", true)) }
+    DisposableEffect(Unit){
+        val installPrefs=context.getSharedPreferences("volna-update-install",0)
+        val listener=android.content.SharedPreferences.OnSharedPreferenceChangeListener{store,key->if(key=="error"){updateStatus=store.getString("error","").orEmpty();dismissedUpdate=null}}
+        installPrefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose{installPrefs.unregisterOnSharedPreferenceChangeListener(listener)}
+    }
+
+    var autoUpdateDownload by remember { if(!prefs.getBoolean("auto_download_v38",false))prefs.edit().putBoolean("updates_auto_download",true).putBoolean("auto_download_v38",true).apply(); mutableStateOf(prefs.getBoolean("updates_auto_download", true)) }
+    var autoInstallIdle by remember { mutableStateOf(prefs.getBoolean("updates_install_idle",false)) }
     val updateOnLaunch = remember { prefs.getLong("update_on_restart", 0) }
     val voicePlayback = remember { NativeVoicePlayback(context) { error = it } }
     var attachmentBatch by remember { mutableStateOf<NativeAttachmentBatch?>(null) }
     var attachmentSending by remember { mutableStateOf(false) }
+    DisposableEffect(attachmentSending){NativeIdleUpdater.transferBusy=attachmentSending;onDispose{NativeIdleUpdater.transferBusy=false}}
     var attachmentStatus by remember { mutableStateOf("") }
     var attachmentError by remember { mutableStateOf("") }
     var pickedChat by remember { mutableStateOf<Long?>(null) }
@@ -284,12 +287,12 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     val installPermission = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val file = pendingUpdateFile
         if (file != null && Build.VERSION.SDK_INT >= 26 && context.packageManager.canRequestPackageInstalls()) {
-            try { startApkInstaller(context, file); updateStatus = "Подтвердите установку в окне Android" }
-            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { updateStatus = problem.message ?: "Не удалось открыть установщик Android" }
+            scope.launch { try { startApkInstaller(context, file); updateStatus = "Подтвердите установку в окне Android" }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { updateStatus = problem.message ?: "Не удалось открыть установщик Android" } }
         } else updateStatus = "Разрешите установку приложений для Волны и нажмите «Обновить» ещё раз"
     }
     val installUpdate: (VolnaUpdate?) -> Unit = { release ->
-        if (callState.call != null || attachmentSending) updateStatus = "Завершите звонок или отправку вложения перед обновлением"
+        if (callState.call != null || incomingAccountCalls.isNotEmpty() || attachmentSending) updateStatus = "Завершите звонок или отправку вложения перед обновлением"
         else if (release != null && !updateBusy) scope.launch {
             updateBusy = true; updateStatus = "Скачиваем Волна ${release.versionName}…"
             try {
@@ -302,7 +305,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                 } else {
                     startApkInstaller(context, file); updateStatus = "Подтвердите установку в окне Android"
                 }
-            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { updateStatus = problem.message ?: "Не удалось установить обновление" }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { updateStatus = problem.message ?: "Не удалось установить обновление"; dismissedUpdate=null }
             finally { updateBusy = false }
         }
     }
@@ -571,6 +574,16 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
 
     VolnaTheme(appearance) {
         NativeBackgroundCallHost(api)
+        val readyUpdate=updateAvailable?.takeIf{it.versionCode!=dismissedUpdate&&pendingUpdateFile?.name=="volna-${it.versionCode}.apk"&&!updateBusy}
+        if(readyUpdate!=null&&callState.call==null&&incomingAccountCalls.isEmpty()&&!attachmentSending) androidx.compose.ui.window.Popup(alignment=Alignment.BottomCenter){
+            Surface(color=Panel,shape=RoundedCornerShape(16.dp),modifier=Modifier.padding(12.dp).fillMaxWidth()){
+                Column(Modifier.padding(12.dp)){NativeText("Волна ${readyUpdate.versionName} скачана и готова к установке",fontSize=13.sp)
+                    if(updateStatus.isNotBlank())NativeText(updateStatus,color=Muted,fontSize=12.sp)
+                    Row{TextButton(onClick={dismissedUpdate=readyUpdate.versionCode;installUpdate(readyUpdate)}){NativeText("Обновить сейчас")};TextButton(onClick={prefs.edit().putLong("update_notice_dismissed",readyUpdate.versionCode).apply();dismissedUpdate=readyUpdate.versionCode}){NativeText("Не сейчас")}}
+                }
+            }
+        }
+
             Surface(Modifier.fillMaxSize().background(Ink).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)), color = Ink) {
             Column(Modifier.fillMaxSize()) {
             if (attachmentSending && attachmentBatch?.voiceFile != null) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Accent)
@@ -613,11 +626,12 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                         else { pendingCall = chat; callPermission.launch(Manifest.permission.RECORD_AUDIO) }
                     },
                     update = updateAvailable, updateBusy = updateBusy, updateStatus = updateStatus,
+                    autoInstallIdle=autoInstallIdle, onAutoInstallIdle={autoInstallIdle=it;prefs.edit().putBoolean("updates_install_idle",it).apply()},
                     autoUpdateDownload = autoUpdateDownload,
                     onAutoUpdateDownload = { autoUpdateDownload = it; prefs.edit().putBoolean("updates_auto_download", it).apply() },
                     updateReady = updateAvailable?.let { pendingUpdateFile?.name == "volna-${it.versionCode}.apk" && pendingUpdateFile?.isFile == true } == true,
                     onUpdateLater = { updateAvailable?.let { prefs.edit().putLong("update_on_restart", it.versionCode).apply(); dismissedUpdate = it.versionCode; updateStatus = "Установка при следующем запуске" } },
-                    onCheckUpdate = { scope.launch { if (!updateBusy) { updateStatus = "Проверяем обновления…"; try { updateAvailable = withContext(Dispatchers.IO) { api.checkUpdate(BuildConfig.VOLNA_VERSION_CODE) }; updateStatus = if (updateAvailable == null) "Установлена последняя версия" else "Доступна Волна ${updateAvailable?.versionName}" } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (e: Exception) { updateStatus = e.message ?: "Не удалось проверить обновления" } } } },
+                    onCheckUpdate = { scope.launch { if (!updateBusy) { updateStatus = "Проверяем обновления…"; try { updateAvailable = withContext(Dispatchers.IO) { api.checkUpdate(BuildConfig.VOLNA_VERSION_CODE) }; dismissedUpdate=null; prefs.edit().remove("update_notice_dismissed").apply(); updateStatus = if (updateAvailable == null) "Установлена последняя версия" else "Доступна Волна ${updateAvailable?.versionName}" } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (e: Exception) { updateStatus = e.message ?: "Не удалось проверить обновления" } } } },
                     onUpdate = { installUpdate(updateAvailable) }, onScanQr = { if (callState.call == null) { initialQr = ""; qrOpen = true } else error = "Завершите звонок перед сканированием" },
                     onOpenProfile = { profileTargetId = it },
                     onAppearance = { appearanceChat = null; appearanceOpen = true }, onCommunityEntry = { communityEntry = it },
@@ -849,11 +863,6 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     }
                 }, confirmButton = { TextButton(onClick = { clipboard.setText(AnnotatedString(callDiagnosticReport)); Toast.makeText(context, "Диагностика скопирована", Toast.LENGTH_SHORT).show() }) { NativeText("Копировать") } },
                     dismissButton = { TextButton(onClick = { callDiagnosticsOpen = false }) { NativeText("Закрыть") } })
-            }
-            updateAvailable?.takeIf { it.versionCode != dismissedUpdate && pendingUpdateFile?.name == "volna-${it.versionCode}.apk" && callState.call == null && !attachmentSending && !updateBusy }?.let { release ->
-                AlertDialog(onDismissRequest = { prefs.edit().putLong("update_on_restart", release.versionCode).apply(); dismissedUpdate = release.versionCode }, title = { NativeText("Вышла новая версия") }, text = { NativeText("Волна ${release.versionName} скачана и проверена. Обновить сейчас или при следующем запуске?") },
-                    confirmButton = { TextButton(onClick = { dismissedUpdate = release.versionCode; installUpdate(release) }) { NativeText("Обновить сейчас") } },
-                    dismissButton = { TextButton(onClick = { prefs.edit().putLong("update_on_restart", release.versionCode).apply(); dismissedUpdate = release.versionCode }) { NativeText("При следующем запуске") } })
             }
             val forwarding = forwardTargetMessage
             if (forwarding != null) {

@@ -1,4 +1,5 @@
-const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage,screen}=require('electron');
+const {mediaPermissions}=require('./media-permissions.cjs');
+const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage,screen,powerMonitor}=require('electron');
 const {notificationState}=require('./notification-state.cjs');
 const {ignoredSpelling}=require('./ignored-spelling.cjs');
 const path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
@@ -7,14 +8,14 @@ const {restoredBounds,readWindowState,trackWindowState,desktopShortcut}=require(
 const {createUpdates}=require('./updates.cjs');const {pickScreen}=require('./screen-picker.cjs');
 protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true}}]);
 app.commandLine.appendSwitch('autoplay-policy','no-user-gesture-required');
-const appWindows=new Set(),editorFocus=new WeakMap();
+const appWindows=new Set(),editorFocus=new WeakMap(),transfers=new Set();
 let win,tray,quitting=false,config,updates,activeCall=false,lastIncoming='',callNotification,spellingDictionary,selectedAccountId=null;
 const show=()=>{if(!win||win.isDestroyed())createWindow();if(win.isMinimized())win.restore();win.show();win.focus();win.flashFrame(false);};
 function createWindow(chatId=null,accountId=null){
  const secondary=chatId!==null;
  const stateFile=path.join(app.getPath('userData'),'window-state.json'),saved=readWindowState(stateFile);
  const window=new BrowserWindow({...restoredBounds(saved,screen.getAllDisplays()),minWidth:390,minHeight:500,title:'Волна',backgroundColor:'#17212b',autoHideMenuBar:true,show:false,icon:path.join(app.getAppPath(),'dist/icons/icon-192.png'),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false,spellcheck:true,additionalArguments:secondary?['--volna-chat-window']:[]}});
- appWindows.add(window);if(!secondary)win=window;window.on('closed',()=>appWindows.delete(window));
+ const contents=window.webContents;appWindows.add(window);if(!secondary)win=window;window.on('closed',()=>{appWindows.delete(window);transfers.delete(contents);});
  if(!secondary){trackWindowState(window,stateFile);if(saved.maximized===true)window.maximize();}
  window.once('ready-to-show',()=>window.show());
  window.webContents.on('before-input-event',(event,input)=>{const shortcut=desktopShortcut(input);if(!shortcut||editorFocus.get(window.webContents)&&shortcut==='search')return;event.preventDefault();if(shortcut==='close')window.close();else window.webContents.send('desktop:shortcut',shortcut);});const external=url=>{const target=externalURL(url);if(target)shell.openExternal(target).catch(()=>{});};
@@ -38,12 +39,13 @@ if(!app.requestSingleInstanceLock())app.quit();else{
  app.whenReady().then(()=>{
   config=validateConfig(JSON.parse(fs.readFileSync(path.join(__dirname,'config.json'),'utf8')));app.setAppUserModelId('dev.volna.messenger');
   const root=path.join(app.getAppPath(),'dist');protocol.handle('app',request=>{const file=rendererFile(root,request.url);return file?net.fetch(pathToFileURL(file).toString()):new Response('Not found',{status:404});});
-  let microphoneAllowed=false,cameraAllowed=false;
+  const mediaConsent=mediaPermissions(path.join(app.getPath('userData'),'media-permissions.json'));
+  let microphoneAllowed=mediaConsent.has('audio'),cameraAllowed=mediaConsent.has('video');
   session.defaultSession.setPermissionCheckHandler((_contents,permission,origin,details)=>trustedRenderer(origin)&&(['notifications','display-capture'].includes(permission)||permission==='media'&&(details.mediaType==='audio'&&microphoneAllowed||details.mediaType==='video'&&cameraAllowed)));
   session.defaultSession.setPermissionRequestHandler(async(contents,permission,callback,details)=>{
    if(!trustedRenderer(details.requestingUrl))return callback(false);if(['notifications','display-capture'].includes(permission))return callback(true);
    if(permission!=='media'||!details.mediaTypes?.length||details.mediaTypes.some(type=>!['audio','video'].includes(type)))return callback(false);const audio=details.mediaTypes.includes('audio'),video=details.mediaTypes.includes('video');if((!audio||microphoneAllowed)&&(!video||cameraAllowed))return callback(true);
-   try{const result=await dialog.showMessageBox(BrowserWindow.fromWebContents(contents),{type:'question',title:video?'Камера и микрофон':'Микрофон',message:video?'Разрешить камеру для видеозвонка?':'Разрешить микрофон для голосовых сообщений и звонков?',buttons:['Разрешить','Отмена'],defaultId:0,cancelId:1});const allowed=result.response===0;if(allowed){if(audio)microphoneAllowed=true;if(video)cameraAllowed=true;}callback(allowed);}catch{callback(false);}
+   try{const result=await dialog.showMessageBox(BrowserWindow.fromWebContents(contents),{type:'question',title:video?'Камера и микрофон':'Микрофон',message:video?'Разрешить камеру для видеозвонка?':'Разрешить микрофон для голосовых сообщений и звонков?',buttons:['Разрешить','Отмена'],defaultId:0,cancelId:1});const allowed=result.response===0;if(allowed){if(audio){microphoneAllowed=true;mediaConsent.grant('audio');}if(video){cameraAllowed=true;mediaConsent.grant('video');}}callback(allowed);}catch{callback(false);}
   });
   session.defaultSession.setDisplayMediaRequestHandler(async(request,callback)=>{
    if(!request.frame||request.frame!==win?.webContents.mainFrame||!trustedRenderer(request.securityOrigin)||!request.userGesture||!request.videoRequested)return callback({});
@@ -52,12 +54,13 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   spellingDictionary=ignoredSpelling(session.defaultSession,path.join(app.getPath('userData'),'ignored-spelling.json'));
   Menu.setApplicationMenu(null);createWindow();tray=new Tray(path.join(root,'icons/icon-192.png'));tray.setToolTip('Волна');
   tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть Волну',click:show},{label:'Проверить обновления',click:()=>{show();updates.check(true);}},{type:'separator'},{label:'Выйти',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',show);
-  const {autoUpdater}=require('electron-updater');updates=createUpdates({updater:autoUpdater,version:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',publish:state=>{if(!win.isDestroyed())win.webContents.send('desktop:update-state',state);},inCall:()=>activeCall,install:()=>{quitting=true;autoUpdater.quitAndInstall(true,true);}});
+  const idleFile=path.join(app.getPath('userData'),'update-settings.json');let idleInstall=false;try{idleInstall=JSON.parse(fs.readFileSync(idleFile,'utf8')).idleInstall===true;}catch{}
+  const {autoUpdater}=require('electron-updater');updates=createUpdates({idleInstall,idleSeconds:()=>powerMonitor.getSystemIdleTime(),saveIdleInstall:value=>{const temp=idleFile+'.tmp';fs.writeFileSync(temp,JSON.stringify({idleInstall:value}),{mode:0o600});fs.renameSync(temp,idleFile);},updater:autoUpdater,version:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',publish:state=>{if(!win.isDestroyed())win.webContents.send('desktop:update-state',state);},inCall:()=>activeCall||transfers.size>0,install:()=>{quitting=true;autoUpdater.quitAndInstall(true,true);}});
   ipc('desktop:editor-focus',(value,event)=>{editorFocus.set(event.sender,value===true);});
   ipc('desktop:open-window',value=>{if(!Number.isSafeInteger(value?.chatId)||value.chatId<1||!Number.isSafeInteger(value.accountId)||value.accountId<1)throw Error('Invalid chat');createWindow(value.chatId,value.accountId);return true;});
   ipc('desktop:start-call',value=>{if(!Number.isSafeInteger(value?.chatId)||value.chatId<1||!Number.isSafeInteger(value.accountId)||value.accountId<1||typeof value.video!=='boolean')throw Error('Invalid call');show();win.webContents.send('desktop:start-call',value);return true;});
   ipc('desktop:unread',(count,event)=>{if(event.sender!==win.webContents)return false;if(!Number.isSafeInteger(count)||count<0||count>1000000)throw Error('Invalid unread count');app.setBadgeCount(count);tray?.setToolTip(count?'Волна · Непрочитанных: '+count:'Волна');return true;});
-  ipc('desktop:update-state',()=>updates.snapshot());ipc('desktop:check-update',()=>updates.check(true));ipc('desktop:update',()=>updates.update());ipc('desktop:defer-update',()=>updates.defer());
+  ipc('desktop:transfer', (value,event)=>{if(value===true)transfers.add(event.sender);else transfers.delete(event.sender);return true;});ipc('desktop:idle-update',value=>updates.setIdleInstall(value));ipc('desktop:update-state',()=>updates.snapshot());ipc('desktop:check-update',()=>updates.check(true));ipc('desktop:update',()=>updates.update());ipc('desktop:defer-update',()=>updates.defer());
   const sessionFile=path.join(app.getPath('userData'),'phone-session.dat');
   const accountsFile=path.join(app.getPath('userData'),'accounts.dat');
   const validAccounts=value=>value&&Array.isArray(value.accounts)&&value.accounts.length<=5&&new Set(value.accounts.map(a=>a?.user?.id)).size===value.accounts.length&&value.accounts.every(a=>Number.isSafeInteger(a?.user?.id)&&a.user.id>0&&/^[A-Za-z0-9_-]{43}$/.test(a.token)&&/^[A-Za-z0-9_-]{43}$/.test(a.refresh_token)&&Number.isSafeInteger(a.expires))&&(value.selected===null||value.accounts.some(a=>a.user.id===value.selected))&&JSON.stringify(value).length<=100000;
@@ -71,7 +74,7 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   ipc('desktop:notification-status',()=>notificationState(process.platform,Notification.isSupported()));
   ipc('desktop:notify',(value,event)=>{if(event.sender!==win.webContents)return false;if(!value||!Number.isSafeInteger(value.chatId)||value.chatId<=0||(win.isFocused()&&(!value.accountId||value.accountId===selectedAccountId))||!Notification.isSupported())return false;const notification=new Notification({title:String(value.title||'Волна').slice(0,80),body:String(value.body||'Новое сообщение').slice(0,240),icon:path.join(root,'icons/icon-192.png')});notification.on('click',()=>{show();win.webContents.send('desktop:open-chat',{chatId:value.chatId,accountId:value.accountId});});notification.show();return true;});
   ipc('desktop:call',(value,event)=>{if(event.sender!==win.webContents)return;activeCall=value?.active===true;if(!activeCall)lastIncoming='';if(!value?.incoming&&callNotification){callNotification.close();callNotification=undefined;win.flashFrame(false);}if(value?.incoming&&value.id!==lastIncoming&&typeof value.id==='string'){callNotification?.close();lastIncoming=value.id;if(win.isMinimized())win.restore();win.showInactive();win.flashFrame(true);const notification=new Notification({title:'Входящий звонок · Волна',body:String(value.name||'Собеседник').slice(0,80),timeoutType:'never',icon:path.join(root,'icons/icon-192.png')});callNotification=notification;notification.on('click',()=>{show();win.webContents.send('desktop:show-call');});notification.show();}});
-  setTimeout(()=>updates.check(),5_000).unref();setInterval(()=>updates.check(),6*60*60*1000).unref();
+  setInterval(()=>updates.tickIdle(),30_000).unref();setTimeout(()=>updates.check(),5_000).unref();setInterval(()=>updates.check(),6*60*60*1000).unref();
  }).catch(error=>{dialog.showErrorBox('Волна не запустилась',error.message);quitting=true;app.quit();});
 }
-app.on('before-quit',()=>{quitting=true;spellingDictionary?.clear();});app.on('window-all-closed',()=>{if(!tray)app.quit();});
+app.on('before-quit',event=>{if(updates?.snapshot().status==='ready'&&updates.snapshot().deferred&&!activeCall){event.preventDefault();updates.install();return;}quitting=true;spellingDictionary?.clear();});app.on('window-all-closed',()=>{if(!tray)app.quit();});

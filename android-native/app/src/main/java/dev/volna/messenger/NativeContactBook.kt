@@ -259,3 +259,14 @@ internal fun nativeContactCallerName(context:Context,account:Long,peer:VolnaUser
  }
  return nativeCallerName("","",peer?.name.orEmpty())
 }
+
+internal fun nativeContactCallerPhone(context:Context,account:Long,peer:VolnaUser?):String?{
+ val contacts=NativeContactBook(context,account).cached().optJSONArray("contacts")?:JSONArray()
+ for(i in 0 until contacts.length()){
+  val row=contacts.getJSONObject(i)
+  if(row.optBoolean("deleted")||row.optLong("linked_user_id")!=peer?.id)continue
+  val phones=row.optJSONArray("phone_numbers")?:continue
+  for(j in 0 until phones.length())nativeKnownContactPhone(phones.optString(j))?.let{return it}
+ }
+ return peer?.phone?.let{nativeKnownContactPhone(it)}
+}

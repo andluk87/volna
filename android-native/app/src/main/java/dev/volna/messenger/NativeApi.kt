@@ -161,11 +161,11 @@ class NativeApi(baseUrl: String) {
         }
     }
 
-    fun downloadUpdate(update: VolnaUpdate, destination: File) {
+    fun downloadUpdate(update: VolnaUpdate, destination: File) = synchronized(NativeIdleUpdater.downloadLock) {
         if (destination.isFile && destination.length() > 0) {
             val digest = MessageDigest.getInstance("SHA-256")
             destination.inputStream().use { input -> val buffer = ByteArray(64 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; digest.update(buffer, 0, count) } }
-            if (digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) } == update.sha256) return
+            if (digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) } == update.sha256) return@synchronized
             destination.delete()
         }
         try {

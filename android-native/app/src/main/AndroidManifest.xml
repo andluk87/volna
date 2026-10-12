@@ -20,6 +20,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <application
         android:name=".VolnaApplication"
         android:allowBackup="false"
@@ -60,6 +61,8 @@
         <service android:name=".VolnaConnectionService" android:exported="true" android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
             <intent-filter><action android:name="android.telecom.ConnectionService" /></intent-filter>
         </service>
+        <activity android:name=".VolnaInstallResultActivity" android:exported="false" android:taskAffinity="" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <receiver android:name=".VolnaUpdateReceiver" android:exported="false"><intent-filter><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter></receiver>
         <receiver android:name=".CallActionReceiver" android:exported="false" />
         <provider
             android:name="androidx.core.content.FileProvider"
