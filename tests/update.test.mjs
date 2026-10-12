@@ -9,6 +9,7 @@ test('update rebuilds and verifies the selected Volna version; aborts before res
  try{
   mkdirSync(join(root,'scripts'));mkdirSync(join(root,'bin'));
   copyFileSync(new URL('../scripts/update.sh',import.meta.url),join(root,'scripts/update.sh'));
+  copyFileSync(new URL('../scripts/clean-windows-downloads.py',import.meta.url),join(root,'scripts/clean-windows-downloads.py'));
   copyFileSync(new URL('../scripts/calls-config.py',import.meta.url),join(root,'scripts/calls-config.py'));
   for(const f of ['compose.yaml','compose.https.yaml'])writeFileSync(join(root,f),'services: {}\n');
   copyFileSync(new URL('../compose.build-host.yaml',import.meta.url),join(root,'compose.build-host.yaml'));

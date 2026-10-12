@@ -199,8 +199,17 @@ class MessagingService : Service() {
             val notificationId = ((id xor (id ushr 32)).toInt() and 0x1fffffff) + if (isReaction) 0x20000000 else 0
             val pending = PendingIntent.getActivity(this, notificationId, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val channel = NativeNotificationSounds.messageChannel(this, userId)
-            val notification = builder(if (NativeAccounts.list(this).size > 1) "$title · ${NativeAccounts.list(this).firstOrNull { it.user.id == userId }?.user?.name.orEmpty()}" else title, body, channel).setContentIntent(pending).setAutoCancel(true)
-                .setGroup("volna-messages-$userId").setOnlyAlertOnce(false).build()
+            val notificationBuilder = builder(if (NativeAccounts.list(this).size > 1) "$title · ${NativeAccounts.list(this).firstOrNull { it.user.id == userId }?.user?.name.orEmpty()}" else title, body, channel).setContentIntent(pending).setAutoCancel(true)
+                .setGroup("volna-messages-$userId").setOnlyAlertOnce(false)
+                .setLargeIcon(android.graphics.BitmapFactory.decodeResource(resources,R.drawable.volna_launcher))
+            if(!isReaction&&cache.chats(userId).firstOrNull{it.id==chatId}?.canSend!=false){
+                val replyIntent=Intent(this,NotificationReplyReceiver::class.java).setAction("dev.volna.messenger.REPLY").setData(Uri.parse("volna://reply/$userId/$chatId/$id"))
+                val replyPending=PendingIntent.getBroadcast(this,notificationId,replyIntent,PendingIntent.FLAG_UPDATE_CURRENT or if(Build.VERSION.SDK_INT>=31)PendingIntent.FLAG_MUTABLE else 0)
+                val input=android.app.RemoteInput.Builder("volna_reply").setLabel("Ответить").build()
+                val action=Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this,R.drawable.ic_volna),"Ответить",replyPending).addRemoteInput(input).apply{if(Build.VERSION.SDK_INT>=28)setSemanticAction(Notification.Action.SEMANTIC_ACTION_REPLY)}.build()
+                notificationBuilder.addAction(action)
+            }
+            val notification=notificationBuilder.build()
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify("volna-account-$userId", notificationId, notification)
         } catch (_: Exception) { }
     }

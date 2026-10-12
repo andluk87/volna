@@ -63,9 +63,10 @@ data class VolnaMessage(
 data class VolnaSession(val token: String, val user: VolnaUser, val refreshToken: String = "")
 internal class NativeApiException(val status: Int, message: String, val errorCode: String = "", val retryAt: Long = 0, val serverTime: Long = 0) : IllegalStateException(message)
 
-class NativeApi(baseUrl: String) {
+class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
     private val base = baseUrl.trimEnd('/')
     private val http: OkHttpClient = OkHttpClient.Builder()
+        .callTimeout(requestTimeoutSeconds,TimeUnit.SECONDS)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .followRedirects(false)
