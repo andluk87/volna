@@ -190,6 +190,8 @@ internal fun NativeNotificationSettings(account: Long, onDismiss: () -> Unit) {
     val prefs = remember(account) { NativeNotificationPolicy.prefs(context, account) }
     var revision by remember { mutableStateOf(0) }
     var ringtoneKind by remember { mutableStateOf("message") }
+    val watchTest by NativeNotificationTest.status.collectAsState()
+    val watchTestStatus = watchTest?.takeIf { it.account == account }
     val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
             @Suppress("DEPRECATION")
@@ -226,6 +228,12 @@ internal fun NativeNotificationSettings(account: Long, onDismiss: () -> Unit) {
                     val title = if (sound == null) "Системный звук" else if (sound.isBlank()) "Без звука" else runCatching { android.media.RingtoneManager.getRingtone(context, android.net.Uri.parse(sound))?.getTitle(context) }.getOrNull() ?: "Выбранный звук"
                     NativeSettingRow(Icons.Outlined.MusicNote, label, title) { selectSound(kind) }
                 }
+            } }
+            item { NativeSettingsCard {
+                NativeSettingRow(Icons.Outlined.Watch, "Проверить уведомление на часах", "Через 10 секунд — успеете заблокировать телефон") { NativeNotificationTest.schedule(context, account) }
+                NativeText("Включите уведомления Волны в приложении для часов, например Huawei Health.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                if (watchTestStatus != null) NativeText(watchTestStatus.message, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                if (watchTestStatus?.pending == true) TextButton(onClick = { NativeNotificationTest.cancel(account) }, modifier = Modifier.padding(horizontal = 8.dp)) { NativeText("Отменить проверку") }
             } }
             item { NativeSettingsCard { NativeSettingRow(Icons.Outlined.NotificationsActive, "Уведомления Android", "Звук, вибрация, экран блокировки и звонки") { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) } } }
             item { NativeText("Беззвучные чаты настраиваются долгим нажатием в списке чатов. Входящие звонки используют отдельный системный канал.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(12.dp)) }

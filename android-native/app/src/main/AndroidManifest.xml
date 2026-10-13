@@ -24,12 +24,12 @@
     <application
         android:name=".VolnaApplication"
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round"
+        android:icon="@drawable/volna_launcher" android:roundIcon="@drawable/volna_launcher"
         android:label="Волна"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <activity
-            android:name=".MainActivity" android:supportsPictureInPicture="true"
+            android:name=".MainActivity" android:icon="@mipmap/ic_launcher" android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:exported="true"
             android:launchMode="singleTask"

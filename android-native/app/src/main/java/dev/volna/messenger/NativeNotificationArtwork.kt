@@ -11,7 +11,7 @@ import android.graphics.Shader
 
 /** Supply both Android's monochrome mask and the colour artwork to notification listeners. */
 internal fun nativeNotificationBuilder(context:Context,channel:String):Notification.Builder =
- Notification.Builder(context,channel).setSmallIcon(R.drawable.ic_volna)
+ Notification.Builder(context,channel).setSmallIcon(R.drawable.ic_volna_notification)
   .setLargeIcon(NativeNotificationArtwork.round(context)).setColor(0xff38a8d6.toInt()).setLocalOnly(false)
 
 internal object NativeNotificationArtwork {
