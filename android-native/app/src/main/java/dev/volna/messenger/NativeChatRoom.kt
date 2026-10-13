@@ -1,6 +1,8 @@
 @file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class, kotlinx.coroutines.FlowPreview::class)
 package dev.volna.messenger
 
+import androidx.compose.ui.graphics.graphicsLayer
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
@@ -135,7 +137,7 @@ internal fun ChatRoomScreen(
     var newMessages by remember(chat.id) { mutableStateOf(0) }
     var highlighted by remember(chat.id) { mutableStateOf<Long?>(null) }
     val motion = LocalMotionEnabled.current
-    val listState = rememberLazyListState()
+    val listState = remember(chat.id) { androidx.compose.foundation.lazy.LazyListState() }
     val recorder = remember(chat.id) { NativeRecorder(context, scope) { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
     val canModerate = chat.kind in listOf("group", "channel") && chat.role in listOf("owner", "admin")
     val canPin = chat.kind !in listOf("group", "channel") || canModerate
@@ -269,7 +271,7 @@ internal fun ChatRoomScreen(
         if (error.isNotBlank()) NativeConnectionNotice(error, onRetry)
         Box(Modifier.weight(1f).fillMaxWidth().hazeSource(backdrop, zIndex = 1f, key = "history")) {
             if (timeline.isEmpty()) Column(Modifier.fillMaxWidth().align(Alignment.Center)) { NativeEmptyState(Icons.Outlined.ChatBubbleOutline, if (searchQuery.isNotBlank()) "Ничего не найдено" else if (showPins) "Нет закреплённых сообщений" else "Начните разговор") }
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(LocalNativeAppearance.current.spacing.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (firstScroll || timeline.isEmpty()) 1f else 0f }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(LocalNativeAppearance.current.spacing.dp)) {
                 if (historyButton) item(key = "history") { TextButton(onClick = { if (moreHistory) onLoadOlder() else callPages++ }, enabled = !loadingHistory, modifier = Modifier.fillMaxWidth()) { if (loadingHistory) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else NativeText(if (moreHistory) "Более ранние сообщения" else "Более ранние звонки", fontSize = 12.sp) } }
                 itemsIndexed(timeline, key = { _, entry -> "${chat.id}-${entry.key}" }) { index, entry ->
                     val group = entry.messages

@@ -24,7 +24,7 @@
     <application
         android:name=".VolnaApplication"
         android:allowBackup="false"
-        android:icon="@drawable/volna_launcher" android:roundIcon="@drawable/volna_launcher"
+        android:icon="@drawable/volna_launcher"
         android:label="Волна"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">

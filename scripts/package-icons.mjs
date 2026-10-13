@@ -106,11 +106,7 @@ const maskable = join(root, 'client/public/icons/icon-maskable-512.png');
 if (!existsSync(maskable)) copyFileSync(join(root, 'client/public/icons/icon-512.png'), maskable);
 for (const size of [180, 192, 512]) writeFileSync(join(root, `client/public/icons/icon-${size}.png`), pngs.get(size));
 writeFileSync(join(root, 'client/public/icons/badge-96.png'), Buffer.from(assets.badge, 'base64'));
-writeFileSync(join(root, 'android-native/app/src/main/res/drawable-nodpi/ic_volna_notification.png'), Buffer.from(assets.badge, 'base64'));
-writeFileSync(join(root, 'android-native/app/src/main/res/drawable-nodpi/volna_launcher.png'), pngs.get(512));
-for (const name of ['ic_launcher.png', 'ic_launcher_round.png']) {
-  writeFileSync(join(root, 'android-native/app/src/main/res/mipmap-mdpi', name), pngs.get(192));
-}
+// Android keeps its separately approved legacy launcher artwork and density-specific notification resources.
 
 // Modern Windows accepts PNG frames inside ICO. Include all common shell sizes.
 const icoSizes = [16, 24, 32, 48, 64, 128, 256];
@@ -134,4 +130,4 @@ const require = createRequire(new URL('../client/package.json', import.meta.url)
 const parsed = require('resedit').Data.IconFile.from(ico);
 if (parsed.icons.length !== icoSizes.length) throw Error('Windows ICO frame validation failed');
 writeFileSync(join(root, 'client/electron/icon.ico'), ico);
-console.log(`Packaged matching circular Android, Web, Apple and Windows icons (${icoSizes.length} ICO frames); transparent corners, solid centers and white wave badge (${assets.whitePixels} ink pixels) verified.`);
+console.log(`Packaged circular Web, Apple and Windows icons (${icoSizes.length} ICO frames); transparent corners, solid centers and white wave badge (${assets.whitePixels} ink pixels) verified.`);
