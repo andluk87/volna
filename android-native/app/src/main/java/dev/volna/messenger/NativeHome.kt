@@ -13,7 +13,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -130,15 +129,7 @@ internal fun ChatListScreen(
                 "profile" -> NativeSettingsScreen(user, token, appearance, headerHeight, onOpenProfile, onAppearance, onScanQr, onSavedMessages, { settings = it }, { accountsOpen = true }, onAppearanceChange, { tab = "contacts" })
                 else -> Column(Modifier.fillMaxSize()) {
                     NativeSearchField(query, onQuery, "Поиск чатов", compact = true)
-                    if (query.isBlank()) LazyRow(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(CircleShape).background(Panel.copy(alpha = .64f)), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        items(folders.map { "folder:${it.id}" to (it.icon + it.name) }) { (key, label) ->
-                            Row(Modifier.clip(CircleShape).background(if (filter == key) Hover else Color.Transparent).clickable { filter = key }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                NativeText(label, color = folders.firstOrNull { "folder:${it.id}" == key }?.color?.takeIf { it in nativeFolderColors }?.let { Color(android.graphics.Color.parseColor(it)) } ?: if (filter == key) Accent else Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                val unread = chats.count { (it.unread > 0 || it.manualUnread) && if (key.startsWith("folder:")) folders.firstOrNull { f -> "folder:${f.id}" == key }?.let { f -> nativeFolderMatches(f, it) } == true else nativeChatFilter(it, key) }
-                                if (unread > 0) NativeText(unread.toString(), Modifier.padding(start = 5.dp).clip(CircleShape).background(if (filter == key) Accent else Muted).padding(horizontal = 5.dp, vertical = 1.dp), color = Panel, fontSize = 11.sp)
-                            }
-                        }
-                    }
+                    if (query.isBlank()) NativeFolderTabs(folders, chats, filter) { filter = it }
                     if (query.trim().length >= 2) NativeGlobalSearch(query, token, api, chats, people, onSelect, onStartChat, onSearchMessage)
                     else Box(Modifier.weight(1f)) {
                         val folder = folders.firstOrNull { "folder:${it.id}" == filter }
@@ -185,8 +176,8 @@ internal fun ChatListScreen(
         NativeGlassSurface(Modifier.align(Alignment.BottomCenter).onSizeChanged { navigationHeight = with(chromeDensity) { it.height.toDp() } }.padding(horizontal = 28.dp, vertical = 8.dp).fillMaxWidth(), radius = 32.dp, floating = true) {
             Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 listOf(Triple("chats", "Чаты", Icons.Outlined.ChatBubbleOutline), Triple("contacts", "Контакты", Icons.Outlined.AccountCircle), Triple("profile", "Настройки", Icons.Outlined.Settings), Triple("account", "Профиль", Icons.Outlined.PersonOutline)).forEach { (key, label, icon) ->
-                    Column(Modifier.weight(1f).clip(CircleShape).background(if (tab == key) Hover.copy(alpha = .55f) else Color.Transparent).clickable { if (key == "account") user?.id?.let(onOpenProfile) else { tab = key; onQuery("") } }.padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        BadgedBox(badge = { if (key == "chats" && chats.any { !it.archived && (it.unread > 0 || it.manualUnread) }) Badge(containerColor = Accent) { NativeText(chats.count { !it.archived && (it.unread > 0 || it.manualUnread) }.toString(), color = Panel, fontSize = 10.sp) } }) {
+                    Column(Modifier.weight(1f).background(if (tab == key) Hover.copy(alpha = .55f) else Color.Transparent, CircleShape).clickable { if (key == "account") user?.id?.let(onOpenProfile) else { tab = key; onQuery("") } }.padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        NativeNavigationIconBadge(if (key == "chats") chats.count { !it.archived && (it.unread > 0 || it.manualUnread) } else 0) {
                             if (key == "account") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 23.dp) else Icon(icon, label, tint = if (tab == key) Accent else TextMain, modifier = Modifier.size(23.dp))
                         }
                         NativeText(label, color = if (tab == key) Accent else TextMain, fontSize = 10.sp, modifier = Modifier.padding(top = 3.dp))
@@ -344,7 +335,7 @@ internal fun NativeChatRow(chat: VolnaChat, me: Long?, token: String, draft: Str
             }
             Row(Modifier.padding(top = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                 NativeText(if (draft.isNotBlank()) "Черновик: $draft" else chat.lastText.ifBlank { "Начните разговор" }, Modifier.weight(1f), color = if (draft.isNotBlank()) Accent else Muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (chat.unread > 0 || chat.manualUnread) Box(Modifier.padding(start = 8.dp).heightIn(min = 22.dp).widthIn(min = 22.dp).clip(CircleShape).background(if (chat.muted) Muted else Accent).padding(horizontal = 6.dp, vertical = 2.dp), contentAlignment = Alignment.Center) { NativeText(if (chat.unread > 0) chat.unread.toString() else "•", color = if (chat.muted) Panel else AccentText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp) }
+                NativeUnreadBadge(chat.unread, Modifier.padding(start = 8.dp), containerColor = if (chat.muted) Muted else Accent, contentColor = if (chat.muted) Panel else AccentText, manualUnread = chat.manualUnread, fontSize = 12.sp)
             }
         }
         DropdownMenu(menu, { menu = false }) {

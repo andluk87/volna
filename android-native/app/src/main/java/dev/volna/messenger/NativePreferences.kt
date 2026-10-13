@@ -230,6 +230,12 @@ internal fun NativeNotificationSettings(account: Long, onDismiss: () -> Unit) {
                 }
             } }
             item { NativeSettingsCard {
+                val branded = remember(revision) { prefs.getBoolean("watch_brand_label", false) }
+                Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically) {
+                    NativeText("Пометка «🌊 Волна»",Modifier.weight(1f),fontSize=15.sp,color=TextMain)
+                    Switch(checked=branded,onCheckedChange={prefs.edit().putBoolean("watch_brand_label",it).apply();revision++})
+                }
+                NativeText("Добавляет подпись в заголовок сообщений, чтобы узнать приложение на часах.",color=Muted,fontSize=12.sp,modifier=Modifier.padding(horizontal=16.dp,vertical=8.dp))
                 NativeSettingRow(Icons.Outlined.Watch, "Проверить уведомление на часах", "Через 10 секунд — успеете заблокировать телефон") { NativeNotificationTest.schedule(context, account) }
                 NativeText("Включите уведомления Волны в приложении для часов, например Huawei Health.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 if (watchTestStatus != null) NativeText(watchTestStatus.message, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))

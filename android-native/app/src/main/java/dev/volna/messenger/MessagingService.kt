@@ -178,7 +178,9 @@ class MessagingService : Service() {
             val reaction = event.optJSONObject("reaction")
             val sender = message.optLong("sender_id")
             val replyToMe = message.optJSONObject("reply")?.optLong("sender_id") == userId
-            val username = NativeAccounts.list(this).firstOrNull { it.user.id == userId }?.user?.username.orEmpty()
+            val accounts = NativeAccounts.list(this)
+            val account = accounts.firstOrNull { it.user.id == userId }
+            val username = account?.user?.username.orEmpty()
             val mentioned = username.isNotBlank() && Regex("(?i)(?<![a-z0-9_])@" + Regex.escape(username) + "(?![a-z0-9_])").containsMatchIn(message.optString("text"))
             val isReaction = type == "message-update" && reaction?.optBoolean("active") == true && reaction.optLong("user_id") != userId && sender == userId
             if (isReaction) { if (!settings.getBoolean("reactions", true)) return }
@@ -189,7 +191,11 @@ class MessagingService : Service() {
             }
             if (nativeNotificationChatVisible(MainActivity.isVisible, MainActivity.visibleAccountId, MainActivity.visibleChatId, userId, chatId)) return
             val id = message.optLong("id")
-            val title = if (isReaction) "Новая реакция" else if(!message.isNull("topic_id")) "${message.optString("group_name")} › ${message.optString("topic_name")}" else message.optString("sender_name", "Волна").ifBlank { "Волна" }
+            val chat = cache.chats(userId).firstOrNull { it.id == chatId }
+            val title = if (isReaction) "Новая реакция" else nativeNotificationTitle(
+                notificationSenderName(userId, sender, message.optString("sender_name"), message.optString("sender_username"), chat),
+                message.optString("group_name"), message.optString("topic_name"), !message.isNull("topic_id")
+            )
             val preview = if (isReaction) "${reaction?.optString("emoji")} на ваше сообщение" else message.optString("text").ifBlank { message.optJSONObject("attachment")?.optString("name") ?: "Вложение" }
             val body = if (settings.getBoolean("preview", true)) preview else if (isReaction) "Реакция на сообщение" else "Новое сообщение"
             val launch = packageManager.getLaunchIntentForPackage(packageName) ?: Intent(this, MainActivity::class.java)
@@ -199,9 +205,9 @@ class MessagingService : Service() {
             val notificationId = ((id xor (id ushr 32)).toInt() and 0x1fffffff) + if (isReaction) 0x20000000 else 0
             val pending = PendingIntent.getActivity(this, notificationId, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val channel = NativeNotificationSounds.messageChannel(this, userId)
-            val notificationBuilder = builder(if (NativeAccounts.list(this).size > 1) "$title · ${NativeAccounts.list(this).firstOrNull { it.user.id == userId }?.user?.name.orEmpty()}" else title, body, channel).setContentIntent(pending).setAutoCancel(true)
+            val notificationBuilder = builder(nativeNotificationBrandTitle(title, settings.getBoolean("watch_brand_label",false)), body, channel).setContentIntent(pending).setAutoCancel(true)
                 .setGroup("volna-messages-$userId").setOnlyAlertOnce(false)
-            if(!isReaction&&cache.chats(userId).firstOrNull{it.id==chatId}?.canSend!=false){
+            if(!isReaction&&chat?.canSend!=false){
                 val replyIntent=Intent(this,NotificationReplyReceiver::class.java).setAction("dev.volna.messenger.REPLY").setData(Uri.parse("volna://reply/$userId/$chatId/$id"))
                 val replyPending=PendingIntent.getBroadcast(this,notificationId,replyIntent,PendingIntent.FLAG_UPDATE_CURRENT or if(Build.VERSION.SDK_INT>=31)PendingIntent.FLAG_MUTABLE else 0)
                 val input=android.app.RemoteInput.Builder("volna_reply").setLabel("Ответить").build()
@@ -211,6 +217,21 @@ class MessagingService : Service() {
             val notification=notificationBuilder.build()
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify("volna-account-$userId", notificationId, notification)
         } catch (_: Exception) { }
+    }
+
+    private fun notificationSenderName(account: Long, sender: Long, serverName: String, serverUsername: String, chat: VolnaChat?): String {
+        val rows = NativeContactBook(this, account).cached().optJSONArray("contacts")
+        val contact = rows?.let { contacts -> (0 until contacts.length()).map { contacts.getJSONObject(it) }
+            .firstOrNull { !it.optBoolean("deleted") && it.optLong("linked_user_id") == sender } }
+        val person = contact?.optJSONObject("user")?.let(api::contactUser)
+            ?: cache.profile(account, sender) ?: cache.contacts(account).firstOrNull { it.id == sender }
+        val direct = chat?.takeIf { it.kind == "direct" && it.peerId == sender }
+        return nativeNotificationName(
+            custom = contact?.optString("custom_name").orEmpty(), phonebook = contact?.optString("phonebook_name").orEmpty(),
+            profile = serverName.ifBlank { person?.name.orEmpty().ifBlank { direct?.name.orEmpty() } },
+            username = serverUsername.ifBlank { person?.username.orEmpty().ifBlank { direct?.username.orEmpty() } },
+            firstName = person?.firstName.orEmpty(), lastName = person?.lastName.orEmpty()
+        )
     }
 
     private fun serviceNotification(): Notification = builder("Волна", "Связь с сообщениями активна", STATUS_CHANNEL)

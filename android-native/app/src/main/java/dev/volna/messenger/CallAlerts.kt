@@ -29,7 +29,7 @@ internal object CallAlerts {
     fun settings(context: Context, intent: Intent) { runCatching { context.startActivity(intent) }.onFailure { runCatching { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) } } }
     fun fullScreenAllowed(context: Context): Boolean = Build.VERSION.SDK_INT < 34 || context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
     fun show(context: Context, call: VolnaCall, account: Long = 0, accountName: String = "", background: Boolean = false) {
-        val callerName=nativeContactCallerName(context,account.takeIf{it>0}?:NativeCalls.accountId(),call.peer)
+        val callerName=nativeNotificationName(custom=nativeContactCallerName(context,account.takeIf{it>0}?:NativeCalls.accountId(),call.peer), username=call.peer?.username.orEmpty(),firstName=call.peer?.firstName.orEmpty(),lastName=call.peer?.lastName.orEmpty(),fallback="Собеседник")
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(NativeCalls.CALL_CHANNEL, "Входящие звонки", NotificationManager.IMPORTANCE_HIGH).apply {
             setSound(null, null); enableVibration(false); lockscreenVisibility = Notification.VISIBILITY_PUBLIC
@@ -42,7 +42,7 @@ internal object CallAlerts {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = nativeNotificationBuilder(context, channel)
             .setContentTitle(callerName)
-            .setContentText(if(accountName.isBlank())"Входящий звонок" else "Входящий звонок · $accountName").setCategory(Notification.CATEGORY_CALL)
+            .setContentText("Входящий звонок").setCategory(Notification.CATEGORY_CALL)
             .setContentIntent(open).setVisibility(Notification.VISIBILITY_PUBLIC).setOngoing(true).setOnlyAlertOnce(true)
         if (fullScreenAllowed(context)) notification.setFullScreenIntent(open, true)
         if (Build.VERSION.SDK_INT >= 31) notification.setStyle(Notification.CallStyle.forIncomingCall(
