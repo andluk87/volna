@@ -33,7 +33,10 @@ export async function uploadFile(file,token,signal){
   const res=await sessionFetch(API+'/api/uploads',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':file.type||'application/octet-stream','X-File-Name':encodeURIComponent(file.name)},body:file,signal});
   const value=await res.json();if(!res.ok)throw Object.assign(new Error(value.error||'Ошибка загрузки'),{status:res.status});return value;
 }
+const localVoiceBlobs=new Map();
+export function seedVoiceBlob(id,token,blob){const key=token+'/'+id;localVoiceBlobs.set(key,blob);while(localVoiceBlobs.size>8)localVoiceBlobs.delete(localVoiceBlobs.keys().next().value);}
 export async function fileBlob(id,token,signal){
+ const local=localVoiceBlobs.get(token+'/'+id);if(local)return local;
   if(token===DEMO_TOKEN)return demoBlob(id,signal);
   const res=await sessionFetch(API+'/api/files/'+id,{headers:{Authorization:'Bearer '+token},signal});
   if(!res.ok){const value=await res.json();throw Object.assign(new Error(value.error||'Файл недоступен'),{status:res.status});}return res.blob();

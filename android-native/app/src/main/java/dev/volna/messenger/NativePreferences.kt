@@ -97,8 +97,8 @@ internal object NativeFolders {
     fun load(context: Context, account: Long): List<NativeFolder> = runCatching {
         val prefs = context.getSharedPreferences("volna-folders-$account", 0)
         val stored = decode(JSONArray(prefs.getString("folders", "[]")))
-        if (prefs.getBoolean("builtins_imported", false)) stored else (nativeDefaultFolders() + stored).also { save(context, account, it) }
-    }.getOrDefault(nativeDefaultFolders())
+        stored
+    }.getOrDefault(emptyList())
     fun save(context: Context, account: Long, folders: List<NativeFolder>) { context.getSharedPreferences("volna-folders-$account", 0).edit().putBoolean("builtins_imported", true).putString("folders", encode(folders).toString()).apply() }
 }
 

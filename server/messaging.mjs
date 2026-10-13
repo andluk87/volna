@@ -41,7 +41,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     const sender=userById(row.sender_id);
     return {...row,...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_name:sender?.name||'Пользователь',sender_username:sender?.username||'',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
       reply:reply?{id:reply.id,sender_id:reply.sender_id,name:userById(reply.sender_id)?.name,text:reply.deleted_at?'Сообщение удалено':reply.text||'Вложение',deleted:!!reply.deleted_at}:null,
-      reactions:db.prepare('SELECT r.emoji,r.user_id,u.name FROM reactions r JOIN users u ON u.id=r.user_id WHERE r.message_id=? ORDER BY r.emoji,r.user_id').all(row.id),
+      reactions:db.prepare('SELECT r.emoji,r.user_id,u.name FROM reactions r JOIN users u ON u.id=r.user_id WHERE r.message_id=? ORDER BY r.emoji,r.rowid').all(row.id).map(reaction=>({...reaction,avatar_url:userById(reaction.user_id)?.avatar_url||null})),
       pinned:!!db.prepare('SELECT 1 FROM pins WHERE message_id=?').get(row.id)};
   };
   const changed=(row,extra={})=>broadcast(row.chat_id,{type:'message-update',message:hydrate(row),...extra});

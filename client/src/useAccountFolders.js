@@ -2,10 +2,10 @@ import {useEffect,useRef,useState} from 'react';
 import {request} from './api';
 import {defaultFolders,normalizeFolders} from './sidebar-state.mjs';
 export default function useAccountFolders(account,token,demo){
- const [state,setState]=useState({version:-1,folders:defaultFolders()}),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [state,setState]=useState({version:-1,folders:[]}),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const current=useRef(state),saving=useRef(false),editing=useRef(false),owner=useRef(null),generation=useRef(0);current.current=state;
  useEffect(()=>{const epoch=++generation.current;const key='volna.account.folders.'+(demo?'demo.':'')+account;let cached;try{cached=JSON.parse(localStorage.getItem(key));}catch{}
-  if(owner.current!==key){owner.current=key;const initial={version:demo?0:-1,folders:cached?normalizeFolders(cached.folders):defaultFolders()};current.current=initial;setState(initial);setError('');editing.current=false;}saving.current=false;setBusy(false);
+  if(owner.current!==key){owner.current=key;const initial={version:demo?0:-1,folders:cached?normalizeFolders(cached.folders):[]};current.current=initial;setState(initial);setError('');editing.current=false;}saving.current=false;setBusy(false);
   async function refresh(){if(!account||!token||demo||saving.current||editing.current)return;try{const next=await request('/folders',token);if(generation.current!==epoch||saving.current||editing.current||next.version<current.current.version)return;current.current=next;setState(next);try{localStorage.setItem(key,JSON.stringify(next));}catch{}}catch(e){if(generation.current===epoch&&current.current.version<0)setError(e.message);}}
   refresh();const timer=setInterval(refresh,5000);window.addEventListener('volna-folders-updated',refresh);window.addEventListener('online',refresh);return()=>{generation.current++;clearInterval(timer);window.removeEventListener('volna-folders-updated',refresh);window.removeEventListener('online',refresh);};
  },[account,token,demo]);

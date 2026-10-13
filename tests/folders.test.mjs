@@ -16,12 +16,12 @@ test('folders: account isolation, cross-session updates, conflicts and deleted d
  const req=async(path,token='',data)=>{const r=await fetch(base+path,{method:data===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,data:await r.json()};};
  const a=(await req('/register','',{username:'folder_alice',name:'Alice',password:'long-test-password'})).data,b=(await req('/register','',{username:'folder_boris',name:'Boris',password:'long-test-password'})).data;
  assert.equal((await req('/folders')).status,401);
- const first=(await req('/folders',a.token)).data;assert.equal(first.version,0);assert.equal(first.folders.length,6);
+ const first=(await req('/folders',a.token)).data;assert.equal(first.version,0);assert.equal(first.folders.length,0);
  assert.equal((await req('/folders',a.token,{version:0,folders:[]})).status,200);
  const again=(await req('/login','',{username:'folder_alice',password:'long-test-password'})).data;
  assert.deepEqual((await req('/folders',again.token)).data,{version:1,folders:[]});
  assert.equal((await req('/folders',a.token,{version:0,folders:first.folders})).status,409);
- assert.equal((await req('/folders',b.token)).data.folders.length,6);
+ assert.equal((await req('/folders',b.token)).data.folders.length,0);
  const privateChat=(await req('/saved',b.token,{})).data;
  assert.equal((await req('/folders',a.token,{version:1,folders:[{id:'foreign',name:'Чужая',chats:[privateChat.id]}]})).status,400);
  assert.equal((await req('/folders',a.token,{version:1,folders:[{id:'same',name:'One'},{id:'same',name:'Two'}]})).status,400);

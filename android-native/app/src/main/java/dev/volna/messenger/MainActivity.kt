@@ -389,9 +389,10 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     if (album) api.sendAlbum(session, batch.chatId, ids, text, batch.replyId, batch.clientId)
                     else ids.mapIndexed { index, id -> api.send(session, batch.chatId, if (index == 0) text else "", batch.replyId, id, batch.clientId + "-" + index) }
                 }
+                batch.voiceFile?.let { local -> created.forEach { message -> if (message.attachmentId != null) withContext(Dispatchers.IO) { runCatching { NativeVoiceRepository.seed(context, session, message, local) } } } }
                 if (token == session && selectedChat?.id == batch.chatId) {
                     if (earlierWindow) { earlierWindow = false; messages.clear() }
-                    focusMessageId = created.lastOrNull()?.id
+                    focusMessageId = null
                     created.forEach { message -> if (messages.none { it.id == message.id }) messages.add(message) }
                     batch.onSent()
                 }
@@ -732,7 +733,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                             try {
                                 val created = withContext(Dispatchers.IO) { api.send(session, chatId, "", replyId, clientId = nonce, expressionId = item.id) }
                                 sendNonces.remove(key)
-                                if (token == session && selectedChat?.id == chatId) { if (earlierWindow) { earlierWindow = false; messages.clear() }; if (messages.none { it.id == created.id }) messages.add(created); focusMessageId = created.id; onSent() }
+                                if (token == session && selectedChat?.id == chatId) { if (earlierWindow) { earlierWindow = false; messages.clear() }; if (messages.none { it.id == created.id }) messages.add(created); focusMessageId = null; onSent() }
                             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { if (token == session) error = problem.message ?: "Не удалось отправить" } finally { busy = false }
                         }
                     },

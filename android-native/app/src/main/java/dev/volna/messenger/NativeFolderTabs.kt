@@ -52,7 +52,8 @@ internal fun nativeFolderTabWidths(viewportWidth: Int, naturalWidths: List<Int>)
 internal fun NativeFolderTabs(
     folders: List<NativeFolder>, chats: List<VolnaChat>, selected: String, onSelect: (String) -> Unit
 ) {
-    if (folders.isEmpty()) return
+    if (folders.none { it.rule != "all" }) return
+    val tabs = if (folders.any { it.rule == "all" }) folders else listOf(NativeFolder("builtin_all", "Все чаты", emptySet(), "all")) + folders
     val scroll = rememberScrollState()
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Panel.copy(alpha = .64f))) {
@@ -60,9 +61,9 @@ internal fun NativeFolderTabs(
         Layout(
             modifier = Modifier.fillMaxWidth().horizontalScroll(scroll),
             content = {
-                folders.forEach { folder -> key(folder.id) {
-                    val folderKey = "folder:${folder.id}"
-                    val active = selected == folderKey
+                tabs.forEach { folder -> key(folder.id) {
+                    val folderKey = if (folder.rule == "all") "all" else "folder:${folder.id}"
+                    val active = selected == folderKey || folder.rule == "all" && selected == "all"
                     val unread = chats.count { (it.unread > 0 || it.manualUnread) && nativeFolderMatches(folder, it) }
                     Row(
                         Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(CircleShape)

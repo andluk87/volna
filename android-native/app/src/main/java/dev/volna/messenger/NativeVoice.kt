@@ -53,6 +53,13 @@ internal object NativeVoiceRepository {
     private val cache = LruCache<String, NativeVoiceData>(80)
     private val lock = Mutex()
     private val decodeLock = Mutex()
+    suspend fun seed(context: Context, token: String, message: VolnaMessage, source: File) = withContext(Dispatchers.IO) {
+        val id = message.attachmentId ?: return@withContext
+        val session = MessageDigest.getInstance("SHA-256").digest(token.toByteArray()).take(12).joinToString("") { "%02x".format(it.toInt() and 255) }
+        val key = "$session/$id"
+        val file = lock.withLock { File(context.cacheDir, "voices/$session/$id").also { it.parentFile?.mkdirs(); source.copyTo(it, overwrite = true) } }
+        decodeLock.withLock { cache.put(key, decodeVoice(file)) }
+    }
     suspend fun load(context: Context, token: String, message: VolnaMessage, waveform: Boolean = true): NativeVoiceData = withContext(Dispatchers.IO) {
         val id = message.attachmentId ?: error("Нет аудиовложения")
         val session = MessageDigest.getInstance("SHA-256").digest(token.toByteArray()).take(12).joinToString("") { "%02x".format(it.toInt() and 255) }

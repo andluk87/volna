@@ -104,7 +104,7 @@ internal fun ChatListScreen(
         catch (e: Exception) { folderError = e.message ?: "Не удалось сохранить папки"; if (e is NativeApiException && e.status == 409) runCatching { applyFolderCloud(withContext(Dispatchers.IO) { api.folders(token) }) }; false }
         finally { folderBusy = false }
     }
-    LaunchedEffect(folders) { if (filter == "all" || filter.startsWith("folder:") && folders.none { "folder:${it.id}" == filter }) filter = folders.firstOrNull()?.let { "folder:${it.id}" } ?: "all" }
+    LaunchedEffect(folders) { if (filter.startsWith("folder:") && folders.none { "folder:${it.id}" == filter }) filter = "all" }
     val appearance = LocalNativeAppearance.current
     val motion = LocalMotionEnabled.current
     val pageState = rememberSaveableStateHolder()

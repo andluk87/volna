@@ -64,7 +64,7 @@ internal class NativeRecorder(private val context: Context, private val scope: C
             file = output
             next = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(context) else MediaRecorder()
             val manager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            next.setAudioSource(if (manager.getProperty(AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED) == "true") MediaRecorder.AudioSource.UNPROCESSED else MediaRecorder.AudioSource.VOICE_RECOGNITION)
+            next.setAudioSource(MediaRecorder.AudioSource.MIC)
             next.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             next.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             next.setAudioEncodingBitRate(128_000); next.setAudioSamplingRate(48_000); next.setAudioChannels(1)
@@ -75,7 +75,7 @@ internal class NativeRecorder(private val context: Context, private val scope: C
                 while (recording) {
                     seconds = ((SystemClock.elapsedRealtime() - started) / 1000).toInt()
                     val peak = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0) / 32767f
-                    wave = wave.drop(1) + peak.coerceIn(.08f, 1f)
+                    wave = wave.drop(1) + (kotlin.math.sqrt(peak) * 1.6f).coerceIn(.08f, 1f)
                     if (seconds >= 300) { finish(); break }
                     delay(100)
                 }
