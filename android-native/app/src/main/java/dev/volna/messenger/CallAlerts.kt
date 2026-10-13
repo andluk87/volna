@@ -40,8 +40,8 @@ internal object CallAlerts {
         val decline = PendingIntent.getBroadcast(context, NativeCalls.CALL_NOTIFICATION,
             Intent(context, CallActionReceiver::class.java).setAction(CallService.ACTION_END).putExtra("call_id", call.id).putExtra("account_id",account).setData(Uri.parse("volna-call://decline/$account/${call.id}")),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification = Notification.Builder(context, channel)
-            .setSmallIcon(R.drawable.ic_volna).setContentTitle(callerName)
+        val notification = nativeNotificationBuilder(context, channel)
+            .setContentTitle(callerName)
             .setContentText(if(accountName.isBlank())"Входящий звонок" else "Входящий звонок · $accountName").setCategory(Notification.CATEGORY_CALL)
             .setContentIntent(open).setVisibility(Notification.VISIBILITY_PUBLIC).setOngoing(true).setOnlyAlertOnce(true)
         if (fullScreenAllowed(context)) notification.setFullScreenIntent(open, true)

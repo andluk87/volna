@@ -93,7 +93,7 @@ class CallService : Service() {
         val state = NativeCalls.state.value
         val open = IncomingCallActivity.pending(this, state.call?.id ?: return, account=NativeCalls.accountId())
         val end = PendingIntent.getBroadcast(this, 11032, Intent(this, CallActionReceiver::class.java).setAction(ACTION_END).putExtra("call_id", state.call?.id), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val notification = Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_volna)
+        val notification = nativeNotificationBuilder(this, CHANNEL)
             .setContentTitle(state.call?.peer?.name ?: "Волна")
             .setContentText(if (projecting) "Демонстрация экрана · звонок продолжается" else state.phase.ifBlank { "Звонок продолжается" })
             .setCategory(Notification.CATEGORY_CALL).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true)

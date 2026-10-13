@@ -201,7 +201,6 @@ class MessagingService : Service() {
             val channel = NativeNotificationSounds.messageChannel(this, userId)
             val notificationBuilder = builder(if (NativeAccounts.list(this).size > 1) "$title · ${NativeAccounts.list(this).firstOrNull { it.user.id == userId }?.user?.name.orEmpty()}" else title, body, channel).setContentIntent(pending).setAutoCancel(true)
                 .setGroup("volna-messages-$userId").setOnlyAlertOnce(false)
-                .setLargeIcon(android.graphics.BitmapFactory.decodeResource(resources,R.drawable.volna_launcher))
             if(!isReaction&&cache.chats(userId).firstOrNull{it.id==chatId}?.canSend!=false){
                 val replyIntent=Intent(this,NotificationReplyReceiver::class.java).setAction("dev.volna.messenger.REPLY").setData(Uri.parse("volna://reply/$userId/$chatId/$id"))
                 val replyPending=PendingIntent.getBroadcast(this,notificationId,replyIntent,PendingIntent.FLAG_UPDATE_CURRENT or if(Build.VERSION.SDK_INT>=31)PendingIntent.FLAG_MUTABLE else 0)
@@ -220,8 +219,8 @@ class MessagingService : Service() {
     private fun builder(title: String, text: String, channel: String): Notification.Builder {
         val launch = packageManager.getLaunchIntentForPackage(packageName)
         val pending = launch?.let { PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE) }
-        val notification = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, channel) else Notification.Builder(this)
-        return notification.setSmallIcon(R.drawable.ic_volna).setContentTitle(title).setContentText(text)
+        val notification = nativeNotificationBuilder(this, channel)
+        return notification.setContentTitle(title).setContentText(text)
             .setCategory(Notification.CATEGORY_MESSAGE).setVisibility(Notification.VISIBILITY_PRIVATE)
             .setContentIntent(pending).setShowWhen(true)
     }

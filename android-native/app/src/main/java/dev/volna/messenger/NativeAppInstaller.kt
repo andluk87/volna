@@ -57,7 +57,7 @@ class VolnaUpdateReceiver:BroadcastReceiver(){
   if(!manager.areNotificationsEnabled())return
   manager.createNotificationChannel(NotificationChannel("volna_updates","Обновления",NotificationManager.IMPORTANCE_LOW))
   val open=PendingIntent.getActivity(context,11090,Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-  runCatching{manager.notify(11090,Notification.Builder(context,"volna_updates").setSmallIcon(R.drawable.ic_volna).setContentTitle("Волна").setContentText(text).setContentIntent(open).setAutoCancel(true).build())}
+  runCatching{manager.notify(11090,nativeNotificationBuilder(context,"volna_updates").setContentTitle("Волна").setContentText(text).setContentIntent(open).setAutoCancel(true).build())}
  }
 }
 
