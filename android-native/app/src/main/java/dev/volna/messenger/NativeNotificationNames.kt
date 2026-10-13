@@ -1,6 +1,6 @@
 package dev.volna.messenger
 
-/** Notification labels use a person's name; login handles and phone numbers stay out of titles. */
+/** Keep display names, including legacy names equal to a login; omit appended @handles. */
 internal fun nativeNotificationName(
     custom: String = "",
     phonebook: String = "",
@@ -8,22 +8,21 @@ internal fun nativeNotificationName(
     username: String = "",
     firstName: String = "",
     lastName: String = "",
-    fallback: String = "Пользователь"
+    fallback: String = "Пользователь",
+    alternateNames: List<String> = emptyList()
 ): String {
-    val handle = username.trim().removePrefix("@")
-    fun clean(value: String, humanFields: Boolean = false): String? {
-        var name = value.trim()
-        if (name.isBlank() || name.equals("null", ignoreCase = true)) return null
-        // Old profiles occasionally include a separate @handle after the display name.
-        name = name.replace(Regex("(?<![\\p{L}\\p{N}_])\\(?@[a-zA-Z0-9_]+\\)?"), "")
-            .trim().trim('·', '|', ',', ';', '-', '(', ')').trim()
-        if (name.isBlank() || Regex("[+0-9() .-]+").matches(name)) return null
-        if (!humanFields && handle.isNotBlank() && name.equals(handle, ignoreCase = true)) return null
-        return name
+    fun clean(value: String): String? {
+        val name = value.trim().takeUnless { it.isBlank() || it.equals("null", ignoreCase = true) }
+            ?: return null
+        // Only remove a separate suffix, never the actual display name or words inside it.
+        val withoutSuffix = name.replace(Regex("\\s+(?:[·|,;—–-]\\s*)?\\(?@[a-zA-Z0-9_]+\\)?$"), "").trim()
+        return withoutSuffix.takeIf { it.isNotBlank() }
     }
-    return clean(custom) ?: clean(phonebook)
-        ?: clean(listOf(firstName, lastName).filter { it.isNotBlank() }.joinToString(" "), humanFields = true)
-        ?: clean(profile) ?: fallback
+    val humanName = listOf(firstName, lastName).filter { it.isNotBlank() }.joinToString(" ")
+    // Username is intentionally not a name candidate. Equality with it does not invalidate a name.
+    return sequenceOf(custom, phonebook, humanName, profile).plus(alternateNames.asSequence())
+        .mapNotNull(::clean).firstOrNull { it != "Пользователь" && it != "Собеседник" }
+        ?: fallback
 }
 
 internal fun nativeNotificationTitle(sender: String, group: String, topic: String, isTopic: Boolean): String {

@@ -230,7 +230,8 @@ class MessagingService : Service() {
             custom = contact?.optString("custom_name").orEmpty(), phonebook = contact?.optString("phonebook_name").orEmpty(),
             profile = serverName.ifBlank { person?.name.orEmpty().ifBlank { direct?.name.orEmpty() } },
             username = serverUsername.ifBlank { person?.username.orEmpty().ifBlank { direct?.username.orEmpty() } },
-            firstName = person?.firstName.orEmpty(), lastName = person?.lastName.orEmpty()
+            firstName = person?.firstName.orEmpty(), lastName = person?.lastName.orEmpty(),
+            alternateNames = listOf(contact?.optString("display_name").orEmpty(), person?.name.orEmpty(), direct?.name.orEmpty())
         )
     }
 
