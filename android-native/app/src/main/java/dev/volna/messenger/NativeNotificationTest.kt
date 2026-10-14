@@ -5,6 +5,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.Person
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -55,9 +56,22 @@ internal object NativeNotificationTest {
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     .setData(Uri.parse("volna://watch-test/$account"))
                 val open = PendingIntent.getActivity(app, ID, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                val title = if (NativeNotificationPolicy.prefs(app, account).getBoolean("watch_brand_label", false)) nativeNotificationBrandTitle("Проверка уведомлений", true) else "Волна · Проверка уведомлений"
+                val text = "Проверочное сообщение для часов"
+                val now = System.currentTimeMillis()
+                val style = if (Build.VERSION.SDK_INT >= 28) {
+                    val owner = Person.Builder().setName("Вы").setKey("volna-test-account-$account").build()
+                    val sender = Person.Builder().setName(title).setKey("volna-watch-test-sender").build()
+                    Notification.MessagingStyle(owner).setGroupConversation(false).addMessage(text, now, sender)
+                } else {
+                    @Suppress("DEPRECATION")
+                    Notification.MessagingStyle("Вы").addMessage(text, now, title)
+                }
                 val notification = nativeNotificationBuilder(app, selectedChannel, includeArtwork = false)
-                    .setContentTitle(if(NativeNotificationPolicy.prefs(app,account).getBoolean("watch_brand_label",false))nativeNotificationBrandTitle("Проверка уведомлений",true) else "Волна · Проверка уведомлений")
-                    .setContentText("Проверочное сообщение для часов")
+                    .setContentTitle(title)
+                    .setContentText(text)
+                    .setStyle(style)
+                    .setWhen(now)
                     .setCategory(Notification.CATEGORY_MESSAGE)
                     .setVisibility(Notification.VISIBILITY_PRIVATE)
                     .setContentIntent(open)
@@ -65,7 +79,7 @@ internal object NativeNotificationTest {
                     .setAutoCancel(true)
                     .build()
                 manager.notify(TAG, ID, notification)
-                mutableStatus.value = NativeNotificationTestStatus(account, "Проверочное уведомление отправлено. Посмотрите на телефоне и часах.")
+                mutableStatus.value = NativeNotificationTestStatus(account, "Проверочное уведомление MessagingStyle отправлено. Посмотрите на телефоне и часах.")
             } catch (problem: Exception) {
                 mutableStatus.value = NativeNotificationTestStatus(account, problem.message ?: "Не удалось отправить проверочное уведомление")
             } finally {
