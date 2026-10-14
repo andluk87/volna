@@ -1,9 +1,9 @@
 {
   "name": "volna-client",
-  "version": "0.12.50",
+  "version": "0.12.51",
   "private": true,
   "type": "module",
-  "description": "Volna desktop and mobile messenger",
+  "description": "VLN desktop and mobile messenger",
   "author": "Volna",
   "main": "electron/main.cjs",
   "scripts": {
@@ -34,7 +34,7 @@
   },
   "build": {
     "appId": "dev.volna.messenger",
-    "productName": "Volna",
+    "productName": "VLN",
     "directories": {
       "output": "release"
     },

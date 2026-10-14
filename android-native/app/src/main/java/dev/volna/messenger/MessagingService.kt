@@ -192,8 +192,9 @@ class MessagingService : Service() {
             if (nativeNotificationChatVisible(MainActivity.isVisible, MainActivity.visibleAccountId, MainActivity.visibleChatId, userId, chatId)) return
             val id = message.optLong("id")
             val chat = cache.chats(userId).firstOrNull { it.id == chatId }
+            val senderName = notificationSenderName(userId, sender, message.optString("sender_name"), message.optString("sender_username"), chat)
             val title = if (isReaction) "Новая реакция" else nativeNotificationTitle(
-                notificationSenderName(userId, sender, message.optString("sender_name"), message.optString("sender_username"), chat),
+                senderName,
                 message.optString("group_name"), message.optString("topic_name"), !message.isNull("topic_id")
             )
             val preview = if (isReaction) "${reaction?.optString("emoji")} на ваше сообщение" else message.optString("text").ifBlank { message.optJSONObject("attachment")?.optString("name") ?: "Вложение" }
@@ -212,10 +213,13 @@ class MessagingService : Service() {
                 val replyIntent=Intent(this,NotificationReplyReceiver::class.java).setAction("dev.volna.messenger.REPLY").setData(Uri.parse("volna://reply/$userId/$chatId/$id"))
                 val replyPending=PendingIntent.getBroadcast(this,notificationId,replyIntent,PendingIntent.FLAG_UPDATE_CURRENT or if(Build.VERSION.SDK_INT>=31)PendingIntent.FLAG_MUTABLE else 0)
                 val input=android.app.RemoteInput.Builder("volna_reply").setLabel("Ответить").build()
-                val action=Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this,R.drawable.telegram_diagnostic_small),"Ответить",replyPending).addRemoteInput(input).setAllowGeneratedReplies(true).addExtras(android.os.Bundle().apply { putBoolean("android.support.action.showsUserInterface", false) }).apply{if(Build.VERSION.SDK_INT>=28)setSemanticAction(Notification.Action.SEMANTIC_ACTION_REPLY)}.build()
+                val action=Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this,R.drawable.ic_volna_notification),"Ответить",replyPending).addRemoteInput(input).setAllowGeneratedReplies(true).addExtras(android.os.Bundle().apply { putBoolean("android.support.action.showsUserInterface", false) }).apply{if(Build.VERSION.SDK_INT>=28)setSemanticAction(Notification.Action.SEMANTIC_ACTION_REPLY)}.build()
                 notificationBuilder.addAction(action)
                 wearableReply = action
             }
+            if (!isReaction) NativeNotificationConversation.attach(this, notificationBuilder, userId, chatId,
+                chat?.name?.ifBlank { title } ?: title, senderName, body, System.currentTimeMillis(), launch,
+                group = chat?.kind in listOf("group", "channel") || !message.isNull("topic_id"), senderId = sender)
             notificationBuilder.extend(nativeNotificationWearable(userId, chatId, id, if (isReaction) "reaction" else "message", wearableReply))
             val notification=notificationBuilder.build()
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify("volna-account-$userId", notificationId, notification)
@@ -238,7 +242,7 @@ class MessagingService : Service() {
         )
     }
 
-    private fun serviceNotification(): Notification = builder("Волна", "Связь с сообщениями активна", STATUS_CHANNEL)
+    private fun serviceNotification(): Notification = builder("VLN", "Связь с сообщениями активна", STATUS_CHANNEL)
         .setOngoing(true).setOnlyAlertOnce(true).build()
 
     private fun builder(title: String, text: String, channel: String): Notification.Builder {
@@ -253,7 +257,7 @@ class MessagingService : Service() {
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
             val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Сообщения Волны", NotificationManager.IMPORTANCE_HIGH).apply { enableVibration(true) })
+            manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Сообщения VLN", NotificationManager.IMPORTANCE_HIGH).apply { enableVibration(true) })
             manager.createNotificationChannel(NotificationChannel(SILENT_CHANNEL, "Сообщения без звука", NotificationManager.IMPORTANCE_DEFAULT).apply { setSound(null, null); enableVibration(false) })
             manager.createNotificationChannel(NotificationChannel(STATUS_CHANNEL, "Связь", NotificationManager.IMPORTANCE_LOW))
         }

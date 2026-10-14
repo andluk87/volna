@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Волна — мессенджер",
-  "short_name": "Волна",
+  "name": "VLN — мессенджер",
+  "short_name": "VLN",
   "description": "Личные сообщения, группы и каналы",
   "lang": "ru",
   "start_url": "/app",

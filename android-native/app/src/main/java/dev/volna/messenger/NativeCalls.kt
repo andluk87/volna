@@ -243,7 +243,7 @@ object NativeCalls {
         // SecurityException there aborts the native network thread instead of reaching Kotlin.
         NativeCallDiagnostics.step("Проверка разрешений сети")
         check(app.checkSelfPermission(Manifest.permission.ACCESS_NETWORK_STATE) == PackageManager.PERMISSION_GRANTED) {
-            "В установленной сборке отсутствует разрешение ACCESS_NETWORK_STATE. Обновите приложение Волна."
+            "В установленной сборке отсутствует разрешение ACCESS_NETWORK_STATE. Обновите приложение VLN."
         }
         NativeCallDiagnostics.step("Получение настроек ICE/TURN")
         val config = withContext(Dispatchers.IO) { api.callConfig(token) }
@@ -499,7 +499,7 @@ object NativeCalls {
         val session = token; val version = generation
         scope.launch {
             try { withContext(Dispatchers.IO) { api.callScreen(session, device, call.id, sharing) } }
-            catch (problem: Exception) { if (sharing && version == generation && state.value.sharing) { stopScreenSharing(); mutableState.update { it.copy(error = "Сервер не подтвердил демонстрацию. Обновите Волну и попробуйте ещё раз.") } } }
+            catch (problem: Exception) { if (sharing && version == generation && state.value.sharing) { stopScreenSharing(); mutableState.update { it.copy(error = "Сервер не подтвердил демонстрацию. Обновите VLN и попробуйте ещё раз.") } } }
         }
     }
 

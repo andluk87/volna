@@ -2,10 +2,6 @@
     android:width="24dp" android:height="24dp"
     android:viewportWidth="24" android:viewportHeight="24">
     <!-- Android tints the alpha mask: keep the background transparent. -->
-    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.5" android:strokeLineCap="round"
-        android:pathData="M12,2C17.52,2 22,6.48 22,12C22,17.52 17.52,22 12,22C6.48,22 2,17.52 2,12C2,6.48 6.48,2 12,2Z" />
-    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.8" android:strokeLineCap="round"
-        android:pathData="M5.5,9.7C7.7,7.7 9.9,7.7 12.1,9.7C14.3,11.7 16.5,11.7 18.5,9.7M5.5,13.2C7.7,11.2 9.9,11.2 12.1,13.2C14.3,15.2 16.5,15.2 18.5,13.2M6.8,16.7C8.6,15.4 10.3,15.7 12.1,17C13.7,18.2 15.6,18.3 17.2,17" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M4.5,4.5L7.6,4.5Q8.4,4.5 8.8,5.4L12,12.6L15.2,5.4Q15.6,4.5 16.4,4.5L19.5,4.5Q20.4,4.5 20,5.5L14.1,18.5Q13.7,19.5 12.7,19.5L11.3,19.5Q10.3,19.5 9.9,18.5L4,5.5Q3.6,4.5 4.5,4.5Z" />
 </vector>

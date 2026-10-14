@@ -57,30 +57,22 @@ internal object NativeNotificationTest {
                 val launch = Intent(app, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     .setData(Uri.parse("volna://watch-test/$account"))
+                    .putExtra("account_id", account)
                 val open = PendingIntent.getActivity(app, ID, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                val title = if (NativeNotificationPolicy.prefs(app, account).getBoolean("watch_brand_label", false)) nativeNotificationBrandTitle("Проверка уведомлений", true) else "Волна · Проверка уведомлений"
-                val text = "Проверка значков Telegram в Волне"
+                val title = if (NativeNotificationPolicy.prefs(app, account).getBoolean("watch_brand_label", false)) nativeNotificationBrandTitle("Проверка уведомлений", true) else "VLN · Проверка уведомлений"
+                val text = "Проверка значка VLN и ярлыка диалога"
                 val now = System.currentTimeMillis()
-                val style = if (Build.VERSION.SDK_INT >= 28) {
-                    val owner = Person.Builder().setName("Вы").setKey("volna-test-account-$account").build()
-                    val sender = Person.Builder().setName(title).setKey("volna-watch-test-sender").build()
-                    Notification.MessagingStyle(owner).setGroupConversation(false).addMessage(text, now, sender)
-                } else {
-                    @Suppress("DEPRECATION")
-                    Notification.MessagingStyle("Вы").addMessage(text, now, title)
-                }
                 val replyIntent = Intent(app, NotificationTestReplyReceiver::class.java)
                     .setAction("dev.volna.messenger.TEST_REPLY")
                     .setData(Uri.parse("volna://watch-test-reply/$account/$now"))
                 val replyPending = PendingIntent.getBroadcast(app, ID, replyIntent, PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
-                val reply = Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(app, R.drawable.telegram_diagnostic_small), "Ответить", replyPending)
+                val reply = Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(app, R.drawable.ic_volna_notification), "Ответить", replyPending)
                     .addRemoteInput(android.app.RemoteInput.Builder("volna_test_reply").setLabel("Тестовый ответ — никому не отправляется").build())
                     .setAllowGeneratedReplies(true).addExtras(android.os.Bundle().apply { putBoolean("android.support.action.showsUserInterface", false) })
                     .apply { if (Build.VERSION.SDK_INT >= 28) setSemanticAction(Notification.Action.SEMANTIC_ACTION_REPLY) }.build()
-                val notification = nativeNotificationBuilder(app, selectedChannel, includeArtwork = false)
+                val notificationBuilder = nativeNotificationBuilder(app, selectedChannel, includeArtwork = false)
                     .setContentTitle(title)
                     .setContentText(text)
-                    .setStyle(style)
                     .addAction(reply)
                     .extend(nativeNotificationWearable(account, 0, now, "test", reply))
                     .setWhen(now)
@@ -89,10 +81,11 @@ internal object NativeNotificationTest {
                     .setContentIntent(open)
                     .setShowWhen(true)
                     .setAutoCancel(true)
-                    .build()
+                NativeNotificationConversation.attach(app, notificationBuilder, account, 0, title, title, text, now, launch, test = true)
+                val notification = notificationBuilder.build()
                 manager.notify(TAG, ID, notification)
                 lastDelivered = account to now
-                mutableStatus.value = NativeNotificationTestStatus(account, "Тест с временными значками Telegram отправлен. Посмотрите на телефоне и часах.")
+                mutableStatus.value = NativeNotificationTestStatus(account, "Тест VLN с ярлыком диалога отправлен. Посмотрите на телефоне и часах.")
             } catch (problem: Exception) {
                 mutableStatus.value = NativeNotificationTestStatus(account, problem.message ?: "Не удалось отправить проверочное уведомление")
             } finally {
@@ -134,18 +127,18 @@ internal object NativeNotificationTest {
     private fun channel(context: Context, account: Long): String {
         val manager = context.getSystemService(NotificationManager::class.java)
         check(manager.areNotificationsEnabled() && (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)) {
-            "Разрешите уведомления Волны в разделе «Уведомления Android» ниже"
+            "Разрешите уведомления VLN в разделе «Уведомления Android» ниже"
         }
         val id = NativeNotificationSounds.messageChannel(context, account)
         if (manager.getNotificationChannel(id) == null) {
             val baseline = when (id) {
-                MessagingService.CHANNEL_ID -> NotificationChannel(id, "Сообщения Волны", NotificationManager.IMPORTANCE_HIGH).apply { enableVibration(true) }
+                MessagingService.CHANNEL_ID -> NotificationChannel(id, "Сообщения VLN", NotificationManager.IMPORTANCE_HIGH).apply { enableVibration(true) }
                 MessagingService.SILENT_CHANNEL -> NotificationChannel(id, "Сообщения без звука", NotificationManager.IMPORTANCE_DEFAULT).apply { setSound(null, null); enableVibration(false) }
-                else -> error("Откройте Волну ещё раз, чтобы подготовить уведомления сообщений")
+                else -> error("Откройте VLN ещё раз, чтобы подготовить уведомления сообщений")
             }
             manager.createNotificationChannel(baseline)
         }
-        val selected = checkNotNull(manager.getNotificationChannel(id)) { "Откройте Волну ещё раз, чтобы подготовить уведомления сообщений" }
+        val selected = checkNotNull(manager.getNotificationChannel(id)) { "Откройте VLN ещё раз, чтобы подготовить уведомления сообщений" }
         check(selected.importance != NotificationManager.IMPORTANCE_NONE) {
             "Включите уведомления сообщений в разделе «Уведомления Android» ниже"
         }

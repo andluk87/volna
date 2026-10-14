@@ -156,7 +156,7 @@ internal fun ChatListScreen(
         NativeGlassSurface(Modifier.align(Alignment.TopCenter).fillMaxWidth().onSizeChanged { headerHeight = with(chromeDensity) { it.height.toDp() } }.padding(horizontal = 8.dp, vertical = 4.dp), radius = 28.dp, floating = true) { Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { if (tab == "chats") drawerOpen = true else tab = "chats" }) { if (tab == "chats") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 34.dp) else Icon(Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
             Column(Modifier.weight(1f)) {
-                NativeText(when (tab) { "contacts" -> "Контакты"; "calls" -> "Звонки"; "profile" -> "Настройки"; else -> "Волна" }, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = TextMain)
+                NativeText(when (tab) { "contacts" -> "Контакты"; "calls" -> "Звонки"; "profile" -> "Настройки"; else -> "VLN" }, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = TextMain)
                 if (tab == "chats" && error.isNotBlank()) NativeText("Ожидание сети…", fontSize = 12.sp, color = Muted)
             }
             if (tab == "profile") IconButton(onClick = { user?.id?.let(onOpenProfile) }, enabled = user != null) { Icon(Icons.Outlined.Edit, "Редактировать профиль", tint = Accent) }
@@ -191,7 +191,7 @@ internal fun ChatListScreen(
             Column(Modifier.fillMaxHeight().widthIn(max = 304.dp).fillMaxWidth(.85f).background(Panel)) {
                 Column(Modifier.fillMaxWidth().background(Accent).clickable { drawerOpen = false; accountsOpen = true }.padding(16.dp)) {
                     user?.let { Avatar(it.name, it.id, it.avatarUrl, token) }
-                    NativeText(user?.name ?: "Волна", Modifier.padding(top = 16.dp), color = AccentText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    NativeText(user?.name ?: "VLN", Modifier.padding(top = 16.dp), color = AccentText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     NativeText(user?.username?.let { "@$it" }.orEmpty(), color = AccentText, fontSize = 13.sp)
                 }
                 val entries = listOf(
@@ -447,7 +447,7 @@ private fun NativeCallHistoryScreen(account: Long, token: String, api: NativeApi
 @Composable
 private fun NativeSettingsScreen(user: VolnaUser?, token: String, appearance: NativeAppearance, topInset: androidx.compose.ui.unit.Dp, onProfile: (Long) -> Unit, onAppearance: () -> Unit, onScanQr: () -> Unit, onSaved: () -> Unit, onSection: (String) -> Unit, onAccounts: () -> Unit, onAppearanceChange: (NativeAppearance) -> Unit, onContacts: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 12.dp, top = topInset + 12.dp, end = 12.dp, bottom = 90.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Surface(color = Panel, shape = RoundedCornerShape(24.dp)) { Column(Modifier.fillMaxWidth().clickable { user?.id?.let(onProfile) }.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Avatar(user?.name ?: "Волна", user?.id ?: 0, user?.avatarUrl, token, size = 88.dp); NativeText(user?.name ?: "Подключение…", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, modifier = Modifier.padding(top = 12.dp)); NativeText("@${user?.username.orEmpty()}", color = Accent, fontSize = 14.sp); user?.phone?.takeIf { it.isNotBlank() }?.let { NativeText(it, color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) } } } }
+        item { Surface(color = Panel, shape = RoundedCornerShape(24.dp)) { Column(Modifier.fillMaxWidth().clickable { user?.id?.let(onProfile) }.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Avatar(user?.name ?: "VLN", user?.id ?: 0, user?.avatarUrl, token, size = 88.dp); NativeText(user?.name ?: "Подключение…", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, modifier = Modifier.padding(top = 12.dp)); NativeText("@${user?.username.orEmpty()}", color = Accent, fontSize = 14.sp); user?.phone?.takeIf { it.isNotBlank() }?.let { NativeText(it, color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) } } } }
         item { NativeSettingsCard {
             NativeSettingRow(Icons.Outlined.PersonOutline, "Аккаунт", "Имя, фото и описание") { user?.id?.let(onProfile) }
             NativeSettingRow(Icons.Outlined.Palette, "Настройки чатов", "Оформление, текст и плотность") { onAppearance() }
@@ -468,7 +468,7 @@ private fun NativeSettingsScreen(user: VolnaUser?, token: String, appearance: Na
             NativeSettingRow(Icons.Outlined.ManageAccounts, "Аккаунты", "Добавить или переключить") { onAccounts() }
         } }
         item { NativeText("Эмодзи: Noto Color Emoji 2.051 · Google · SIL OFL 1.1\nДанные: Unicode 17 / CLDR 48 · Unicode License\nСтеклянные эффекты: Haze 1.5.4 · Apache 2.0", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(12.dp)) }
-        item { NativeText("Волна ${BuildConfig.VERSION_NAME} · Android\n${android.net.Uri.parse(BuildConfig.API_BASE_URL).host}", color = Muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(12.dp)) }
+        item { NativeText("VLN ${BuildConfig.VERSION_NAME} · Android\n${android.net.Uri.parse(BuildConfig.API_BASE_URL).host}", color = Muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(12.dp)) }
     }
 }
 

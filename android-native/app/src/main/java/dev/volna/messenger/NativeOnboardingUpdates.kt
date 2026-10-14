@@ -47,7 +47,7 @@ internal fun NativeInitialProfile(user: VolnaUser, token: String, api: NativeApi
     }
     // This is the registration step, so dismissing it cannot expose chats with an incomplete profile.
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        NativeText("Добро пожаловать в Волну")
+        NativeText("Добро пожаловать в VLN")
         NativeText("Представьтесь и выберите свой уникальный ник. Имя и фамилия могут совпадать с именами других пользователей.", color = Muted)
         OutlinedTextField(last, { last = it; error = "" }, label = { NativeText("Фамилия") }, singleLine = true, enabled = !saving, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(first, { first = it; error = "" }, label = { NativeText("Имя") }, singleLine = true, enabled = !saving, modifier = Modifier.fillMaxWidth())
@@ -76,7 +76,7 @@ internal fun NativeUpdatesScreen(update: VolnaUpdate?, busy: Boolean, status: St
     val context = LocalContext.current
     NativeFullScreen("Обновления", onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            NativeText("Волна ${BuildConfig.VERSION_NAME}")
+            NativeText("VLN ${BuildConfig.VERSION_NAME}")
             Row(Modifier.fillMaxWidth()) {
                 Column(Modifier.weight(1f)) { NativeText("Скачивать автоматически"); NativeText("Новая версия загружается и проверяется заранее", color = Muted) }
                 Switch(checked = automatic, onCheckedChange = onAutomatic, enabled = !busy)
@@ -88,7 +88,7 @@ internal fun NativeUpdatesScreen(update: VolnaUpdate?, busy: Boolean, status: St
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             OutlinedButton(onClick = onCheck, enabled = !busy) { NativeText("Проверить обновления") }
             if (update != null) {
-                NativeText("Доступна Волна ${update.versionName}")
+                NativeText("Доступна VLN ${update.versionName}")
                 Button(onClick = onInstall, enabled = !busy) { NativeText(if (ready) "Обновить сейчас" else "Скачать и установить") }
                 if (ready) OutlinedButton(onClick = onLater, enabled = !busy) { NativeText("При следующем запуске") }
             }

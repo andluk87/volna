@@ -11,7 +11,7 @@ export function mobile({db,auth,body,json,userById,disconnect,online}) {
     db.prepare(`INSERT INTO session_details VALUES(?,?,?,?) ON CONFLICT(token) DO UPDATE SET
       last_seen=excluded.last_seen WHERE session_details.last_seen<?`).run(session.token,agent,now,now,now-30000);
   };
-  const describe=agent=>agent.includes('VolnaAndroid/')?'Волна · Android':/Android/i.test(agent)?'Браузер · Android':/Windows/i.test(agent)?'Windows':/iPhone|iPad/i.test(agent)?'iOS':/Macintosh/i.test(agent)?'macOS':/Linux/i.test(agent)?'Linux':agent||'Неизвестное устройство';
+  const describe=agent=>agent.includes('VolnaAndroid/')?'VLN · Android':/Android/i.test(agent)?'Браузер · Android':/Windows/i.test(agent)?'Windows':/iPhone|iPad/i.test(agent)?'iOS':/Macintosh/i.test(agent)?'macOS':/Linux/i.test(agent)?'Linux':agent||'Неизвестное устройство';
   const handle=async(req,res,url,session)=>{
     const uid=session.user_id,path=url.pathname;
     if(path==='/api/contacts'&&req.method==='GET') {
@@ -23,7 +23,7 @@ export function mobile({db,auth,body,json,userById,disconnect,online}) {
     if(path==='/api/sessions'&&req.method==='GET') {
       json(res,200,db.prepare(`SELECT s.token AS id,r.expires,r.platform,d.agent,d.created,d.last_seen FROM sessions s
         JOIN refresh_sessions r ON r.access_id=s.token LEFT JOIN session_details d ON d.token=s.token WHERE s.user_id=? AND r.expires>? ORDER BY d.last_seen DESC`).all(uid,Date.now())
-        .map(row=>({id:row.id,current:row.id===session.token,label:row.platform==='android'?'Волна · Android':row.platform==='windows'?'Волна · Windows':describe(row.agent),platform:row.platform,browser:row.agent,created:row.created??null,last_seen:row.last_seen??null,expires:row.expires})));
+        .map(row=>({id:row.id,current:row.id===session.token,label:row.platform==='android'?'VLN · Android':row.platform==='windows'?'VLN · Windows':describe(row.agent),platform:row.platform,browser:row.agent,created:row.created??null,last_seen:row.last_seen??null,expires:row.expires})));
       return true;
     }
     const revoke=path.match(/^\/api\/sessions\/([a-f0-9]{64}|others)\/revoke$/);

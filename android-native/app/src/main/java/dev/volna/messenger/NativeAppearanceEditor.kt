@@ -109,7 +109,7 @@ internal fun NativeAppearanceEditor(value: NativeAppearance, onChange: (NativeAp
                     NativeGradientEditor(variant.wallpaper.colors, max = if (variant.wallpaper.type == "solid") 1 else 4) { wallpaper(variant.wallpaper.copy(colors = it)) }
                     Row(verticalAlignment = Alignment.CenterVertically) { NativeText("Анимированный фон", Modifier.weight(1f)); Switch(variant.wallpaper.animated, { wallpaper(variant.wallpaper.copy(animated = it)) }, enabled = variant.wallpaper.colors.size > 1) }
                 }
-                AppearanceChoices("Паттерн", listOf("none" to "Нет", "dots" to "Точки", "waves" to "Волны", "grid" to "Сетка", "orbits" to "Орбиты"), variant.wallpaper.pattern) { wallpaper(variant.wallpaper.copy(pattern = it)) }
+                AppearanceChoices("Паттерн", listOf("none" to "Нет", "dots" to "Точки", "waves" to "VLN", "grid" to "Сетка", "orbits" to "Орбиты"), variant.wallpaper.pattern) { wallpaper(variant.wallpaper.copy(pattern = it)) }
                 if (variant.wallpaper.pattern != "none") { NativeText("Интенсивность узора · ${(variant.wallpaper.patternOpacity * 100).toInt()}%", color = Muted); Slider(variant.wallpaper.patternOpacity, { wallpaper(variant.wallpaper.copy(patternOpacity = it)) }); TextButton(onClick = { colorTarget = "pattern" }) { NativeText("Цвет узора") }; TextButton(onClick = { wallpaper(variant.wallpaper.copy(patternColor = 0L)) }) { NativeText("Автоматический цвет") } }
             } }
             if (chat == null) {

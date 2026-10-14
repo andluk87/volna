@@ -32,7 +32,7 @@ class NotificationReplyReceiver:BroadcastReceiver(){
     manager.cancel(tag,notificationId)
    }catch(_:Exception){
     runCatching{manager.activeNotifications.firstOrNull{it.tag==tag&&it.id==notificationId}?.let{
-     manager.notify(tag,notificationId,Notification.Builder.recoverBuilder(context,it.notification).setContentText("Ответ не отправлен. Повторите ответ или откройте Волну.").setOnlyAlertOnce(true).build())
+     manager.notify(tag,notificationId,Notification.Builder.recoverBuilder(context,it.notification).setContentText("Ответ не отправлен. Повторите ответ или откройте VLN.").setOnlyAlertOnce(true).build())
     }}
    }finally{pending.finish()}
   }

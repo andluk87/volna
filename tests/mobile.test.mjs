@@ -34,7 +34,7 @@ test('mobile: session metadata contains no bearer token; revocation is account-s
  assert.equal(sessions.length,2);assert.equal(sessions.filter(s=>s.current).length,1);
  assert.equal(JSON.stringify(sessions).includes(a.token),false);assert.equal(JSON.stringify(sessions).includes(a2.token),false);
  const another=sessions.find(s=>!s.current);
- assert.equal(another.label,'Волна · Android');
+ assert.equal(another.label,'VLN · Android');
  assert.equal((await request(`/sessions/${another.id}/revoke`,b.token,{})).status,200);
  assert.equal((await request('/me',a2.token)).status,200);
  assert.equal((await request(`/sessions/${sessions.find(s=>s.current).id}/revoke`,a.token,{})).status,400);

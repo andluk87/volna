@@ -14,7 +14,7 @@ self.addEventListener('push',event=>event.waitUntil((async()=>{
  let payload={};try{payload=event.data?.json()||{};}catch{}
  const chat=Number.isSafeInteger(payload.chat_id)&&payload.chat_id>0?payload.chat_id:null;
  const expiredCall=payload.kind==='call'&&payload.expires<Date.now();
- await self.registration.showNotification(String(payload.title||'Волна').slice(0,100),{
+ await self.registration.showNotification(String(payload.title||'VLN').slice(0,100),{
   body:expiredCall?'Пропущенный аудиозвонок':String(payload.body||'Новое сообщение').slice(0,200),
   icon:'/icons/icon-192.png',badge:'/icons/badge-96.png',tag:String(payload.tag||'volna').slice(0,80),
   data:{chat_id:chat,account_id:Number.isSafeInteger(payload.account_id)?payload.account_id:null},renotify:true,vibrate:[160,80,160]

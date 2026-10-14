@@ -69,7 +69,7 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
     if (state.minimized && !standalone) {
         Row(Modifier.fillMaxWidth().background(Outgoing).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).clickable { NativeCalls.minimize(false) }) {
-                NativeText(call.peer?.name ?: "Волна", fontWeight = FontWeight.SemiBold, color = TextMain, fontSize = 13.sp)
+                NativeText(call.peer?.name ?: "VLN", fontWeight = FontWeight.SemiBold, color = TextMain, fontSize = 13.sp)
                 NativeText(if (state.connected) callDuration(state.elapsed) + if (state.sharing) " · Показ экрана" else " · Разговор" else state.phase, color = Muted, fontSize = 11.sp)
             }
             IconButton(onClick = NativeCalls::toggleMute) { Icon(if (state.muted) Icons.Outlined.MicOff else Icons.Outlined.Mic, "Микрофон", tint = Accent) }
@@ -228,7 +228,7 @@ private fun NativeParticipantVideo(state: NativeCallState, token: String, local:
 
 internal fun nativeCallStatus(state: NativeCallState): String = when {
     state.connected -> callDuration(state.elapsed)
-    state.call?.status == "ringing" && state.call.incoming -> "Звонок Волна"
+    state.call?.status == "ringing" && state.call.incoming -> "Звонок VLN"
     state.call?.status == "ringing" -> "Ожидание…"
     state.phase.contains("Восстанов", ignoreCase = true) -> state.phase
     else -> "Соединение…"

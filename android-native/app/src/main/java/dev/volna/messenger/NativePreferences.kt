@@ -232,12 +232,12 @@ internal fun NativeNotificationSettings(account: Long, onDismiss: () -> Unit) {
             item { NativeSettingsCard {
                 val branded = remember(revision) { prefs.getBoolean("watch_brand_label", false) }
                 Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically) {
-                    NativeText("Пометка «🌊 Волна»",Modifier.weight(1f),fontSize=15.sp,color=TextMain)
+                    NativeText("Пометка «🌊 VLN»",Modifier.weight(1f),fontSize=15.sp,color=TextMain)
                     Switch(checked=branded,onCheckedChange={prefs.edit().putBoolean("watch_brand_label",it).apply();revision++})
                 }
                 NativeText("Добавляет подпись в заголовок сообщений, чтобы узнать приложение на часах.",color=Muted,fontSize=12.sp,modifier=Modifier.padding(horizontal=16.dp,vertical=8.dp))
                 NativeSettingRow(Icons.Outlined.Watch, "Проверить уведомление на часах", "Через 10 секунд — успеете заблокировать телефон") { NativeNotificationTest.schedule(context, account) }
-                NativeText("Включите уведомления Волны в приложении для часов, например Huawei Health.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                NativeText("Включите уведомления VLN в приложении для часов, например Huawei Health.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 if (watchTestStatus != null) NativeText(watchTestStatus.message, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 if (watchTestStatus?.pending == true) TextButton(onClick = { NativeNotificationTest.cancel(account) }, modifier = Modifier.padding(horizontal = 8.dp)) { NativeText("Отменить проверку") }
             } }
@@ -275,7 +275,7 @@ internal fun NativeSessionsScreen(token: String, api: NativeApi, onScanQr: () ->
             if (sessions.any { !it.current }) item { TextButton(onClick = { revokeOthers = true }, enabled = !busy) { NativeText("Завершить другие сессии", color = MaterialTheme.colorScheme.error) } }
         }
     }
-    if (pending != null || revokeOthers) AlertDialog(onDismissRequest = { pending = null; revokeOthers = false }, title = { NativeText("Завершить сессию?") }, text = { NativeText(if (revokeOthers) "На всех других устройствах потребуется снова войти в Волну." else "На устройстве «${pending?.label}» потребуется войти снова.") }, confirmButton = { TextButton(onClick = { val id = if (revokeOthers) "others" else pending!!.id; pending = null; revokeOthers = false; revoke(id) }) { NativeText("Завершить") } }, dismissButton = { TextButton(onClick = { pending = null; revokeOthers = false }) { NativeText("Отмена") } })
+    if (pending != null || revokeOthers) AlertDialog(onDismissRequest = { pending = null; revokeOthers = false }, title = { NativeText("Завершить сессию?") }, text = { NativeText(if (revokeOthers) "На всех других устройствах потребуется снова войти в VLN." else "На устройстве «${pending?.label}» потребуется войти снова.") }, confirmButton = { TextButton(onClick = { val id = if (revokeOthers) "others" else pending!!.id; pending = null; revokeOthers = false; revoke(id) }) { NativeText("Завершить") } }, dismissButton = { TextButton(onClick = { pending = null; revokeOthers = false }) { NativeText("Отмена") } })
 }
 
 @Composable

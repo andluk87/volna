@@ -28,7 +28,7 @@ test('push: private defaults, ownership, durable queue/key, preview, read suppre
   const send=async text=>(await req(`/chats/${chat}/messages`,a.token,{text,client_id:randomUUID()})).data;
   await send('Первый секрет');await send('Второй секрет');assert.equal(app.db.prepare('SELECT COUNT(*) n FROM push_jobs').get().n,1);
   await app.close();await start();assert.deepEqual((await req('/push/config',b.token)).data,publicKey);assert.equal(app.db.prepare('SELECT COUNT(*) n FROM push_jobs').get().n,1);
-  await due();assert.equal(sent.length,1);assert.equal(sent[0].payload.title,'Волна');assert.equal(sent[0].payload.body,'Новое сообщение');assert.equal(JSON.stringify(sent[0].payload).includes('секрет'),false);assert.equal(sent[0].payload.chat_id,chat);
+  await due();assert.equal(sent.length,1);assert.equal(sent[0].payload.title,'VLN');assert.equal(sent[0].payload.body,'Новое сообщение');assert.equal(JSON.stringify(sent[0].payload).includes('секрет'),false);assert.equal(sent[0].payload.chat_id,chat);
   await req('/push/subscribe',b.token,{subscription:sub,preview:true});await send('Видимый текст');await due();assert.equal(sent.at(-1).payload.body,'Видимый текст');
   const pushCount=sent.length;await req('/push/subscribe',b.token,{subscription:sub,preview:true});await send('Mute removes queued push');
   await req(`/chats/${chat}/preferences`,b.token,{muted:true});await due();assert.equal(sent.length,pushCount);assert.equal(app.db.prepare('SELECT COUNT(*) n FROM push_jobs').get().n,0);

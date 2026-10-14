@@ -11,7 +11,7 @@ import java.io.File
 
 internal suspend fun installVolnaApk(context:Context,file:File,allowSilent:Boolean=false)=withContext(Dispatchers.IO){
  val archive=context.packageManager.getPackageArchiveInfo(file.absolutePath,0)?:error("APK недоступен")
- require((if(Build.VERSION.SDK_INT>=28)archive.longVersionCode else @Suppress("DEPRECATION") archive.versionCode.toLong())>BuildConfig.VERSION_CODE){"APK не содержит более новой версии Волны"}
+ require((if(Build.VERSION.SDK_INT>=28)archive.longVersionCode else @Suppress("DEPRECATION") archive.versionCode.toLong())>BuildConfig.VERSION_CODE){"APK не содержит более новой версии VLN"}
  require(archive.packageName==context.packageName){"Обновление предназначено для другого приложения"}
  val installer=context.packageManager.packageInstaller
  val params=PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply{
@@ -41,23 +41,23 @@ class VolnaUpdateReceiver:BroadcastReceiver(){
    val status=intent.getIntExtra(PackageInstaller.EXTRA_STATUS,PackageInstaller.STATUS_FAILURE)
    if(status==PackageInstaller.STATUS_PENDING_USER_ACTION){
     val confirm=if(Build.VERSION.SDK_INT>=33)intent.getParcelableExtra(Intent.EXTRA_INTENT,Intent::class.java) else @Suppress("DEPRECATION") intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-    if(prefs.getBoolean("silent",false)){prefs.edit().putString("error","Android требует подтверждения. Откройте Волну и нажмите «Обновить сейчас».").apply();notify(context,"Обновление скачано. Подтвердите установку в Волне") }else confirm?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)?.let{runCatching{context.startActivity(it)}};return
+    if(prefs.getBoolean("silent",false)){prefs.edit().putString("error","Android требует подтверждения. Откройте VLN и нажмите «Обновить сейчас».").apply();notify(context,"Обновление скачано. Подтвердите установку в VLN") }else confirm?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)?.let{runCatching{context.startActivity(it)}};return
    }
-   if(status!=PackageInstaller.STATUS_SUCCESS){val text=if(status==PackageInstaller.STATUS_FAILURE_ABORTED)"Установка отменена. Обновление остаётся скачанным." else "Android не установил обновление. Откройте Волну и повторите.";prefs.edit().clear().putString("error",text).apply();notify(context,text);return}
+   if(status!=PackageInstaller.STATUS_SUCCESS){val text=if(status==PackageInstaller.STATUS_FAILURE_ABORTED)"Установка отменена. Обновление остаётся скачанным." else "Android не установил обновление. Откройте VLN и повторите.";prefs.edit().clear().putString("error",text).apply();notify(context,text);return}
   }else if(intent.action!=Intent.ACTION_MY_PACKAGE_REPLACED)return
   val legacy=intent.action==Intent.ACTION_MY_PACKAGE_REPLACED&&File(context.filesDir,"updates/volna-${BuildConfig.VERSION_CODE}.apk").isFile&&prefs.getInt("handled_version",0)!=BuildConfig.VERSION_CODE
   if(!legacy&&!nativeUpdateRelaunch(prefs.getInt("before",0),BuildConfig.VERSION_CODE,prefs.getLong("requested",0),System.currentTimeMillis()))return
   prefs.edit().clear().putInt("handled_version",BuildConfig.VERSION_CODE).commit()
   val launch=Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("after_update",true)
   runCatching{context.startActivity(launch)}
-  notify(context,"Обновление установлено. Открыть Волну")
+  notify(context,"Обновление установлено. Открыть VLN")
  }
  private fun notify(context:Context,text:String){
   val manager=context.getSystemService(NotificationManager::class.java)
   if(!manager.areNotificationsEnabled())return
   manager.createNotificationChannel(NotificationChannel("volna_updates","Обновления",NotificationManager.IMPORTANCE_LOW))
   val open=PendingIntent.getActivity(context,11090,Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-  runCatching{manager.notify(11090,nativeNotificationBuilder(context,"volna_updates").setContentTitle("Волна").setContentText(text).setContentIntent(open).setAutoCancel(true).build())}
+  runCatching{manager.notify(11090,nativeNotificationBuilder(context,"volna_updates").setContentTitle("VLN").setContentText(text).setContentIntent(open).setAutoCancel(true).build())}
  }
 }
 

@@ -16,8 +16,8 @@ function writeResources(file, iconFile, appVersion, copyright) {
   version.setFileVersion(appVersion, 1033);
   version.setProductVersion(appVersion, 1033);
   version.setStringValues({lang: 1033, codepage: 1200}, {
-    FileDescription: 'Volna', ProductName: 'Volna', CompanyName: 'Volna',
-    OriginalFilename: 'Volna.exe', InternalName: 'Volna', LegalCopyright: copyright,
+    FileDescription: 'VLN', ProductName: 'VLN', CompanyName: 'Volna',
+    OriginalFilename: 'VLN.exe', InternalName: 'VLN', LegalCopyright: copyright,
   });
   version.outputToResourceEntries(resources.entries);
   resources.outputResource(exe);

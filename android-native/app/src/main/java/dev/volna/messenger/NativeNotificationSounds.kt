@@ -35,7 +35,7 @@ internal object NativeNotificationSounds {
         val vibration=prefs.getBoolean("call_vibration",true)
         val digest=MessageDigest.getInstance("SHA-256").digest("$selected:$vibration".toByteArray()).take(6).joinToString(""){"%02x".format(it)}
         val id="volna-background-call-$account-$digest"
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(id,"Звонки другого аккаунта Волны",NotificationManager.IMPORTANCE_HIGH).apply { setSound(selected,AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build());enableVibration(vibration);if(vibration)vibrationPattern=longArrayOf(0,700,700) })
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(id,"Звонки другого аккаунта VLN",NotificationManager.IMPORTANCE_HIGH).apply { setSound(selected,AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build());enableVibration(vibration);if(vibration)vibrationPattern=longArrayOf(0,700,700) })
         return id
     }
     fun messageChannel(context: Context, account: Long): String {
@@ -47,7 +47,7 @@ internal object NativeNotificationSounds {
         val selected = if (sound) uri(context, account, "message_sound_uri", RingtoneManager.TYPE_NOTIFICATION) else null
         val digest = MessageDigest.getInstance("SHA-256").digest("$selected:$vibration".toByteArray()).take(6).joinToString("") { "%02x".format(it) }
         val id = "volna-message-$account-$digest"
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(id, "Сообщения Волны", NotificationManager.IMPORTANCE_HIGH).apply {
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(id, "Сообщения VLN", NotificationManager.IMPORTANCE_HIGH).apply {
             setSound(selected, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build())
             enableVibration(vibration); if (vibration) vibrationPattern = longArrayOf(0, 160, 100, 160)
         })

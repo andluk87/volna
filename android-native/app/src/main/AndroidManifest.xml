@@ -24,12 +24,12 @@
     <application
         android:name=".VolnaApplication"
         android:allowBackup="false"
-        android:icon="@drawable/telegram_diagnostic_launcher" android:roundIcon="@drawable/telegram_diagnostic_launcher"
-        android:label="Волна"
+        android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
+        android:label="VLN"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <activity
-            android:name=".MainActivity" android:icon="@drawable/telegram_diagnostic_launcher" android:supportsPictureInPicture="true"
+            android:name=".MainActivity" android:icon="@mipmap/ic_launcher" android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:exported="true"
             android:launchMode="singleTask"

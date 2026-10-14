@@ -32,4 +32,4 @@ internal fun nativeNotificationTitle(sender: String, group: String, topic: Strin
     return if (topicName.isBlank()) groupName else "$groupName › $topicName"
 }
 
-internal fun nativeNotificationBrandTitle(title:String,enabled:Boolean)=if(enabled)"🌊 Волна · $title" else title
+internal fun nativeNotificationBrandTitle(title:String,enabled:Boolean)=if(enabled)"🌊 VLN · $title" else title

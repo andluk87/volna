@@ -21,7 +21,7 @@
     <string name="sms_auth_retry_verify">Повторить проверку</string>
     <string name="sms_auth_resend_seconds">Отправить повторно через %1$d с</string>
     <string name="sms_auth_resend">Отправить код повторно</string>
-    <string name="sms_auth_privacy">Входя в Волну, вы подтверждаете свой номер телефона. SMS-код никому не сообщайте.</string>
+    <string name="sms_auth_privacy">Входя в VLN, вы подтверждаете свой номер телефона. SMS-код никому не сообщайте.</string>
     <string name="sms_auth_choose_country">Выберите страну</string>
     <string name="sms_auth_country_search">Поиск страны или кода</string>
     <string name="sms_auth_close">Закрыть</string>

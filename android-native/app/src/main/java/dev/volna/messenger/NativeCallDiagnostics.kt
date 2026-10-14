@@ -100,7 +100,7 @@ internal object NativeCallDiagnostics {
     }
     @Synchronized fun clear() { revision.incrementAndGet(); saved.value = ""; prefs?.edit()?.remove("report")?.apply() }
     private fun format(message: String) = buildString {
-        appendLine("Волна $runVersion")
+        appendLine("VLN $runVersion")
         appendLine("WebRTC $runRtcVersion · видео: $runCodec")
         appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         appendLine("${Build.MANUFACTURER} ${Build.MODEL}")

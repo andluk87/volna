@@ -289,18 +289,18 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         if (file != null && Build.VERSION.SDK_INT >= 26 && context.packageManager.canRequestPackageInstalls()) {
             scope.launch { try { startApkInstaller(context, file); updateStatus = "Подтвердите установку в окне Android" }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { updateStatus = problem.message ?: "Не удалось открыть установщик Android" } }
-        } else updateStatus = "Разрешите установку приложений для Волны и нажмите «Обновить» ещё раз"
+        } else updateStatus = "Разрешите установку приложений для VLN и нажмите «Обновить» ещё раз"
     }
     val installUpdate: (VolnaUpdate?) -> Unit = { release ->
         if (callState.call != null || incomingAccountCalls.isNotEmpty() || attachmentSending) updateStatus = "Завершите звонок или отправку вложения перед обновлением"
         else if (release != null && !updateBusy) scope.launch {
-            updateBusy = true; updateStatus = "Скачиваем Волна ${release.versionName}…"
+            updateBusy = true; updateStatus = "Скачиваем VLN ${release.versionName}…"
             try {
                 val file = pendingUpdateFile?.takeIf { it.name == "volna-${release.versionCode}.apk" && it.isFile } ?: File(context.filesDir, "updates/volna-${release.versionCode}.apk")
                 withContext(Dispatchers.IO) { api.downloadUpdate(release, file) }
                 pendingUpdateFile = file
                 if (Build.VERSION.SDK_INT >= 26 && !context.packageManager.canRequestPackageInstalls()) {
-                    updateStatus = "Разрешите установку приложений для Волны"
+                    updateStatus = "Разрешите установку приложений для VLN"
                     installPermission.launch(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")))
                 } else {
                     startApkInstaller(context, file); updateStatus = "Подтвердите установку в окне Android"
@@ -312,7 +312,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     LaunchedEffect(updateAvailable, autoUpdateDownload) {
         val release = updateAvailable ?: return@LaunchedEffect
         if (updateBusy || !autoUpdateDownload) return@LaunchedEffect
-        updateBusy = true; updateStatus = "Скачиваем Волна ${release.versionName}…"
+        updateBusy = true; updateStatus = "Скачиваем VLN ${release.versionName}…"
         try {
             val file = File(context.filesDir, "updates/volna-${release.versionCode}.apk")
             withContext(Dispatchers.IO) { api.downloadUpdate(release, file) }
@@ -495,7 +495,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             me = withContext(Dispatchers.IO) { api.me(token) }
             me?.let { prefs.edit().putLong("user_id", it.id).apply(); NativeAccounts.remember(context, it, token); withContext(Dispatchers.IO) { cache.saveMe(it) }; MessagingService.start(context, token, it.id) }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) {
-            error = problem.message ?: "Не удалось подключиться к Волна"
+            error = problem.message ?: "Не удалось подключиться к VLN"
             if (problem is NativeApiException && problem.status == 401 || error.contains("Войдите", true) || error.contains("401")) {
                 me?.id?.let { NativeAccounts.remove(context, it) }
                 prefs.edit().remove("token").apply()
@@ -578,7 +578,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         val readyUpdate=updateAvailable?.takeIf{it.versionCode!=dismissedUpdate&&pendingUpdateFile?.name=="volna-${it.versionCode}.apk"&&!updateBusy}
         if(readyUpdate!=null&&callState.call==null&&incomingAccountCalls.isEmpty()&&!attachmentSending) androidx.compose.ui.window.Popup(alignment=Alignment.BottomCenter){
             Surface(color=Panel,shape=RoundedCornerShape(16.dp),modifier=Modifier.padding(12.dp).fillMaxWidth()){
-                Column(Modifier.padding(12.dp)){NativeText("Волна ${readyUpdate.versionName} скачана и готова к установке",fontSize=13.sp)
+                Column(Modifier.padding(12.dp)){NativeText("VLN ${readyUpdate.versionName} скачана и готова к установке",fontSize=13.sp)
                     if(updateStatus.isNotBlank())NativeText(updateStatus,color=Muted,fontSize=12.sp)
                     Row{TextButton(onClick={dismissedUpdate=readyUpdate.versionCode;installUpdate(readyUpdate)}){NativeText("Обновить сейчас")};TextButton(onClick={prefs.edit().putLong("update_notice_dismissed",readyUpdate.versionCode).apply();dismissedUpdate=readyUpdate.versionCode}){NativeText("Не сейчас")}}
                 }
@@ -632,7 +632,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     onAutoUpdateDownload = { autoUpdateDownload = it; prefs.edit().putBoolean("updates_auto_download", it).apply() },
                     updateReady = updateAvailable?.let { pendingUpdateFile?.name == "volna-${it.versionCode}.apk" && pendingUpdateFile?.isFile == true } == true,
                     onUpdateLater = { updateAvailable?.let { prefs.edit().putLong("update_on_restart", it.versionCode).apply(); dismissedUpdate = it.versionCode; updateStatus = "Установка при следующем запуске" } },
-                    onCheckUpdate = { scope.launch { if (!updateBusy) { updateStatus = "Проверяем обновления…"; try { updateAvailable = withContext(Dispatchers.IO) { api.checkUpdate(BuildConfig.VOLNA_VERSION_CODE) }; dismissedUpdate=null; prefs.edit().remove("update_notice_dismissed").apply(); updateStatus = if (updateAvailable == null) "Установлена последняя версия" else "Доступна Волна ${updateAvailable?.versionName}" } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (e: Exception) { updateStatus = e.message ?: "Не удалось проверить обновления" } } } },
+                    onCheckUpdate = { scope.launch { if (!updateBusy) { updateStatus = "Проверяем обновления…"; try { updateAvailable = withContext(Dispatchers.IO) { api.checkUpdate(BuildConfig.VOLNA_VERSION_CODE) }; dismissedUpdate=null; prefs.edit().remove("update_notice_dismissed").apply(); updateStatus = if (updateAvailable == null) "Установлена последняя версия" else "Доступна VLN ${updateAvailable?.versionName}" } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (e: Exception) { updateStatus = e.message ?: "Не удалось проверить обновления" } } } },
                     onUpdate = { installUpdate(updateAvailable) }, onScanQr = { if (callState.call == null) { initialQr = ""; qrOpen = true } else error = "Завершите звонок перед сканированием" },
                     onOpenProfile = { profileTargetId = it },
                     onAppearance = { appearanceChat = null; appearanceOpen = true }, onCommunityEntry = { communityEntry = it },

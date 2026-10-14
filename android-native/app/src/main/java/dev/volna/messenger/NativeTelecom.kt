@@ -27,7 +27,7 @@ internal object NativeTelecom {
         val handle = PhoneAccountHandle(ComponentName(context, VolnaConnectionService::class.java), "volna-voip")
         try {
             val telecom = context.getSystemService(TelecomManager::class.java) ?: return
-            telecom.registerPhoneAccount(PhoneAccount.builder(handle, "Волна")
+            telecom.registerPhoneAccount(PhoneAccount.builder(handle, "VLN")
                 .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED or PhoneAccount.CAPABILITY_VIDEO_CALLING)
                 .setSupportedUriSchemes(listOf("volna", "tel", "sip")).build())
             account = handle

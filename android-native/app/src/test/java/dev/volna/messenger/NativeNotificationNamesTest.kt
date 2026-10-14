@@ -34,6 +34,6 @@ class NativeNotificationNamesTest {
     }
     @Test fun optionalWaveMarkIsTextAndDefaultsToAnUnchangedTitle() {
         assertEquals("Елена",nativeNotificationBrandTitle("Елена",false))
-        assertEquals("🌊 Волна · Елена",nativeNotificationBrandTitle("Елена",true))
+        assertEquals("🌊 VLN · Елена",nativeNotificationBrandTitle("Елена",true))
     }
 }

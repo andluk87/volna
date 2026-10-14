@@ -35,7 +35,7 @@ export function notifications({db,auth,body,json,contactDisplay=(uid,id,name)=>n
   const member=row&&db.prepare('SELECT last_read FROM members WHERE chat_id=? AND user_id=?').get(job.chat_id,row.user_id);
   if(!row||row.session_expires<=Date.now()||job.expires<=Date.now()||!member){remove(job.id);return;}
   if(job.kind==='message'&&db.prepare('SELECT muted FROM chat_preferences WHERE user_id=? AND chat_id=?').get(row.user_id,job.chat_id)?.muted){remove(job.id);return;}
-  let title='Волна',text=job.kind==='call'?'Входящий аудиозвонок. Откройте Волну, чтобы ответить.':'Новое сообщение';
+  let title='VLN',text=job.kind==='call'?'Входящий аудиозвонок. Откройте VLN, чтобы ответить.':'Новое сообщение';
   if(job.kind==='message'){
    const m=db.prepare('SELECT m.*,u.name FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=? AND m.chat_id=?').get(job.message_id,job.chat_id);
    if(!m||m.deleted_at||member.last_read>=m.id||!topicNotification(db,job.chat_id,row.user_id,m.text,m.reply_to)){remove(job.id);return;}

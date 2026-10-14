@@ -1,1 +1,0 @@
-Temporary, unmodified Telegram Android icon resources. Source commit f32ffeec763f0bdbf4bec25b52d654f77bff733d: https://github.com/DrKLO/Telegram . GNU GPL version 2 license in telegram-diagnostic-icons-LICENSE.txt. Application identity remains Volna.

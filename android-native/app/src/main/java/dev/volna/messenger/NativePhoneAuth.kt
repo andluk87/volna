@@ -45,7 +45,7 @@ internal fun NativeQrScanner(token: String, api: NativeApi, initialQr: String = 
     val frozen = remember { AtomicBoolean(initialQr.isNotBlank()) }
     LaunchedEffect(qr) {
         if (qr.isBlank()) return@LaunchedEffect
-        if (!qr.matches(Regex("volna://login/[A-Za-z0-9_-]{43}"))) { error = "Это не QR-код входа Волны"; return@LaunchedEffect }
+        if (!qr.matches(Regex("volna://login/[A-Za-z0-9_-]{43}"))) { error = "Это не QR-код входа VLN"; return@LaunchedEffect }
         busy = true; error = ""; info = null
         try { info = withContext(Dispatchers.IO) { api.qrScan(token, qr) } }
         catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "QR-код недоступен" }
@@ -77,7 +77,7 @@ internal fun NativeQrScanner(token: String, api: NativeApi, initialQr: String = 
     }
     NativeFullScreen("Сканировать QR", onDismiss) {
         Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            NativeText("Отсканируйте QR в открытой Web или Windows-версии Волны. Подтвердите только вход на своём устройстве.", color = Muted)
+            NativeText("Отсканируйте QR в открытой Web или Windows-версии VLN. Подтвердите только вход на своём устройстве.", color = Muted)
             if (!permitted) Button(onClick = { permission.launch(Manifest.permission.CAMERA) }) { NativeText("Разрешить камеру") }
             else AndroidView(factory = { PreviewView(it).also { view -> preview = view } }, modifier = Modifier.fillMaxWidth().weight(1f))
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
