@@ -59,7 +59,7 @@ internal object NativeNotificationTest {
                     .setData(Uri.parse("volna://watch-test/$account"))
                 val open = PendingIntent.getActivity(app, ID, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 val title = if (NativeNotificationPolicy.prefs(app, account).getBoolean("watch_brand_label", false)) nativeNotificationBrandTitle("Проверка уведомлений", true) else "Волна · Проверка уведомлений"
-                val text = "Проверочное сообщение для часов"
+                val text = "Проверка значков Telegram в Волне"
                 val now = System.currentTimeMillis()
                 val style = if (Build.VERSION.SDK_INT >= 28) {
                     val owner = Person.Builder().setName("Вы").setKey("volna-test-account-$account").build()
@@ -73,7 +73,7 @@ internal object NativeNotificationTest {
                     .setAction("dev.volna.messenger.TEST_REPLY")
                     .setData(Uri.parse("volna://watch-test-reply/$account/$now"))
                 val replyPending = PendingIntent.getBroadcast(app, ID, replyIntent, PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
-                val reply = Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(app, R.drawable.ic_volna_notification), "Ответить", replyPending)
+                val reply = Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(app, R.drawable.telegram_diagnostic_small), "Ответить", replyPending)
                     .addRemoteInput(android.app.RemoteInput.Builder("volna_test_reply").setLabel("Тестовый ответ — никому не отправляется").build())
                     .setAllowGeneratedReplies(true).addExtras(android.os.Bundle().apply { putBoolean("android.support.action.showsUserInterface", false) })
                     .apply { if (Build.VERSION.SDK_INT >= 28) setSemanticAction(Notification.Action.SEMANTIC_ACTION_REPLY) }.build()
@@ -92,7 +92,7 @@ internal object NativeNotificationTest {
                     .build()
                 manager.notify(TAG, ID, notification)
                 lastDelivered = account to now
-                mutableStatus.value = NativeNotificationTestStatus(account, "Тест MessagingStyle + WearableExtender отправлен. Посмотрите на телефоне и часах.")
+                mutableStatus.value = NativeNotificationTestStatus(account, "Тест с временными значками Telegram отправлен. Посмотрите на телефоне и часах.")
             } catch (problem: Exception) {
                 mutableStatus.value = NativeNotificationTestStatus(account, problem.message ?: "Не удалось отправить проверочное уведомление")
             } finally {

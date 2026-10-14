@@ -1,0 +1,77 @@
+{
+  "commit": "f32ffeec763f0bdbf4bec25b52d654f77bff733d",
+  "resources": [
+    {
+      "source": "TMessagesProj/src/main/res/drawable-hdpi/ic_launcher_dr.webp",
+      "sha256": "4c6f7ea82ec6c913ac78913c5e93cbcc3cedef2ec7db188a04476edbaf353f3f",
+      "size": [
+        72,
+        72
+      ]
+    },
+    {
+      "source": "TMessagesProj/src/main/res/drawable-hdpi/notification.webp",
+      "sha256": "873db3d9f0c4e81bda605b2601b4f0bd4bc376fe8b8648ab84d1bed55fd2d65a",
+      "size": [
+        36,
+        36
+      ]
+    },
+    {
+      "source": "TMessagesProj/src/main/res/drawable-mdpi/ic_launcher_dr.webp",
+      "sha256": "2db2c54fb7a44941d90f75f9224ab8205a41333d2cc6d29b3c089c1294601238",
+      "size": [
+        48,
+        48
+      ]
+    },
+    {
+      "source": "TMessagesProj/src/main/res/drawable-mdpi/notification.webp",
+      "sha256": "127b37ede36a3cf43884044440bb07d55afdb92b03c7b4c1d3e5a094c4676f21",
+      "size": [
+        24,
+        24
+      ]
+    },
+    {
+      "source": "TMessagesProj/src/main/res/drawable-xhdpi/ic_launcher_dr.webp",
+      "sha256": "b33718f18bfa8c8cfd3a318d247e578279ba351b08466af92b0e4533e748d246",
+      "size": [
+        96,
+        96
+      ]
+    },
+    {
+      "source": "TMessagesProj/src/main/res/drawable-xhdpi/notification.webp",
+      "sha256": "c29bd2eb35a23a93a4352f0f432535c73934755e785cd4bbe0118a2cfe2f2fa0",
+      "size": [
+        48,
+        48
+      ]
+    },
+    {
+      "source": "TMessagesProj/src/main/res/drawable-xxhdpi/ic_launcher_dr.webp",
+      "sha256": "74f2f223fd5a9d679d145bd3b46d6a5d8f63155d144b9ed1b5b027c1d91daa35",
+      "size": [
+        144,
+        144
+      ]
+    },
+    {
+      "source": "TMessagesProj/src/main/res/drawable-xxhdpi/notification.webp",
+      "sha256": "6df1bef4b36b42656179dc5772845df208204439c57f06792eb480313bb11e4d",
+      "size": [
+        72,
+        72
+      ]
+    },
+    {
+      "source": "TMessagesProj/src/main/res/drawable-xxxhdpi/ic_launcher_dr.webp",
+      "sha256": "86044e329a82c927b9e5b518c0ded5fd99723c2b93bea92180dbd374e6dd7df8",
+      "size": [
+        192,
+        192
+      ]
+    }
+  ]
+}
