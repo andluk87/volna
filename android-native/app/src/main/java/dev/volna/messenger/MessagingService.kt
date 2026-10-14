@@ -241,7 +241,7 @@ class MessagingService : Service() {
     private fun builder(title: String, text: String, channel: String): Notification.Builder {
         val launch = packageManager.getLaunchIntentForPackage(packageName)
         val pending = launch?.let { PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE) }
-        val notification = nativeNotificationBuilder(this, channel)
+        val notification = nativeNotificationBuilder(this, channel, includeArtwork = channel == STATUS_CHANNEL)
         return notification.setContentTitle(title).setContentText(text)
             .setCategory(Notification.CATEGORY_MESSAGE).setVisibility(Notification.VISIBILITY_PRIVATE)
             .setContentIntent(pending).setShowWhen(true)

@@ -55,7 +55,7 @@ internal object NativeNotificationTest {
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     .setData(Uri.parse("volna://watch-test/$account"))
                 val open = PendingIntent.getActivity(app, ID, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                val notification = nativeNotificationBuilder(app, selectedChannel)
+                val notification = nativeNotificationBuilder(app, selectedChannel, includeArtwork = false)
                     .setContentTitle(if(NativeNotificationPolicy.prefs(app,account).getBoolean("watch_brand_label",false))nativeNotificationBrandTitle("Проверка уведомлений",true) else "Волна · Проверка уведомлений")
                     .setContentText("Проверочное сообщение для часов")
                     .setCategory(Notification.CATEGORY_MESSAGE)

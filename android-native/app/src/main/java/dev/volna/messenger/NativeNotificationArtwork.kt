@@ -9,10 +9,10 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Shader
 
-/** Supply both Android's monochrome mask and the colour artwork to notification listeners. */
-internal fun nativeNotificationBuilder(context:Context,channel:String):Notification.Builder =
+/** The status-bar mask is always supplied; message notifications omit duplicate brand artwork. */
+internal fun nativeNotificationBuilder(context:Context,channel:String,includeArtwork:Boolean = true):Notification.Builder =
  Notification.Builder(context,channel).setSmallIcon(R.drawable.ic_volna_notification)
-  .setLargeIcon(NativeNotificationArtwork.round(context)).setColor(0xff38a8d6.toInt()).setLocalOnly(false)
+  .apply { if (includeArtwork) setLargeIcon(NativeNotificationArtwork.round(context)) }.setColor(0xff38a8d6.toInt()).setLocalOnly(false)
 
 internal object NativeNotificationArtwork {
  private var cached:Bitmap?=null
