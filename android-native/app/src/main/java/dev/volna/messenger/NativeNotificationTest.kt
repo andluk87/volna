@@ -29,9 +29,11 @@ internal object NativeNotificationTest {
     val status = mutableStatus.asStateFlow()
     private var scheduled: Runnable? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var lastDelivered: Pair<Long, Long>? = null
 
     fun schedule(context: Context, account: Long) {
         clearPending()
+        lastDelivered = null
         val app = context.applicationContext
         try {
             channel(app, account)
@@ -67,10 +69,20 @@ internal object NativeNotificationTest {
                     @Suppress("DEPRECATION")
                     Notification.MessagingStyle("Вы").addMessage(text, now, title)
                 }
+                val replyIntent = Intent(app, NotificationTestReplyReceiver::class.java)
+                    .setAction("dev.volna.messenger.TEST_REPLY")
+                    .setData(Uri.parse("volna://watch-test-reply/$account/$now"))
+                val replyPending = PendingIntent.getBroadcast(app, ID, replyIntent, PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+                val reply = Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(app, R.drawable.ic_volna_notification), "Ответить", replyPending)
+                    .addRemoteInput(android.app.RemoteInput.Builder("volna_test_reply").setLabel("Тестовый ответ — никому не отправляется").build())
+                    .setAllowGeneratedReplies(true).addExtras(android.os.Bundle().apply { putBoolean("android.support.action.showsUserInterface", false) })
+                    .apply { if (Build.VERSION.SDK_INT >= 28) setSemanticAction(Notification.Action.SEMANTIC_ACTION_REPLY) }.build()
                 val notification = nativeNotificationBuilder(app, selectedChannel, includeArtwork = false)
                     .setContentTitle(title)
                     .setContentText(text)
                     .setStyle(style)
+                    .addAction(reply)
+                    .extend(nativeNotificationWearable(account, 0, now, "test", reply))
                     .setWhen(now)
                     .setCategory(Notification.CATEGORY_MESSAGE)
                     .setVisibility(Notification.VISIBILITY_PRIVATE)
@@ -79,7 +91,8 @@ internal object NativeNotificationTest {
                     .setAutoCancel(true)
                     .build()
                 manager.notify(TAG, ID, notification)
-                mutableStatus.value = NativeNotificationTestStatus(account, "Проверочное уведомление MessagingStyle отправлено. Посмотрите на телефоне и часах.")
+                lastDelivered = account to now
+                mutableStatus.value = NativeNotificationTestStatus(account, "Тест MessagingStyle + WearableExtender отправлен. Посмотрите на телефоне и часах.")
             } catch (problem: Exception) {
                 mutableStatus.value = NativeNotificationTestStatus(account, problem.message ?: "Не удалось отправить проверочное уведомление")
             } finally {
@@ -91,6 +104,13 @@ internal object NativeNotificationTest {
             clearPending()
             mutableStatus.value = NativeNotificationTestStatus(account, "Не удалось запланировать проверку. Попробуйте ещё раз.")
         }
+    }
+
+    fun acceptReply(context: Context, account: Long, timestamp: Long) {
+        if (lastDelivered != (account to timestamp)) return
+        lastDelivered = null
+        context.getSystemService(NotificationManager::class.java).cancel(TAG, ID)
+        mutableStatus.value = NativeNotificationTestStatus(account, "Тестовый ответ получен локально. Сообщение никому не отправлено.")
     }
 
     fun cancel(account: Long) {

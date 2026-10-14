@@ -207,13 +207,16 @@ class MessagingService : Service() {
             val channel = NativeNotificationSounds.messageChannel(this, userId)
             val notificationBuilder = builder(nativeNotificationBrandTitle(title, settings.getBoolean("watch_brand_label",false)), body, channel).setContentIntent(pending).setAutoCancel(true)
                 .setGroup("volna-messages-$userId").setOnlyAlertOnce(false)
+            var wearableReply: Notification.Action? = null
             if(!isReaction&&chat?.canSend!=false){
                 val replyIntent=Intent(this,NotificationReplyReceiver::class.java).setAction("dev.volna.messenger.REPLY").setData(Uri.parse("volna://reply/$userId/$chatId/$id"))
                 val replyPending=PendingIntent.getBroadcast(this,notificationId,replyIntent,PendingIntent.FLAG_UPDATE_CURRENT or if(Build.VERSION.SDK_INT>=31)PendingIntent.FLAG_MUTABLE else 0)
                 val input=android.app.RemoteInput.Builder("volna_reply").setLabel("Ответить").build()
-                val action=Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this,R.drawable.ic_volna_notification),"Ответить",replyPending).addRemoteInput(input).apply{if(Build.VERSION.SDK_INT>=28)setSemanticAction(Notification.Action.SEMANTIC_ACTION_REPLY)}.build()
+                val action=Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this,R.drawable.ic_volna_notification),"Ответить",replyPending).addRemoteInput(input).setAllowGeneratedReplies(true).addExtras(android.os.Bundle().apply { putBoolean("android.support.action.showsUserInterface", false) }).apply{if(Build.VERSION.SDK_INT>=28)setSemanticAction(Notification.Action.SEMANTIC_ACTION_REPLY)}.build()
                 notificationBuilder.addAction(action)
+                wearableReply = action
             }
+            notificationBuilder.extend(nativeNotificationWearable(userId, chatId, id, if (isReaction) "reaction" else "message", wearableReply))
             val notification=notificationBuilder.build()
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify("volna-account-$userId", notificationId, notification)
         } catch (_: Exception) { }

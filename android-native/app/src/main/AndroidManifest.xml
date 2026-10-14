@@ -64,6 +64,7 @@
         <activity android:name=".VolnaInstallResultActivity" android:exported="false" android:taskAffinity="" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <receiver android:name=".VolnaUpdateReceiver" android:exported="false"><intent-filter><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter></receiver>
         <receiver android:name=".NotificationReplyReceiver" android:exported="false" />
+        <receiver android:name=".NotificationTestReplyReceiver" android:exported="false" />
         <receiver android:name=".CallActionReceiver" android:exported="false" />
         <provider
             android:name="androidx.core.content.FileProvider"
