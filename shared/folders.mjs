@@ -18,3 +18,11 @@ export function folderMatches(f,c){
  return !!automatic&&!(f.excludeMuted&&c.muted)&&!(f.excludeRead&&!(c.unread>0||c.manual_unread))&&!(f.excludeArchived&&c.archived);
 }
 export function folderChats(chats,f){const result=chats.filter(c=>folderMatches(f,c));return result.sort((a,b)=>{const x=f.pinned.indexOf(a.id),y=f.pinned.indexOf(b.id);return x<0&&y<0?0:x<0?1:y<0?-1:x-y;});}
+
+export function folderNavigation(chats,folders){
+ const custom=folders.filter(f=>f.rule!=='all'&&f.id!=='builtin_all'&&f.name.trim().toLowerCase()!=='все чаты');
+ const active=custom.some(f=>chats.some(c=>[...f.chats,...f.pinned].includes(c.id)&&folderMatches(f,c)));
+ if(!active)return {tabs:[],remaining:chats};
+ const remaining=chats.filter(c=>!custom.some(f=>folderMatches(f,c)));
+ return {tabs:[{id:'',name:'Все чаты',rule:'all',chats:[],excluded:[],pinned:[],types:[]},...custom],remaining};
+}

@@ -104,7 +104,7 @@ internal fun ChatListScreen(
         catch (e: Exception) { folderError = e.message ?: "Не удалось сохранить папки"; if (e is NativeApiException && e.status == 409) runCatching { applyFolderCloud(withContext(Dispatchers.IO) { api.folders(token) }) }; false }
         finally { folderBusy = false }
     }
-    LaunchedEffect(folders) { if (filter.startsWith("folder:") && folders.none { "folder:${it.id}" == filter }) filter = "all" }
+    LaunchedEffect(folders, chats) { if (filter.startsWith("folder:") && nativeNavigationFolders(folders, chats).none { "folder:${it.id}" == filter }) filter = "all" }
     val appearance = LocalNativeAppearance.current
     val motion = LocalMotionEnabled.current
     val pageState = rememberSaveableStateHolder()
@@ -132,8 +132,9 @@ internal fun ChatListScreen(
                     if (query.isBlank()) NativeFolderTabs(folders, chats, filter) { filter = it }
                     if (query.trim().length >= 2) NativeGlobalSearch(query, token, api, chats, people, onSelect, onStartChat, onSearchMessage)
                     else Box(Modifier.weight(1f)) {
-                        val folder = folders.firstOrNull { "folder:${it.id}" == filter }
-                        val visible = chats.filter { if (folder != null) nativeFolderMatches(folder, it) else nativeChatFilter(it, filter) }.let { rows -> if (folder == null) rows else rows.sortedBy { folder.pinned.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE } }
+                        val tabs = nativeNavigationFolders(folders, chats)
+                        val folder = tabs.firstOrNull { it.rule != "all" && "folder:${it.id}" == filter }
+                        val visible = chats.filter { if (folder != null) nativeFolderMatches(folder, it) else nativeChatFilter(it, filter) && (filter != "all" || tabs.isEmpty() || nativeUnassignedChat(it, tabs)) }.let { rows -> if (folder == null) rows else rows.sortedBy { folder.pinned.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE } }
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
                             val archivedCount = chats.count { it.archived }
                             if ((filter == "all" || folder?.rule == "all") && archivedCount > 0) item(key = "archive") {

@@ -299,3 +299,10 @@ internal fun NativeStorageScreen(onDismiss: () -> Unit) {
         }
     }
 }
+
+internal fun nativeNavigationFolders(folders: List<NativeFolder>, chats: List<VolnaChat>): List<NativeFolder> {
+    val custom = folders.filter { it.rule != "all" && it.id != "builtin_all" && !it.name.trim().equals("Все чаты", ignoreCase = true) }
+    if (custom.none { folder -> chats.any { chat -> (chat.id in folder.chats || chat.id in folder.pinned) && nativeFolderMatches(folder, chat) } }) return emptyList()
+    return listOf(NativeFolder("builtin_all", "Все чаты", emptySet(), "all")) + custom
+}
+internal fun nativeUnassignedChat(chat: VolnaChat, tabs: List<NativeFolder>) = tabs.drop(1).none { nativeFolderMatches(it, chat) }
