@@ -105,7 +105,7 @@ internal fun NativeProfileEditor(userId: Long, currentUser: VolnaUser?, token: S
     LaunchedEffect(userId) { try { profile = withContext(Dispatchers.IO) { api.userProfile(token,userId) }; name = profile!!.name; bio = profile!!.bio } catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message.orEmpty() } }
     val photo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null && own) scope.launch {
         busy = true
-        try { val updated = withContext(Dispatchers.IO) { val mime = context.contentResolver.getType(uri).orEmpty(); require(mime in listOf("image/png","image/jpeg","image/webp")) { "Фото: PNG, JPEG или WebP" }; val bytes = readAttachment(context.contentResolver,uri); require(bytes.size <= 5*1024*1024) { "Фото больше 5 МБ" }; val id = api.upload(token,"avatar",mime,bytes); api.updateProfile(token,name,bio,true,id) }; profile=updated; onSaved(updated) }
+        try { val updated = withContext(Dispatchers.IO) { val bytes = profilePhoto(context, uri); val id = api.upload(token,"avatar.jpg","image/jpeg",bytes); api.updateProfile(token,name,bio,true,id) }; profile=updated; onSaved(updated) }
         catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error=problem.message.orEmpty() } finally { busy=false }
     } }
     NativeFullScreen(if (own) "Мой профиль" else "Профиль", onDismiss) {

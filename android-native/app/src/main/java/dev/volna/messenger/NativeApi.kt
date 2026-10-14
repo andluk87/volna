@@ -93,6 +93,9 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
             }
         }
         .build()
+    // Coil uses the same credential resolution and serialized refresh as API requests.
+    internal val mediaHttp: OkHttpClient get() = http
+
     private fun credentials(result: JSONObject) = VolnaSession(result.getString("token"), parseUser(result.getJSONObject("user")), result.getString("refresh_token"))
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 

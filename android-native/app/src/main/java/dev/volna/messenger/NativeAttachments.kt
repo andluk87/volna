@@ -46,13 +46,14 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 internal fun imageRequest(context: android.content.Context, path: String, token: String = ""): ImageRequest {
-    val local = path.matches(Regex("/api/files/[a-f0-9]{48}"))
-    return ImageRequest.Builder(context).data(if (local) BuildConfig.API_BASE_URL.trimEnd('/') + path else path)
+    val source = nativeImageSource(BuildConfig.API_BASE_URL, path)
+    return ImageRequest.Builder(context).data(source.url)
         .apply {
-            if (local && token.isNotBlank()) {
+            if (source.authenticated && token.isNotBlank()) {
                 addHeader("Authorization", "Bearer $token")
-                val session = java.security.MessageDigest.getInstance("SHA-256").digest(token.toByteArray()).joinToString("") { "%02x".format(it.toInt() and 255) }
-                memoryCacheKey("$session:$path"); diskCacheKey("$session:$path")
+                val account = NativeCredentials.accountId(token)
+                val session = if (account > 0) "account-$account" else java.security.MessageDigest.getInstance("SHA-256").digest(token.toByteArray()).joinToString("") { "%02x".format(it.toInt() and 255) }
+                memoryCacheKey("$session:${source.url}"); diskCacheKey("$session:${source.url}")
             }
         }.build()
 }

@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class VolnaApplication : Application(), coil.ImageLoaderFactory {
     override fun onCreate() { super.onCreate(); NativeCredentials.initialize(this); NativeCallDiagnostics.install(this) }
-    override fun newImageLoader(): coil.ImageLoader = coil.ImageLoader.Builder(this).components {
+    override fun newImageLoader(): coil.ImageLoader = coil.ImageLoader.Builder(this).okHttpClient { NativeApi(BuildConfig.API_BASE_URL).mediaHttp }.components {
         if (Build.VERSION.SDK_INT >= 28) add(coil.decode.ImageDecoderDecoder.Factory()) else add(coil.decode.GifDecoder.Factory())
         add(coil.decode.VideoFrameDecoder.Factory())
     }.diskCache { coil.disk.DiskCache.Builder().directory(cacheDir.resolve("image_cache")).maxSizeBytes(64L * 1024 * 1024).build() }.build()

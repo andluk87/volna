@@ -384,16 +384,24 @@ private fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isMi
     var reactionPeople by remember(message.id) { mutableStateOf(false) }
     val target = group.firstOrNull { it.id == targetId } ?: message
     val appearance = LocalNativeAppearance.current
-    val screenWidth = LocalConfiguration.current.screenWidthDp.dp / appearance.uiScale
+    val sticker = message.expressionKind == "sticker" || message.attachmentMime == "image/webp" && message.attachmentName.orEmpty().startsWith("Стикер-")
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val screenWidth = maxWidth
     val available = screenWidth - 20.dp - (if (selectionMode) 44.dp else 0.dp) - (if (appearance.avatars && showAuthor && !isMine) 36.dp else 0.dp)
     val maxWidth = (screenWidth * .75f).coerceAtMost(available).coerceAtMost(560.dp).coerceAtLeast(80.dp)
     val compactText = message.text.isNotBlank() && message.attachmentId == null && message.reply == null && message.forwardedName == null && !message.deleted && !message.edited && message.reactions.isEmpty() && message.emojiEntities.isEmpty() && group.size == 1 && !(showAuthor && !isMine)
-    val sticker = message.expressionKind == "sticker" || message.attachmentMime == "image/webp" && message.attachmentName.orEmpty().startsWith("Стикер-")
+    val minWidth = when {
+        message.deleted -> 0.dp
+        group.size > 1 || message.attachmentMime?.startsWith("image/") == true || message.attachmentMime?.startsWith("video/") == true -> (if (sticker) 160.dp else 260.dp).coerceAtMost(maxWidth)
+        message.attachmentMime?.startsWith("audio/") == true -> (screenWidth * .58f).coerceIn(200.dp.coerceAtMost(maxWidth), maxWidth).coerceAtMost(300.dp)
+        else -> 0.dp
+    }
     NativeMessageContent(isMine) { Row(Modifier.fillMaxWidth().background(if (selected || highlighted) Accent.copy(alpha = .12f) else Color.Transparent), horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
         if (selectionMode) Checkbox(selected, { onSelectGroup() }, enabled = message.id > 0, modifier = Modifier.size(44.dp))
         if (appearance.avatars && showAuthor && !isMine) Box(Modifier.width(36.dp).heightIn(min = 32.dp), contentAlignment = Alignment.BottomCenter) { if (!joined) Box(Modifier.clickable { onProfile(message.senderId) }) { Avatar(message.senderName, message.senderId, size = 28.dp) } }
         val shape = RoundedCornerShape(topStart = if (joined && !isMine) 6.dp else appearance.radius.dp, topEnd = if (joined && isMine) 6.dp else appearance.radius.dp, bottomEnd = appearance.radius.dp, bottomStart = appearance.radius.dp)
-        Column(Modifier.widthIn(min = if (message.attachmentMime?.startsWith("audio/") == true && !message.deleted) (screenWidth * .58f).coerceIn(200.dp.coerceAtMost(maxWidth), maxWidth).coerceAtMost(300.dp) else 0.dp, max = maxWidth).clip(shape).background(if (sticker && !message.deleted) androidx.compose.ui.graphics.SolidColor(Color.Transparent) else nativeMessageBrush(isMine))
+        // Resolve content width before measuring fillMaxWidth/weighted children.
+        Column(Modifier.widthIn(min = minWidth, max = maxWidth).width(IntrinsicSize.Max).clip(shape).background(if (sticker && !message.deleted) androidx.compose.ui.graphics.SolidColor(Color.Transparent) else nativeMessageBrush(isMine))
             .combinedClickable(enabled = message.id > 0, onClick = { if (selectionMode) onSelectGroup() else detail = !detail }, onLongClick = { if (selectionMode) onSelectGroup() else { targetId = message.id; menu = true } })
             .padding(horizontal = if (appearance.density == "minimal") 7.dp else 10.dp, vertical = (if (compactText) appearance.padding.coerceAtMost(4) else appearance.padding).dp)) {
             if (showAuthor && !isMine && !joined && !message.deleted) NativeText(message.senderName, Modifier.clickable { onProfile(message.senderId) }, color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
@@ -431,6 +439,7 @@ private fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isMi
         }
     }
     }
+    } // BoxWithConstraints
     if (reactionPicker) {
         BackHandler { reactionPicker = false }
         androidx.compose.ui.window.Popup(alignment = Alignment.Center, onDismissRequest = { reactionPicker = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = false)) {
