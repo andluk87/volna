@@ -316,7 +316,7 @@ internal fun ChatRoomScreen(
             if (recorder.recording) {
                 IconButton(onClick = recorder::cancel) { Icon(Icons.Outlined.DeleteOutline, "Отменить запись", tint = MaterialTheme.colorScheme.error) }
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 3.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { NativeText("${recorder.seconds / 60}:${(recorder.seconds % 60).toString().padStart(2, '0')}", color = MaterialTheme.colorScheme.error, fontSize = 12.sp); NativeRecordingWave(recorder.wave, Modifier.weight(1f).padding(start = 8.dp)) }
+                    Row(verticalAlignment = Alignment.CenterVertically) { NativeRecordingIndicator(); NativeText("${recorder.seconds / 60}:${(recorder.seconds % 60).toString().padStart(2, '0')}", color = MaterialTheme.colorScheme.error, fontSize = 12.sp); NativeRecordingWave(recorder.wave, Modifier.weight(1f).padding(start = 8.dp)) }
                     NativeText(if (recorder.locked) "Запись закреплена · нажмите для отправки" else "← отмена · ↑ закрепить", color = Muted, fontSize = 10.sp, maxLines = 1)
                 }
             } else {

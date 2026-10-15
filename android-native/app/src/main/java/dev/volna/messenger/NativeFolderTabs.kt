@@ -22,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -35,6 +37,18 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+internal data class NativePillColors(val surface: Color, val selected: Color, val selectedText: Color, val text: Color)
+
+@Composable
+internal fun nativePillColors(): NativePillColors {
+    val dark = Ink.luminance() < .5f
+    val surface = if (dark) lerp(Ink, TextMain, .065f) else Input
+    return NativePillColors(surface,
+        if (dark) lerp(surface, Accent, .20f) else Panel,
+        if (dark) lerp(Accent, TextMain, .15f) else Accent,
+        if (dark) lerp(surface, TextMain, .72f) else Muted)
+}
 
 // Share the entire viewport equally while every tab still fits. Distribute the
 // remainder too: dividing 361 px into three tabs must not leave a blank pixel.
@@ -57,7 +71,8 @@ internal fun NativeFolderTabs(
     if (tabs.isEmpty()) return
     val scroll = rememberScrollState()
     val density = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp).clip(RoundedCornerShape(28.dp)).background(Hover.copy(alpha = .55f)).padding(4.dp)) {
+    val colors = nativePillColors()
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp).clip(RoundedCornerShape(24.dp)).background(colors.surface).padding(3.dp)) {
         val viewportWidth = with(density) { maxWidth.roundToPx() }
         Layout(
             modifier = Modifier.fillMaxWidth().horizontalScroll(scroll),
@@ -67,18 +82,17 @@ internal fun NativeFolderTabs(
                     val active = selected == folderKey || folder.rule == "all" && selected == "all"
                     val unread = chats.count { (it.unread > 0 || it.manualUnread) && (if (folder.rule == "all") nativeUnassignedChat(it, tabs) && nativeChatFilter(it, "all") else nativeFolderMatches(folder, it)) }
                     Row(
-                        Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(CircleShape)
-                            .background(if (active) Accent.copy(alpha = .16f) else Color.Transparent)
+                        Modifier.heightIn(min = 40.dp).widthIn(min = 48.dp).clip(CircleShape)
+                            .background(if (active) colors.selected else Color.Transparent)
                             .selectable(selected = active, role = Role.Tab, onClick = { onSelect(folderKey) })
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
                     ) {
                         NativeText(
                             folder.icon + folder.name,
                             modifier = Modifier.weight(1f, fill = false),
-                            color = if (active) Accent else folder.color.takeIf { it in nativeFolderColors }
-                                ?.let { Color(android.graphics.Color.parseColor(it)) } ?: if (active) Accent else Muted,
+                            color = if (active) colors.selectedText else colors.text,
                             fontSize = 14.sp, fontWeight = FontWeight.Medium,
                             maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis
                         )

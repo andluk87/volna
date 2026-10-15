@@ -25,3 +25,21 @@
 .selection-action span{opacity:.65}
 .selecting-messages>.selection-bar .selection-cancel{margin-left:auto;padding:8px;min-height:34px;color:var(--accent);font-size:12px;font-weight:500;text-transform:uppercase}
 @media(max-width:480px){.selecting-messages>.selection-bar{gap:7px;padding:8px}.selecting-messages>.selection-bar .selection-action{padding:8px 10px}}
+/* Recording remains noticeable while the waveform follows the actual microphone. */
+.composer .recording-bar .recording i{width:9px;height:9px;box-shadow:0 0 0 0 #f14f5966;animation:voice-record-dot 1.1s ease-out infinite}
+.composer .record-wave{height:32px}
+.composer .record-wave i{min-height:3px;transition:height 100ms linear,opacity 100ms linear;background:#ed707a;box-shadow:0 0 5px #ed707a30}
+.composer .mic-button.recording-active{position:relative;border-radius:50%;background:#dc5062;color:white;box-shadow:none;animation:voice-record-button 1.2s ease-in-out infinite alternate}
+.composer .mic-button.recording-active::before,.composer .mic-button.recording-active::after{content:'';position:absolute;inset:1px;border:2px solid #ed707a;border-radius:50%;pointer-events:none;animation:voice-record-ring 1.5s ease-out infinite}
+.composer .mic-button.recording-active::after{animation-delay:-.75s}
+.composer .mic-button.recording-active svg{animation:voice-record-mic .65s ease-in-out infinite alternate}
+@keyframes voice-record-ring{from{transform:scale(.85);opacity:.65}to{transform:scale(1.32);opacity:0}}
+@keyframes voice-record-button{to{background:#f16b78}}
+@keyframes voice-record-mic{to{transform:scale(1.14)}}
+@keyframes voice-record-dot{70%,100%{box-shadow:0 0 0 6px #f14f5900;opacity:.45}}
+html[data-animations=false] .composer .recording-bar .recording i,html[data-animations=false] .composer .mic-button.recording-active,html[data-animations=false] .composer .mic-button.recording-active svg,html[data-animations=false] .composer .mic-button.recording-active::before,html[data-animations=false] .composer .mic-button.recording-active::after{animation:none}
+html[data-animations=false] .composer .record-wave i{transition:none}
+html[data-animations=false] .composer .mic-button.recording-active::before,html[data-animations=false] .composer .mic-button.recording-active::after{content:none}
+@media(prefers-reduced-motion:reduce){.composer .recording-bar .recording i,.composer .mic-button.recording-active,.composer .mic-button.recording-active svg,.composer .mic-button.recording-active::before,.composer .mic-button.recording-active::after{animation:none}.composer .record-wave i{transition:none}.composer .mic-button.recording-active::before,.composer .mic-button.recording-active::after{content:none}}
+
+.composer .record-wave{position:relative}.record-wave-envelope{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;fill:#ed707a26;stroke:#ed707a55;stroke-width:.5}.composer .record-wave i{position:relative;z-index:1}

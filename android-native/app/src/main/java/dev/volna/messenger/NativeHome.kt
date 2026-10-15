@@ -174,18 +174,10 @@ internal fun ChatListScreen(
             }
         }
         }
-        NativeGlassSurface(Modifier.align(Alignment.BottomCenter).onSizeChanged { navigationHeight = with(chromeDensity) { it.height.toDp() } }.padding(horizontal = 28.dp, vertical = 8.dp).fillMaxWidth(), radius = 32.dp, floating = true) {
-            Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                listOf(Triple("chats", "Чаты", Icons.Outlined.ChatBubbleOutline), Triple("contacts", "Контакты", Icons.Outlined.AccountCircle), Triple("profile", "Настройки", Icons.Outlined.Settings), Triple("account", "Профиль", Icons.Outlined.PersonOutline)).forEach { (key, label, icon) ->
-                    Column(Modifier.weight(1f).background(if (tab == key) Hover.copy(alpha = .55f) else Color.Transparent, CircleShape).clickable { if (key == "account") user?.id?.let(onOpenProfile) else { tab = key; onQuery("") } }.padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        NativeNavigationIconBadge(if (key == "chats") chats.count { !it.archived && (it.unread > 0 || it.manualUnread) } else 0) {
-                            if (key == "account") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 23.dp) else Icon(icon, label, tint = if (tab == key) Accent else TextMain, modifier = Modifier.size(23.dp))
-                        }
-                        NativeText(label, color = if (tab == key) Accent else TextMain, fontSize = 10.sp, modifier = Modifier.padding(top = 3.dp))
-                    }
-                }
-            }
-        }
+        NativeHomeNavigation(tab, user, token,
+            chats.count { !it.archived && (it.unread > 0 || it.manualUnread) },
+            onSelect = { tab = it; onQuery("") }, onProfile = { user?.id?.let(onOpenProfile) },
+            modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { navigationHeight = with(chromeDensity) { it.height.toDp() } }.padding(horizontal = 28.dp, vertical = 6.dp).fillMaxWidth())
         if (drawerOpen) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .45f)).clickable { drawerOpen = false })
             Column(Modifier.fillMaxHeight().widthIn(max = 304.dp).fillMaxWidth(.85f).background(Panel)) {

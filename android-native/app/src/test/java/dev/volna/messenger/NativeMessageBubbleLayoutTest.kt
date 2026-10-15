@@ -4,6 +4,9 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import java.io.File
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -102,7 +105,11 @@ class NativeMessageBubbleLayoutTest {
             NativeEmojiProvider { VolnaTheme(NativeAppearance(theme = "dark")) {
                 val folders = listOf(NativeFolder("a", "РРЦПД", setOf(1)), NativeFolder("b", "ДЦР", setOf(2)), NativeFolder("c", "РТК", setOf(3)))
                 val chats = (1L..3L).map { VolnaChat(it, "Чат", "", "", "", 0, false, it) }
-                Box(Modifier.width(400.dp)) { NativeFolderTabs(folders, chats, "folder:a") {} }
+                Column(Modifier.width(400.dp).background(Ink).padding(vertical = 8.dp)) {
+                    NativeFolderTabs(folders, chats, "folder:a") {}
+                    NativeHomeNavigation("chats", null, "", 73, {}, {}, Modifier.padding(horizontal = 28.dp, vertical = 16.dp))
+                    NativeRecordingWave(List(28) { index -> listOf(.12f, .3f, .7f, .95f, .6f, .35f, .15f)[index % 7] }, Modifier.width(400.dp).padding(horizontal = 24.dp, vertical = 12.dp))
+                }
             } }
         } }
         compose.onNodeWithText("РРЦПД").assertIsDisplayed()
