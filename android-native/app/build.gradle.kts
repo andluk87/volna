@@ -11,8 +11,8 @@ val apiUrl = (project.findProperty("volnaApiUrl") as String?)
     ?: ""
 require(apiUrl.startsWith("https://")) { "Set ANDROID_API_URL to your Volna HTTPS base URL" }
 val safeApiUrl = apiUrl.trimEnd('/')
-val volnaVersionCode = 12_052
-val volnaVersionName = "0.12.52"
+val volnaVersionCode = 12_053
+val volnaVersionName = "0.12.53"
 val volnaWebRtcVersion = "150.7871.01"
 
 android {
@@ -32,6 +32,8 @@ android {
         buildConfigField("String", "WEBRTC_VERSION", "\"$volnaWebRtcVersion\"")
     }
 
+    testOptions { unitTests.isIncludeAndroidResources = true }
+
     buildFeatures { compose = true; buildConfig = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -39,6 +41,11 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+}
+
+tasks.withType<Test>().configureEach {
+    // Keep Robolectric's Android runtime across disposable Docker builds.
+    systemProperty("maven.repo.local", File(gradle.gradleUserHomeDir, "caches/robolectric-runtime").absolutePath)
 }
 
 dependencies {
@@ -69,6 +76,8 @@ dependencies {
     implementation("androidx.camera:camera-view:1.4.2")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation("org.json:json:20250517")
 }

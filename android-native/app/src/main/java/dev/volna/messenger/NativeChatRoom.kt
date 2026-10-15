@@ -2,6 +2,9 @@
 package dev.volna.messenger
 
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -29,6 +32,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.focus.FocusRequester
@@ -88,7 +92,7 @@ internal fun ChatRoomScreen(
     onMessageAction: (VolnaMessage, String, String) -> Unit, onRetry: () -> Unit,
     focusMessageId: Long?, onFocusConsumed: () -> Unit, onJumpToMessage: (Long) -> Unit,
     startSearch: Boolean, onSearchStarted: () -> Unit, onVisibleMessage: (Long) -> Unit, earlierWindow: Boolean, onNewest: () -> Unit,
-    onForwardMany: (List<VolnaMessage>) -> Unit, topicNavigation: @Composable () -> Unit = {}
+    onForwardMany: (List<VolnaMessage>) -> Unit, topicNavigation: @Composable () -> Unit = {}, readVisible: Boolean = true
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -189,10 +193,15 @@ internal fun ChatRoomScreen(
     val currentGroups by rememberUpdatedState(timeline)
     val currentOffset by rememberUpdatedState(offset)
     val reportVisible by rememberUpdatedState(onVisibleMessage)
-    LaunchedEffect(chat.id, listState) {
-        snapshotFlow { val index = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1; currentGroups.take((index - currentOffset + 1).coerceAtLeast(0)).lastOrNull { it.messages.isNotEmpty() }?.messages?.lastOrNull()?.id }.distinctUntilChanged().debounce(400).collect { id ->
-            if (!searchOpen && !showPins && MainActivity.isVisible) id?.takeIf { it > 0 }?.let(reportVisible)
+    val lifecycle = (context as? LifecycleOwner)?.lifecycle
+    LaunchedEffect(chat.id, listState, readVisible, lifecycle) {
+        if (!readVisible) return@LaunchedEffect
+        suspend fun report() {
+            snapshotFlow { val index = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1; currentGroups.take((index - currentOffset + 1).coerceAtLeast(0)).lastOrNull { it.messages.isNotEmpty() }?.messages?.lastOrNull()?.id }.distinctUntilChanged().debounce(400).collect { id ->
+                if (!searchOpen && !showPins && MainActivity.isVisible) id?.takeIf { it > 0 }?.let(reportVisible)
+            }
         }
+        if (lifecycle != null) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { report() } else report()
     }
     fun select(message: VolnaMessage) { selection = if (message.id in selection) selection - message.id else if (selection.size < 50) selection + message.id else selection }
     fun submit() {
@@ -372,7 +381,7 @@ internal fun ChatRoomScreen(
 }
 
 @Composable
-private fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isMine: Boolean, peerDelivered: Boolean, peerRead: Boolean, canModerate: Boolean, canPin: Boolean, transcribing: Boolean,
+internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isMine: Boolean, peerDelivered: Boolean, peerRead: Boolean, canModerate: Boolean, canPin: Boolean, transcribing: Boolean,
     onReply: (VolnaMessage) -> Unit, onEdit: (VolnaMessage) -> Unit, onForward: (VolnaMessage) -> Unit, onCopy: (VolnaMessage) -> Unit, onAction: (VolnaMessage, String, String) -> Unit,
     onPlayAudio: (VolnaMessage) -> Unit, voicePlayback: NativeVoicePlayback, token: String, onOpenAttachment: (VolnaMessage) -> Unit,
     joined: Boolean, showAuthor: Boolean, me: Long?, selected: Boolean, selectionMode: Boolean, onSelect: (VolnaMessage) -> Unit, onSelectGroup: () -> Unit, onJump: (Long) -> Unit, highlighted: Boolean, onProfile: (Long) -> Unit, canReply: Boolean
@@ -394,14 +403,14 @@ private fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isMi
         message.deleted -> 0.dp
         group.size > 1 || message.attachmentMime?.startsWith("image/") == true || message.attachmentMime?.startsWith("video/") == true -> (if (sticker) 160.dp else 260.dp).coerceAtMost(maxWidth)
         message.attachmentMime?.startsWith("audio/") == true -> (screenWidth * .58f).coerceIn(200.dp.coerceAtMost(maxWidth), maxWidth).coerceAtMost(300.dp)
-        else -> 0.dp
+        else -> 96.dp.coerceAtMost(maxWidth)
     }
     NativeMessageContent(isMine) { Row(Modifier.fillMaxWidth().background(if (selected || highlighted) Accent.copy(alpha = .12f) else Color.Transparent), horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
         if (selectionMode) Checkbox(selected, { onSelectGroup() }, enabled = message.id > 0, modifier = Modifier.size(44.dp))
         if (appearance.avatars && showAuthor && !isMine) Box(Modifier.width(36.dp).heightIn(min = 32.dp), contentAlignment = Alignment.BottomCenter) { if (!joined) Box(Modifier.clickable { onProfile(message.senderId) }) { Avatar(message.senderName, message.senderId, size = 28.dp) } }
         val shape = RoundedCornerShape(topStart = if (joined && !isMine) 6.dp else appearance.radius.dp, topEnd = if (joined && isMine) 6.dp else appearance.radius.dp, bottomEnd = appearance.radius.dp, bottomStart = appearance.radius.dp)
-        // Resolve content width before measuring fillMaxWidth/weighted children.
-        Column(Modifier.widthIn(min = minWidth, max = maxWidth).width(IntrinsicSize.Max).clip(shape).background(if (sticker && !message.deleted) androidx.compose.ui.graphics.SolidColor(Color.Transparent) else nativeMessageBrush(isMine))
+        // Measure text directly; intrinsic sizing of inline content can collapse the bubble.
+        Column(Modifier.testTag("message-bubble-${message.id}").widthIn(min = minWidth, max = maxWidth).clip(shape).background(if (sticker && !message.deleted) androidx.compose.ui.graphics.SolidColor(Color.Transparent) else nativeMessageBrush(isMine))
             .combinedClickable(enabled = message.id > 0, onClick = { if (selectionMode) onSelectGroup() else detail = !detail }, onLongClick = { if (selectionMode) onSelectGroup() else { targetId = message.id; menu = true } })
             .padding(horizontal = if (appearance.density == "minimal") 7.dp else 10.dp, vertical = (if (compactText) appearance.padding.coerceAtMost(4) else appearance.padding).dp)) {
             if (showAuthor && !isMine && !joined && !message.deleted) NativeText(message.senderName, Modifier.clickable { onProfile(message.senderId) }, color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
@@ -417,13 +426,13 @@ private fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isMi
                     else -> Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { if (selectionMode) onSelect(message) else onOpenAttachment(message) }, verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Description, null, tint = Accent); Column(Modifier.padding(start = 8.dp)) { NativeText(message.attachmentName.orEmpty(), color = TextMain, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis); NativeText("%.1f МБ".format(message.attachmentSize / 1048576.0), color = Muted, fontSize = 11.sp) } }
                 }
                 if (message.text.isNotBlank()) {
-                    if (compactText) NativeLinkedText(message.text, entities = message.emojiEntities, token = token, account = me ?: 0, stamp = { NativeMessageStamp(message, isMine, peerDelivered, peerRead, !appearance.timeOnTap || detail) }) else NativeLinkedText(message.text, Modifier.padding(top = if (message.attachmentId == null) 0.dp else 5.dp), message.emojiEntities, token, me ?: 0)
+                    NativeLinkedText(message.text, Modifier.padding(top = if (message.attachmentId == null) 0.dp else 5.dp), message.emojiEntities, token, me ?: 0)
                 }
 
             }
-            Row(if (compactText) Modifier.align(Alignment.End) else Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
-                if (group.size == 1 && message.reactions.isNotEmpty()) Box(Modifier.weight(1f)) { NativeMessageReactions(message, me, { onAction(message, "react", it) }, { reactionPicker = true }, token) } else if (!compactText) Spacer(Modifier.weight(1f))
-                if (!compactText) NativeMessageStamp(group.last(), isMine, peerDelivered, peerRead, !appearance.timeOnTap || detail, edited = group.any { it.edited })
+            Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+                if (group.size == 1 && message.reactions.isNotEmpty()) Box(Modifier.weight(1f, fill = false)) { NativeMessageReactions(message, me, { onAction(message, "react", it) }, { reactionPicker = true }, token) }
+                NativeMessageStamp(group.last(), isMine, peerDelivered, peerRead, !appearance.timeOnTap || detail, edited = group.any { it.edited })
                 DropdownMenu(menu, { menu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = false)) {
                     if (!target.deleted) Row(Modifier.padding(horizontal = 4.dp)) { NativeEmoji.take(5).forEach { emoji -> NativeText(emoji, Modifier.size(44.dp).clickable { menu = false; onAction(target, "react", emoji) }.padding(8.dp), fontSize = 22.sp) }; IconButton(onClick = { menu = false; reactionPicker = true }) { Icon(Icons.Outlined.Add, "Другие реакции") } }
                     if (!target.deleted && canReply) DropdownMenuItem(text = { NativeText("Ответить") }, leadingIcon = { Icon(Icons.Outlined.Reply, null) }, onClick = { menu = false; onReply(target) })
@@ -471,7 +480,7 @@ private fun NativeMessageReactions(message: VolnaMessage, me: Long?, onReact: (S
 }
 
 @Composable
-internal fun NativeLinkedText(text: String, modifier: Modifier = Modifier, entities: List<NativeEmojiEntity> = emptyList(), token: String = "", account: Long = 0, stamp: (@Composable () -> Unit)? = null) {
+internal fun NativeLinkedText(text: String, modifier: Modifier = Modifier, entities: List<NativeEmojiEntity> = emptyList(), token: String = "", account: Long = 0) {
     val accent = Accent
     val formatted = remember(text) { nativeFormatted(text) }
     var revealed by remember(text) { mutableStateOf(emptySet<Int>()) }
@@ -488,11 +497,9 @@ internal fun NativeLinkedText(text: String, modifier: Modifier = Modifier, entit
             if(span.kind == "link") addLink(LinkAnnotation.Url(span.url,TextLinkStyles(style=SpanStyle(color=accent,textDecoration=TextDecoration.Underline))),span.start,span.end)
             if(span.kind == "spoiler") { val visible=span.start in revealed; addStyle(SpanStyle(color=if(visible)TextMain else Color.Transparent,background=Muted.copy(alpha=if(visible)0.12f else 0.65f)),span.start,span.end); addLink(LinkAnnotation.Clickable("spoiler-${span.start}",linkInteractionListener={ revealed=if(visible)revealed-span.start else revealed+span.start }),span.start,span.end) }
         } }
-        if (stamp != null) { append(" "); appendInlineContent("message-stamp") }
     }
 
-    if (stamp != null && renderedEntities.isEmpty()) androidx.compose.material3.Text(emojiAnnotated(linked, LocalEmojiCatalog.current, LocalEmojiFont.current), modifier, color = TextMain, fontSize = 15.sp, lineHeight = 20.sp, style = nativeEmojiTextStyle(LocalTextStyle.current), inlineContent = mapOf("message-stamp" to androidx.compose.foundation.text.InlineTextContent(androidx.compose.ui.text.Placeholder(6.em, 1.2.em, androidx.compose.ui.text.PlaceholderVerticalAlign.Bottom)) { stamp() }))
-    else if (renderedEntities.isEmpty()) NativeText(linked, modifier, color = TextMain, fontSize = 15.sp, lineHeight = 20.sp)
+    if (renderedEntities.isEmpty()) NativeText(linked, modifier, color = TextMain, fontSize = 15.sp, lineHeight = 20.sp)
     else {
         val context = LocalContext.current; val api = NativeExpressionHttp.api; val store = remember(account) { NativeExpressionStore(context, account) }
         val builder = androidx.compose.ui.text.AnnotatedString.Builder()
@@ -515,9 +522,11 @@ internal fun NativeLinkedText(text: String, modifier: Modifier = Modifier, entit
 
 @Composable
 private fun NativeMessageStamp(message: VolnaMessage, isMine: Boolean, delivered: Boolean, read: Boolean, visible: Boolean, edited: Boolean = message.edited) {
-    if (visible) Row(verticalAlignment = Alignment.CenterVertically) {
-        if (edited) NativeText("изменено · ", color = Muted, fontSize = 10.sp)
-        NativeText(nativeClock(message.createdAt), color = Muted, fontSize = 11.sp)
-        if (isMine) Icon(if (message.id < 0) Icons.Outlined.Schedule else if (delivered) Icons.Outlined.DoneAll else Icons.Outlined.Done, if (message.id < 0) "Отправляется" else if (read) "Прочитано" else if (delivered) "Доставлено" else "Отправлено", tint = if (read) Accent else Muted, modifier = Modifier.padding(start = 3.dp).size(15.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (visible) {
+            if (edited) NativeText("изменено · ", color = Muted, fontSize = 10.sp)
+            NativeText(nativeClock(message.createdAt), color = Muted, fontSize = 11.sp)
+        }
+        if (isMine) Icon(if (message.id < 0) Icons.Outlined.Schedule else if (delivered || read) Icons.Outlined.DoneAll else Icons.Outlined.Done, if (message.id < 0) "Отправляется" else if (read) "Прочитано" else if (delivered) "Доставлено" else "Отправлено", tint = if (read) Accent else Muted, modifier = Modifier.padding(start = 3.dp).size(15.dp))
     }
 }

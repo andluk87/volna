@@ -446,6 +446,14 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     LaunchedEffect(token) {
         MessagingService.signals.collect { event ->
             if(event.account!=me?.id)return@collect
+            if(event.type in listOf("read", "delivered")) {
+                try {
+                    val rows = withContext(Dispatchers.IO) { api.chats(token) }
+                    chats.clear(); chats.addAll(rows)
+                    selectedChat?.let { selected -> selectedChat = rows.firstOrNull { it.id == selected.id } }
+                    withContext(Dispatchers.IO) { cache.saveChats(event.account, rows) }
+                } catch(cancelled:kotlinx.coroutines.CancellationException) { throw cancelled } catch(_:Exception) {}
+            }
             if(event.type=="history-cleared"&&selectedChat?.id==event.chatId){messages.clear();if(event.deleted)selectedChat=null}
             if(event.type=="removed"&&topicsGroup?.id==event.chatId)topicsGroup=null
             if(event.type=="removed"&&(selectedChat?.id==event.chatId||selectedChat?.parentId==event.chatId)){selectedChat=null;messages.clear();topicsGroup=null}
@@ -696,7 +704,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     },
                     startSearch = profileSearchRequested, onSearchStarted = { profileSearchRequested = false },
                     earlierWindow = earlierWindow, onNewest = { earlierWindow = false; messages.clear(); focusMessageId = selectedChat?.lastId?.takeIf { it > 0 }; retryGeneration++ },
-                    token = token, callActive = callState.call != null,
+                    token = token, callActive = callState.call != null, readVisible = callState.call == null || callState.minimized,
                     transcribingMessages = transcribingMessages.toSet(),
                     moreHistory = moreHistory, loadingHistory = loadingHistory, onLoadOlder = {
                         val chatId = selectedChat?.id

@@ -3,7 +3,7 @@ package dev.volna.messenger
 import androidx.compose.animation.animateColorAsState
 import kotlinx.coroutines.delay
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -67,12 +67,22 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
     val minimize = { if (onMinimize != null) onMinimize() else NativeCalls.minimize(true) }
     BackHandler(enabled = !state.minimized || standalone) { minimize() }
     if (state.minimized && !standalone) {
-        Row(Modifier.fillMaxWidth().background(Outgoing).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).clickable { NativeCalls.minimize(false) }) {
-                NativeText(call.peer?.name ?: "VLN", fontWeight = FontWeight.SemiBold, color = TextMain, fontSize = 13.sp)
-                NativeText(if (state.connected) callDuration(state.elapsed) + if (state.sharing) " · Показ экрана" else " · Разговор" else state.phase, color = Muted, fontSize = 11.sp)
+        val pulse = if (LocalMotionEnabled.current) {
+            val animation = rememberInfiniteTransition(label = "call-bar")
+            val value by animation.animateFloat(0f, 1f, infiniteRepeatable(tween(1200), RepeatMode.Reverse), label = "call-pulse")
+            value
+        } else .5f
+        Row(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(
+            androidx.compose.ui.graphics.lerp(Color(0xff176b57), Color(0xff208578), pulse), Color(0xff196484)
+        ))).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(end = 10.dp).height(26.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                repeat(3) { index -> Box(Modifier.width(3.dp).height((8 + 16 * if (index == 1) 1 - pulse else pulse).dp).clip(CircleShape).background(Color.White)) }
             }
-            IconButton(onClick = NativeCalls::toggleMute) { Icon(if (state.muted) Icons.Outlined.MicOff else Icons.Outlined.Mic, "Микрофон", tint = Accent) }
+            Column(Modifier.weight(1f).clickable { NativeCalls.minimize(false) }) {
+                NativeText(call.peer?.name ?: "VLN", fontWeight = FontWeight.SemiBold, color = Color.White, fontSize = 13.sp)
+                NativeText(if (state.connected) callDuration(state.elapsed) + if (state.sharing) " · Показ экрана" else " · Разговор" else state.phase, color = Color.White.copy(alpha = .85f), fontSize = 11.sp)
+            }
+            IconButton(onClick = NativeCalls::toggleMute) { Icon(if (state.muted) Icons.Outlined.MicOff else Icons.Outlined.Mic, "Микрофон", tint = Color.White) }
             IconButton(onClick = { NativeCalls.end() }) { Icon(Icons.Outlined.CallEnd, "Завершить звонок", tint = Color(0xFFE7767F)) }
         }
         return

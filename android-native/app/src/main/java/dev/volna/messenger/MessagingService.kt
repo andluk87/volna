@@ -33,7 +33,10 @@ class MessagingService : Service() {
         @Volatile var call: okhttp3.Call? = null
         var worker: Thread? = null
         var callsWorker: Thread? = null
-        fun stop() { stopped = true; call?.cancel(); worker?.interrupt(); callsWorker?.interrupt() }
+        var receiptsWorker: Thread? = null
+        val receipts = NativeDeliveryQueue()
+        @Volatile var receiptSyncVersion = 0
+        fun stop() { stopped = true; call?.cancel(); worker?.interrupt(); callsWorker?.interrupt(); receiptsWorker?.interrupt() }
     }
     private val streams = ConcurrentHashMap<Long, AccountStream>()
     private val main = Handler(Looper.getMainLooper())
@@ -82,6 +85,7 @@ class MessagingService : Service() {
                 val stream = AccountStream(account.user.id, account.token)
                 streams[account.user.id] = stream
                 stream.worker = thread(name = "volna-events-${account.user.id}", isDaemon = true) { consume(stream) }
+                stream.receiptsWorker = thread(name = "vln-receipts-${account.user.id}", isDaemon = true) { deliverReceipts(stream) }
                 stream.callsWorker = thread(name = "volna-call-alerts-${account.user.id}", isDaemon = true) { watchCalls(stream) }
             }
         }
@@ -135,6 +139,42 @@ class MessagingService : Service() {
         }
     }
 
+    private fun deliverReceipts(stream: AccountStream) {
+        var synced = -1
+        while (current(stream)) {
+            try {
+                val syncVersion = stream.receiptSyncVersion
+                if (syncVersion != synced) {
+                    // Recover missed messages after a stream reconnect, independently of Activity/call UI.
+                    val chats = api.chats(stream.token)
+                    for (chat in chats.filter { it.unread > 0 }) {
+                        if (!current(stream)) return
+                        try {
+                            val rows = api.messages(stream.token, chat.id)
+                            val existing = cache.messages(stream.userId, chat.id)
+                            cache.saveMessages(stream.userId, chat.id, (existing.filter { old -> rows.none { it.id == old.id } } + rows).distinctBy { it.id }.sortedBy { it.id }.takeLast(1000))
+                            rows.filter { it.senderId != stream.userId }.maxOfOrNull { it.id }?.let { stream.receipts.received(chat.id, it) }
+                        } catch (problem: NativeApiException) {
+                            if (problem.status !in listOf(400, 403, 404)) throw problem
+                        }
+                    }
+                    synced = syncVersion
+                }
+                for ((chat, message) in stream.receipts.snapshot()) {
+                    if (!current(stream)) return
+                    try {
+                        api.markDelivered(stream.token, chat, message)
+                        stream.receipts.acknowledged(chat, message)
+                    } catch (problem: NativeApiException) {
+                        // A removed chat must not prevent delivery receipts for other chats.
+                        if (problem.status in listOf(400, 403, 404)) stream.receipts.acknowledged(chat, message)
+                    } catch (_: Exception) { /* Retry this chat without losing other receipts. */ }
+                }
+            } catch (_: Exception) { /* Keep pending receipts for the next attempt. */ }
+            try { Thread.sleep(1500) } catch (_: InterruptedException) { break }
+        }
+    }
+
     private fun clearBackgroundCall(account: Long) { getSystemService(NotificationManager::class.java).cancel("volna-call-account-$account", NativeCalls.CALL_NOTIFICATION); NativeBackgroundCalls.remove(account) }
     private fun watchCalls(stream: AccountStream) {
         var alerted: String? = null
@@ -165,12 +205,15 @@ class MessagingService : Service() {
         try {
             val event = JSONObject(raw)
             val type = event.optString("type")
+            if (type == "ready") { streams[userId]?.let { it.receiptSyncVersion++ }; return }
+            if (type in listOf("read", "delivered")) { signals.tryEmit(NativeSessionSignal(userId, type, event.optLong("chat_id"), 0)); return }
             if (type in listOf("profile","topics","community","removed","chats","history-cleared")) { if(type=="profile" && event.optLong("user_id")==userId) runCatching { val user=api.me(token);NativeAccounts.remember(this,user,token);cache.saveMe(user) };signals.tryEmit(NativeSessionSignal(userId,type,event.optLong("chat_id"),event.optLong("user_id"),event.optBoolean("deleted")));return }
             if (type !in listOf("message", "message-update")) return
             val message = event.optJSONObject("message") ?: return
             val chatId = message.optLong("chat_id")
             val parsed = api.parseMessage(message)
             runCatching { val existing = cache.messages(userId, chatId); cache.saveMessages(userId, chatId, (existing.filter { it.id != parsed.id } + parsed).sortedBy { it.id }) }
+            if (type == "message" && parsed.senderId != userId) streams[userId]?.receipts?.received(chatId, parsed.id)
             events.tryEmit(NativeMessagingEvent(userId, type, parsed))
             if (!event.optBoolean("notify", true) || !message.isNull("deleted_at")) return
             val settings = NativeNotificationPolicy.prefs(this, userId)

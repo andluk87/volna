@@ -1,4 +1,4 @@
 const key='volna.desktop.notifications';
-export function desktopNotificationSettings(){try{const v=JSON.parse(localStorage.getItem(key)||'{}');return {enabled:v.enabled!==false,preview:v.preview===true};}catch{return {enabled:true,preview:false};}}
-export function saveDesktopNotificationSettings(v){localStorage.setItem(key,JSON.stringify({enabled:v.enabled===true,preview:v.preview===true}));}
+export function desktopNotificationSettings(){try{const v=JSON.parse(localStorage.getItem(key)||'{}');return {enabled:v.enabled!==false,preview:v.preview!==false};}catch{return {enabled:true,preview:true};}}
+export function saveDesktopNotificationSettings(v){localStorage.setItem(key,JSON.stringify({enabled:v.enabled===true,preview:v.preview!==false}));}
 export function notifyDesktopMessage(m,accountId){const s=desktopNotificationSettings();if(s.enabled)window.volnaDesktop?.notifyMessage({chatId:m.chat_id,accountId,title:s.preview?(m.topic_id?m.group_name+' › '+m.topic_name:m.sender_name||'VLN'):'VLN',body:s.preview?m.text||'Новое вложение':'Новое сообщение'}).catch(()=>{});}

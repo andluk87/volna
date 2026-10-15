@@ -1,6 +1,7 @@
 const {mediaPermissions}=require('./media-permissions.cjs');
 const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage,screen,powerMonitor}=require('electron');
 const {notificationState}=require('./notification-state.cjs');
+const {createNotificationWindow}=require('./notification-window.cjs');
 const {ignoredSpelling}=require('./ignored-spelling.cjs');
 const path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
 const {trustedRenderer,externalURL,validateConfig,rendererFile}=require('./desktop-core.cjs');
@@ -12,6 +13,7 @@ app.setName('VLN');
 protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true}}]);
 app.commandLine.appendSwitch('autoplay-policy','no-user-gesture-required');
 const appWindows=new Set(),editorFocus=new WeakMap(),transfers=new Set();
+let messageToasts;
 let win,tray,quitting=false,config,updates,activeCall=false,lastIncoming='',callNotification,spellingDictionary,selectedAccountId=null;
 const show=()=>{if(!win||win.isDestroyed())createWindow();if(win.isMinimized())win.restore();win.show();win.focus();win.flashFrame(false);};
 function createWindow(chatId=null,accountId=null){
@@ -75,9 +77,10 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   ipc('desktop:notification-settings',()=>shell.openExternal('ms-settings:notifications'));
   ipc('desktop:sound-settings',()=>shell.openExternal('ms-settings:sound'));
   ipc('desktop:notification-status',()=>notificationState(process.platform,Notification.isSupported()));
-  ipc('desktop:notify',(value,event)=>{if(event.sender!==win.webContents)return false;if(!value||!Number.isSafeInteger(value.chatId)||value.chatId<=0||(win.isFocused()&&(!value.accountId||value.accountId===selectedAccountId))||!Notification.isSupported())return false;const notification=new Notification({title:String(value.title||'VLN').slice(0,80),body:String(value.body||'Новое сообщение').slice(0,240),icon:path.join(root,'icons/icon-192.png')});notification.on('click',()=>{show();win.webContents.send('desktop:open-chat',{chatId:value.chatId,accountId:value.accountId});});notification.show();return true;});
+  messageToasts=createNotificationWindow({BrowserWindow,screen,ipcMain,parent:()=>win,open:value=>{show();win.webContents.send('desktop:open-chat',{chatId:value.chatId,accountId:value.accountId});}});
+  ipc('desktop:notify',(value,event)=>{if(event.sender!==win.webContents)return false;if(!value||!Number.isSafeInteger(value.chatId)||value.chatId<=0||!Number.isSafeInteger(value.accountId)||value.accountId<=0||(win.isFocused()&&value.accountId===selectedAccountId))return false;messageToasts.push(value);return true;});
   ipc('desktop:call',(value,event)=>{if(event.sender!==win.webContents)return;activeCall=value?.active===true;if(!activeCall)lastIncoming='';if(!value?.incoming&&callNotification){callNotification.close();callNotification=undefined;win.flashFrame(false);}if(value?.incoming&&value.id!==lastIncoming&&typeof value.id==='string'){callNotification?.close();lastIncoming=value.id;if(win.isMinimized())win.restore();win.showInactive();win.flashFrame(true);const notification=new Notification({title:'Входящий звонок · VLN',body:String(value.name||'Собеседник').slice(0,80),timeoutType:'never',icon:path.join(root,'icons/icon-192.png')});callNotification=notification;notification.on('click',()=>{show();win.webContents.send('desktop:show-call');});notification.show();}});
   setInterval(()=>updates.tickIdle(),30_000).unref();setTimeout(()=>updates.check(),5_000).unref();setInterval(()=>updates.check(),6*60*60*1000).unref();
  }).catch(error=>{dialog.showErrorBox('VLN не запустилась',error.message);quitting=true;app.quit();});
 }
-app.on('before-quit',event=>{if(updates?.snapshot().status==='ready'&&updates.snapshot().deferred&&!activeCall){event.preventDefault();updates.install();return;}quitting=true;spellingDictionary?.clear();});app.on('window-all-closed',()=>{if(!tray)app.quit();});
+app.on('before-quit',event=>{if(updates?.snapshot().status==='ready'&&updates.snapshot().deferred&&!activeCall){event.preventDefault();updates.install();return;}quitting=true;messageToasts?.dispose();spellingDictionary?.clear();});app.on('window-all-closed',()=>{if(!tray)app.quit();});

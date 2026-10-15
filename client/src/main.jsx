@@ -112,6 +112,8 @@ function App({demo=false}){
  useEffect(()=>{if(demo){setRestoring(false);return;}let live=true;restoreSession().then(result=>{if(live&&result){setToken(result.token);setMe(result.user);}}).finally(()=>{if(live)setRestoring(false);});return()=>{live=false;};},[]);
  const accountUnread=useAccountNotifications(accounts,me?.id);
  const userRef=useRef(null);userRef.current=me?.id;
+ const [callOverlay,setCallOverlay]=useState(false);
+ useEffect(()=>{const check=()=>setCallOverlay(!!document.querySelector('.call-panel:not(.call-minimized)'));window.addEventListener('volna-call-visibility',check);return()=>window.removeEventListener('volna-call-visibility',check);},[]);
  const [pendingSend,setPendingSend]=useState(null),[selectedIds,setSelectedIds]=useState(new Set());
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[chats,setChats]=useState([]),[active,setActive]=useState(null),[messages,setMessages]=useState([]),[pins,setPins]=useState([]),[jumpTarget,setJumpTarget]=useState(null);
  const [openingChat,setOpeningChat]=useState(false);
@@ -193,7 +195,7 @@ function App({demo=false}){
  const focus=()=>{if(!document.hidden)sync();};document.addEventListener('visibilitychange',focus);
  return()=>{controller.abort();document.removeEventListener('visibilitychange',focus);};},[token,handleError,clearSession]);
  useEffect(()=>{if(!token||query.trim().length<2){setPeople([]);return;}const controller=new AbortController();const timer=setTimeout(()=>request('/users?q='+encodeURIComponent(query.trim()),token,undefined,controller.signal).then(setPeople).catch(handleError),250);return()=>{clearTimeout(timer);controller.abort();};},[query,token,handleError]);
- useEffect(()=>{const last=messages.at(-1);if(!active||!last||document.hidden||!atBottom)return;const key=active+':'+last.id;if(readRef.current===key)return;readRef.current=key;request(`/chats/${active}/read`,token,{message_id:last.id}).catch(e=>{readRef.current='';handleError(e);});},[messages,active,token,handleError,atBottom]);
+ useEffect(()=>{const last=messages.at(-1);if(!active||!last||document.hidden||!atBottom||callOverlay)return;const key=active+':'+last.id;if(readRef.current===key)return;readRef.current=key;request(`/chats/${active}/read`,token,{message_id:last.id}).catch(e=>{readRef.current='';handleError(e);});},[messages,active,token,handleError,atBottom,callOverlay]);
  useEffect(()=>{if(panel!=='search'||!active){return;}const controller=new AbortController();const timer=setTimeout(async()=>{setSearchBusy(true);try{const rows=await request(`/chats/${active}/search?q=${encodeURIComponent(search)}`,token,undefined,controller.signal);setResults(rows);setSearchMore(rows.length===50);}catch(e){handleError(e);}finally{if(!controller.signal.aborted)setSearchBusy(false);}},250);return()=>{clearTimeout(timer);controller.abort();};},[search,panel,active,token,handleError]);
  useEffect(()=>{if(!recording)return;const timer=setInterval(()=>setRecordSeconds(v=>v+1),1000);return()=>clearInterval(timer);},[recording]);
  useEffect(()=>{if(recordSeconds>=120&&recording)finishRecording(recordingPress.current);},[recordSeconds,recording]);
