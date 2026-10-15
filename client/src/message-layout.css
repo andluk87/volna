@@ -1,0 +1,9 @@
+/* Each tile opens its own photo; adjacent thumbnails form a seamless collage. */
+.media-album {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border-radius:var(--bubble-radius);isolation:isolate}
+.media-album>.message {padding:0;margin:0;border-radius:0;min-width:0;width:100%;max-width:none}
+.media-album .photo-attachment,.media-album .image-open {margin:0;padding:0;border-radius:0;width:100%;max-width:none;display:block;overflow:hidden}
+.media-album .image-open img {display:block;width:100%;height:180px;max-height:none;object-fit:cover;border-radius:0;margin:0}
+.media-album>.message:last-of-type:nth-of-type(odd) {grid-column:1/-1}
+.media-album>.message:first-of-type .image-open {border-top-left-radius:var(--bubble-radius)}
+.media-album>.message:nth-of-type(2) .image-open {border-top-right-radius:var(--bubble-radius)}
+.media-album>.message:before,.media-album>.message:after {content:none}

@@ -35,7 +35,7 @@ class NativeMessageBubbleLayoutTest {
     private lateinit var activity: ActivityController<ComponentActivity>
     @Before fun startActivity() { activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible() }
     @After fun closeActivity() { compose.runOnUiThread { activity.pause().stop().destroy() } }
-    private fun content(text: String, edited: Boolean = false, timeOnTap: Boolean = false) { compose.runOnUiThread { activity.get().setContent { Bubble(text, edited, timeOnTap) } } }
+    private fun content(text: String, edited: Boolean = false, timeOnTap: Boolean = false, reactions: List<VolnaReaction> = emptyList()) { compose.runOnUiThread { activity.get().setContent { Bubble(text, edited, timeOnTap, reactions) } } }
     private fun screenshot(name: String) {
         compose.runOnUiThread {
             val view = activity.get().window.decorView
@@ -46,11 +46,11 @@ class NativeMessageBubbleLayoutTest {
             bitmap.recycle()
         }
     }
-    @Composable private fun Bubble(text: String, edited: Boolean = false, timeOnTap: Boolean = false) {
+    @Composable private fun Bubble(text: String, edited: Boolean = false, timeOnTap: Boolean = false, reactions: List<VolnaReaction> = emptyList()) {
         val context = LocalContext.current
         val voice = remember { NativeVoicePlayback(context) {} }
-        val message = VolnaMessage(10, 1, "Иван", text, "2026-10-15T12:30:00Z", false, null, edited = edited)
-        Box(Modifier.width(360.dp)) { NativeEmojiProvider { VolnaTheme(NativeAppearance(timeOnTap = timeOnTap)) {
+        val message = VolnaMessage(10, 1, "Иван", text, "2026-10-15T12:30:00Z", false, null, edited = edited, reactions = reactions)
+        Box(Modifier.width(360.dp)) { NativeEmojiProvider { VolnaTheme(NativeAppearance(theme = "dark", timeOnTap = timeOnTap)) {
             MessageBubble(message, listOf(message), true, true, false, false, false, false,
                 {}, {}, {}, {}, { _, _, _ -> }, {}, voice, "", {}, false, false, 1,
                 false, false, {}, {}, {}, false, {}, true)
@@ -78,4 +78,36 @@ class NativeMessageBubbleLayoutTest {
         compose.onNodeWithText("Да").assertIsDisplayed()
         compose.onNodeWithContentDescription("Доставлено").assertIsDisplayed()
     }
+    @Test fun shortPlainMessageSharesLineWithTime() {
+        content("хорошо")
+        val body = compose.onNodeWithText("хорошо", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val tick = compose.onNodeWithContentDescription("Доставлено", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val bubble = compose.onNodeWithTag("message-bubble-10").getUnclippedBoundsInRoot()
+        assertTrue("time must sit beside the text: $body $tick", tick.top < body.bottom && tick.left >= body.right)
+        assertTrue("compact width ${bubble.width}", bubble.width < 180.dp)
+        screenshot("single-line")
+    }
+    @Test fun reactionsWrapWithVisibleTime() {
+        content("И хлеб", reactions = listOf("❤️", "👍", "🔥", "👏", "😎", "🎉").map { VolnaReaction(it, 1, "Иван") })
+        compose.onNodeWithText("И хлеб").assertIsDisplayed()
+        val chips = compose.onNodeWithTag("message-reactions-10", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val tick = compose.onNodeWithContentDescription("Доставлено", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue("reactions and stamp overlap: $chips $tick", chips.right <= tick.left)
+        assertTrue("footer bottom: $chips $tick", tick.bottom <= chips.bottom + 4.dp)
+        screenshot("reactions")
+    }
+
+    @Test fun folderBarMatchesRoundedSegmentLayout() {
+        compose.runOnUiThread { activity.get().setContent {
+            NativeEmojiProvider { VolnaTheme(NativeAppearance(theme = "dark")) {
+                val folders = listOf(NativeFolder("a", "РРЦПД", setOf(1)), NativeFolder("b", "ДЦР", setOf(2)), NativeFolder("c", "РТК", setOf(3)))
+                val chats = (1L..3L).map { VolnaChat(it, "Чат", "", "", "", 0, false, it) }
+                Box(Modifier.width(400.dp)) { NativeFolderTabs(folders, chats, "folder:a") {} }
+            } }
+        } }
+        compose.onNodeWithText("РРЦПД").assertIsDisplayed()
+        compose.onNodeWithText("Все чаты").assertIsDisplayed()
+        screenshot("folders")
+    }
+
 }

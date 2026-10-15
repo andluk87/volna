@@ -7,6 +7,7 @@ function createNotificationStack({publish,open,now=Date.now,timers=globalThis,tt
  }
  function activate(id){const entry=entries.find(e=>e.id===id);if(!entry)return false;remove(id);open(entry);return true;}
  function clear(){for(const timer of handles.values())timers.clearTimeout(timer);handles.clear();entries=[];publish(entries);}
- return {push,remove,activate,clear,snapshot:()=>entries.slice()};
+ function configure(limit){max=Math.max(1,Math.min(5,Number(limit)||5));while(entries.length>max)remove(entries[0].id);}
+ return {push,remove,activate,clear,configure,snapshot:()=>entries.slice()};
 }
 module.exports={createNotificationStack};

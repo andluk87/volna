@@ -12,3 +12,5 @@ window.vlnToast.subscribe(entries=>{
  }
  if(!matchMedia('(prefers-reduced-motion: reduce)').matches)for(const {node,y} of old.values()){if(!node.isConnected)continue;const delta=y-node.getBoundingClientRect().top;if(delta)node.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:220,easing:'ease-out'});}
 });
+
+let sound;window.vlnToast.onSound?.(({volume})=>{sound?.pause();sound=new Audio('../dist/appearance-sample.wav');sound.volume=volume/100;sound.play().catch(()=>{});});

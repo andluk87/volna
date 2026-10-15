@@ -1,4 +1,7 @@
+import {normalizeNotificationSettings,notificationAllowed,notificationUnreadCount} from '../electron/notification-settings.mjs';
+export {notificationUnreadCount};
 const key='volna.desktop.notifications';
-export function desktopNotificationSettings(){try{const v=JSON.parse(localStorage.getItem(key)||'{}');return {enabled:v.enabled!==false,preview:v.preview!==false};}catch{return {enabled:true,preview:true};}}
-export function saveDesktopNotificationSettings(v){localStorage.setItem(key,JSON.stringify({enabled:v.enabled===true,preview:v.preview!==false}));}
-export function notifyDesktopMessage(m,accountId){const s=desktopNotificationSettings();if(s.enabled)window.volnaDesktop?.notifyMessage({chatId:m.chat_id,accountId,title:s.preview?(m.topic_id?m.group_name+' › '+m.topic_name:m.sender_name||'VLN'):'VLN',body:s.preview?m.text||'Новое вложение':'Новое сообщение'}).catch(()=>{});}
+export function desktopNotificationSettings(){try{return normalizeNotificationSettings(JSON.parse(localStorage.getItem(key)||'{}'));}catch{return normalizeNotificationSettings();}}
+export async function saveDesktopNotificationSettings(value){const settings=normalizeNotificationSettings(value);await window.volnaDesktop?.setNotificationPreferences?.(settings);localStorage.setItem(key,JSON.stringify(settings));window.dispatchEvent(new Event('volna-desktop-notifications-changed'));return settings;}
+export function syncDesktopNotificationSettings(){return window.volnaDesktop?.setNotificationPreferences?.(desktopNotificationSettings());}
+export function notifyDesktopMessage(m,accountId,{selected=accountId,chat,reaction=false}={}){const s=desktopNotificationSettings();if(!notificationAllowed(s,{accountId,selected,kind:chat?.kind||(m.group_name?'group':'direct'),muted:!!chat?.muted,reaction}))return;if(s.enabled||s.sound||s.trayFlash)window.volnaDesktop?.notifyMessage({chatId:m.chat_id,accountId,title:s.showName?(m.topic_id?m.group_name+' › '+m.topic_name:m.sender_name||'VLN'):'VLN',body:s.showText?m.text||m.attachment?.name||'Новое вложение':reaction?'Новая реакция':'Новое сообщение'}).catch(()=>{});}

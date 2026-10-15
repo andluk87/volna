@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -56,7 +57,7 @@ internal fun NativeFolderTabs(
     if (tabs.isEmpty()) return
     val scroll = rememberScrollState()
     val density = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Panel.copy(alpha = .64f))) {
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp).clip(RoundedCornerShape(28.dp)).background(Hover.copy(alpha = .55f)).padding(4.dp)) {
         val viewportWidth = with(density) { maxWidth.roundToPx() }
         Layout(
             modifier = Modifier.fillMaxWidth().horizontalScroll(scroll),
@@ -67,7 +68,7 @@ internal fun NativeFolderTabs(
                     val unread = chats.count { (it.unread > 0 || it.manualUnread) && (if (folder.rule == "all") nativeUnassignedChat(it, tabs) && nativeChatFilter(it, "all") else nativeFolderMatches(folder, it)) }
                     Row(
                         Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(CircleShape)
-                            .background(if (active) Hover else Color.Transparent)
+                            .background(if (active) Accent.copy(alpha = .16f) else Color.Transparent)
                             .selectable(selected = active, role = Role.Tab, onClick = { onSelect(folderKey) })
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -76,7 +77,7 @@ internal fun NativeFolderTabs(
                         NativeText(
                             folder.icon + folder.name,
                             modifier = Modifier.weight(1f, fill = false),
-                            color = folder.color.takeIf { it in nativeFolderColors }
+                            color = if (active) Accent else folder.color.takeIf { it in nativeFolderColors }
                                 ?.let { Color(android.graphics.Color.parseColor(it)) } ?: if (active) Accent else Muted,
                             fontSize = 14.sp, fontWeight = FontWeight.Medium,
                             maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis

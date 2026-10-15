@@ -1,5 +1,7 @@
 const {mediaPermissions}=require('./media-permissions.cjs');
-const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage,screen,powerMonitor}=require('electron');
+const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage,screen,powerMonitor,nativeImage}=require('electron');
+const {unreadOverlay}=require('./unread-overlay.cjs');
+const {systemFocusState}=require('./focus-assist.cjs');
 const {notificationState}=require('./notification-state.cjs');
 const {createNotificationWindow}=require('./notification-window.cjs');
 const {ignoredSpelling}=require('./ignored-spelling.cjs');
@@ -22,6 +24,7 @@ function createWindow(chatId=null,accountId=null){
  const window=new BrowserWindow({...restoredBounds(saved,screen.getAllDisplays()),minWidth:390,minHeight:500,title:'VLN',backgroundColor:'#17212b',autoHideMenuBar:true,show:false,icon:path.join(app.getAppPath(),'dist/icons/icon-192.png'),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false,spellcheck:true,additionalArguments:secondary?['--volna-chat-window']:[]}});
  const contents=window.webContents;appWindows.add(window);if(!secondary)win=window;window.on('closed',()=>{appWindows.delete(window);transfers.delete(contents);});
  if(!secondary){trackWindowState(window,stateFile);if(saved.maximized===true)window.maximize();}
+ window.on('focus',()=>window.flashFrame(false));
  window.once('ready-to-show',()=>window.show());
  window.webContents.on('before-input-event',(event,input)=>{const shortcut=desktopShortcut(input);if(!shortcut||editorFocus.get(window.webContents)&&shortcut==='search')return;event.preventDefault();if(shortcut==='close')window.close();else window.webContents.send('desktop:shortcut',shortcut);});const external=url=>{const target=externalURL(url);if(target)shell.openExternal(target).catch(()=>{});};
  window.webContents.on('context-menu',(_event,params)=>{
@@ -41,7 +44,7 @@ function ipc(channel,fn){ipcMain.handle(channel,(event,...args)=>{if(![...appWin
 if(!app.requestSingleInstanceLock())app.quit();else{
  app.on('second-instance',(_event,argv)=>{show();});
 
- app.whenReady().then(()=>{
+ app.whenReady().then(async()=>{
   config=validateConfig(JSON.parse(fs.readFileSync(path.join(__dirname,'config.json'),'utf8')));app.setAppUserModelId('dev.volna.messenger');
   const root=path.join(app.getAppPath(),'dist');protocol.handle('app',request=>{const file=rendererFile(root,request.url);return file?net.fetch(pathToFileURL(file).toString()):new Response('Not found',{status:404});});
   const mediaConsent=mediaPermissions(path.join(app.getPath('userData'),'media-permissions.json'));
@@ -64,7 +67,7 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   ipc('desktop:editor-focus',(value,event)=>{editorFocus.set(event.sender,value===true);});
   ipc('desktop:open-window',value=>{if(!Number.isSafeInteger(value?.chatId)||value.chatId<1||!Number.isSafeInteger(value.accountId)||value.accountId<1)throw Error('Invalid chat');createWindow(value.chatId,value.accountId);return true;});
   ipc('desktop:start-call',value=>{if(!Number.isSafeInteger(value?.chatId)||value.chatId<1||!Number.isSafeInteger(value.accountId)||value.accountId<1||typeof value.video!=='boolean')throw Error('Invalid call');show();win.webContents.send('desktop:start-call',value);return true;});
-  ipc('desktop:unread',(count,event)=>{if(event.sender!==win.webContents)return false;if(!Number.isSafeInteger(count)||count<0||count>1000000)throw Error('Invalid unread count');app.setBadgeCount(count);tray?.setToolTip(count?'VLN · Непрочитанных: '+count:'VLN');return true;});
+  ipc('desktop:unread',(count,event)=>{if(event.sender!==win.webContents)return false;if(!Number.isSafeInteger(count)||count<0||count>1000000)throw Error('Invalid unread count');app.setBadgeCount(count);if(process.platform==='win32'){const image=unreadOverlay(count);win.setOverlayIcon(image?nativeImage.createFromBuffer(image):null,count?'Непрочитанных: '+count:'');}tray?.setToolTip(count?'VLN · Непрочитанных: '+count:'VLN');return true;});
   ipc('desktop:transfer', (value,event)=>{if(value===true)transfers.add(event.sender);else transfers.delete(event.sender);return true;});ipc('desktop:idle-update',value=>updates.setIdleInstall(value));ipc('desktop:update-state',()=>updates.snapshot());ipc('desktop:check-update',()=>updates.check(true));ipc('desktop:update',()=>updates.update());ipc('desktop:defer-update',()=>updates.defer());
   const sessionFile=path.join(app.getPath('userData'),'phone-session.dat');
   const accountsFile=path.join(app.getPath('userData'),'accounts.dat');
@@ -77,8 +80,20 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   ipc('desktop:notification-settings',()=>shell.openExternal('ms-settings:notifications'));
   ipc('desktop:sound-settings',()=>shell.openExternal('ms-settings:sound'));
   ipc('desktop:notification-status',()=>notificationState(process.platform,Notification.isSupported()));
+  const {normalizeNotificationSettings}=await import('./notification-settings.mjs');
+  const preferencesFile=path.join(app.getPath('userData'),'notification-preferences.json');
+  let notificationPreferences;try{notificationPreferences=normalizeNotificationSettings(JSON.parse(fs.readFileSync(preferencesFile,'utf8')));}catch{notificationPreferences=normalizeNotificationSettings();}
+  let lastSound=0;
   messageToasts=createNotificationWindow({BrowserWindow,screen,ipcMain,parent:()=>win,open:value=>{show();win.webContents.send('desktop:open-chat',{chatId:value.chatId,accountId:value.accountId});}});
-  ipc('desktop:notify',(value,event)=>{if(event.sender!==win.webContents)return false;if(!value||!Number.isSafeInteger(value.chatId)||value.chatId<=0||!Number.isSafeInteger(value.accountId)||value.accountId<=0||(win.isFocused()&&value.accountId===selectedAccountId))return false;messageToasts.push(value);return true;});
+  messageToasts.configure(notificationPreferences);
+  ipc('desktop:notification-preferences',(value,event)=>{const previous=notificationPreferences;notificationPreferences=normalizeNotificationSettings(value);if(previous.showName!==notificationPreferences.showName||previous.showText!==notificationPreferences.showText||previous.useNative!==notificationPreferences.useNative)messageToasts.clear();fs.writeFileSync(preferencesFile,JSON.stringify(notificationPreferences));messageToasts.configure(notificationPreferences);if(!notificationPreferences.enabled)messageToasts.clear();return true;});
+  ipc('desktop:notification-sound',(volume,event)=>{messageToasts.playSound(volume);return true;});
+  ipc('desktop:notify',async(value,event)=>{if(event.sender!==win.webContents)return false;if(!value||!Number.isSafeInteger(value.chatId)||value.chatId<=0||!Number.isSafeInteger(value.accountId)||value.accountId<=0||(win.isFocused()&&value.accountId===selectedAccountId))return false;
+   const settings=notificationPreferences;if(!settings.allAccounts&&value.accountId!==selectedAccountId)return false;if(settings.respectFocus&&await systemFocusState()===true)return false;
+   if(settings.trayFlash)win.flashFrame(true);
+   if(settings.enabled){if(settings.useNative&&Notification.isSupported()){const notification=new Notification({title:String(value.title||'VLN').slice(0,80),body:String(value.body||'Новое сообщение').slice(0,500),silent:true,icon:path.join(root,'icons/icon-192.png')});notification.on('click',()=>{show();win.webContents.send('desktop:open-chat',{chatId:value.chatId,accountId:value.accountId});});notification.show();}else messageToasts.push(value);}
+   if(settings.sound&&settings.volume>0&&Date.now()-lastSound>700){lastSound=Date.now();messageToasts.playSound(settings.volume);}return true;
+  });
   ipc('desktop:call',(value,event)=>{if(event.sender!==win.webContents)return;activeCall=value?.active===true;if(!activeCall)lastIncoming='';if(!value?.incoming&&callNotification){callNotification.close();callNotification=undefined;win.flashFrame(false);}if(value?.incoming&&value.id!==lastIncoming&&typeof value.id==='string'){callNotification?.close();lastIncoming=value.id;if(win.isMinimized())win.restore();win.showInactive();win.flashFrame(true);const notification=new Notification({title:'Входящий звонок · VLN',body:String(value.name||'Собеседник').slice(0,80),timeoutType:'never',icon:path.join(root,'icons/icon-192.png')});callNotification=notification;notification.on('click',()=>{show();win.webContents.send('desktop:show-call');});notification.show();}});
   setInterval(()=>updates.tickIdle(),30_000).unref();setTimeout(()=>updates.check(),5_000).unref();setInterval(()=>updates.check(),6*60*60*1000).unref();
  }).catch(error=>{dialog.showErrorBox('VLN не запустилась',error.message);quitting=true;app.quit();});

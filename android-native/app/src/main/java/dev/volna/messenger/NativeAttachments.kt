@@ -59,9 +59,9 @@ internal fun imageRequest(context: android.content.Context, path: String, token:
 }
 
 @Composable
-fun AttachmentThumbnail(message: VolnaMessage, token: String, onOpen: () -> Unit, modifier: Modifier = Modifier, onLongPress: (() -> Unit)? = null) {
+fun AttachmentThumbnail(message: VolnaMessage, token: String, onOpen: () -> Unit, modifier: Modifier = Modifier, onLongPress: (() -> Unit)? = null, seamless: Boolean = false) {
     val context = LocalContext.current
-    Box(modifier.clip(RoundedCornerShape(10.dp)).background(Input).combinedClickable(onClick = onOpen, onLongClick = onLongPress), contentAlignment = Alignment.Center) {
+    Box(modifier.clip(RoundedCornerShape(if (seamless) 0.dp else 10.dp)).background(Input).combinedClickable(onClick = onOpen, onLongClick = onLongPress), contentAlignment = Alignment.Center) {
         if (message.attachmentMime?.startsWith("image/") == true && message.attachmentId != null) AsyncImage(
             model = imageRequest(context, "/api/files/${message.attachmentId}", token), contentDescription = message.attachmentName,
             contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())

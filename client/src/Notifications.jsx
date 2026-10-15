@@ -6,7 +6,7 @@ import Dialog from './Dialog';
 import {accountSessions} from './session.mjs';
 import {DEMO_TOKEN} from './demo-api.mjs';
 function keyBytes(value){return Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-value.length%4)%4)),c=>c.charCodeAt(0));}
-export default function Notifications(props){if(props.token===DEMO_TOKEN)return <DemoNotifications {...props}/>;return window.volnaDesktop?<DesktopNotifications {...props}/>:<WebNotifications {...props}/>;}
+export default function Notifications(props){if(window.volnaDesktop)return <DesktopNotifications {...props}/>;if(props.token===DEMO_TOKEN)return <DemoNotifications {...props}/>;return <WebNotifications {...props}/>;}
 function WebNotifications({token,onClose,inline=false}){
  const [enabled,setEnabled]=useState(false),[preview,setPreview]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[loaded,setLoaded]=useState(false);
  const supported=window.isSecureContext&&'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window&&!Capacitor.isNativePlatform()&&(location.protocol==='https:'||location.hostname==='localhost');

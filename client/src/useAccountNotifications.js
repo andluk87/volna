@@ -13,7 +13,8 @@ export default function useAccountNotifications(accounts,selected){
    events(account.token,controller.signal,event=>{
     if(controller.signal.aborted)return;
     if(event.type==='ready'||['chats','read','history-cleared','community'].includes(event.type))refresh();
-    if(event.type==='message'&&event.message.sender_id!==id){request(`/chats/${event.message.chat_id}/delivered`,account.token,{message_id:event.message.id},controller.signal).catch(()=>{});if(event.notify!==false&&!preferences.find(c=>c.id===event.message.chat_id)?.muted)notifyDesktopMessage(event.message,id);refresh();}
+    if(event.type==='message-update'&&event.reaction?.active&&event.reaction.user_id!==id&&event.message?.sender_id===id&&event.notify!==false)notifyDesktopMessage({...event.message,text:event.reaction.emoji+' на ваше сообщение'},id,{selected,reaction:true,chat:preferences.find(c=>c.id===event.message.chat_id)});
+    if(event.type==='message'&&event.message.sender_id!==id){request(`/chats/${event.message.chat_id}/delivered`,account.token,{message_id:event.message.id},controller.signal).catch(()=>{});if(event.notify!==false&&!preferences.find(c=>c.id===event.message.chat_id)?.muted)notifyDesktopMessage(event.message,id,{selected,chat:preferences.find(c=>c.id===event.message.chat_id)});refresh();}
    },()=>{},()=>{});
 
   }

@@ -124,3 +124,20 @@
 
 [data-desktop=true] .emoji-panel .expression-tabs{order:-3}[data-desktop=true] .emoji-panel>header{order:-2}[data-desktop=true] .emoji-panel .emoji-categories{order:2;min-height:36px;padding:3px;border-top:1px solid var(--border);border-bottom:0;scrollbar-width:none}[data-desktop=true] .emoji-panel .emoji-categories button{width:24px;min-width:24px;height:28px;padding:3px}[data-desktop=true] .emoji-panel .unicode-emoji-cell{min-height:34px}[data-desktop=true] .emoji-panel .emoji-favorite{opacity:0}[data-desktop=true] .emoji-panel .unicode-emoji-cell:hover .emoji-favorite,[data-desktop=true] .emoji-panel .unicode-emoji-cell:focus-within .emoji-favorite{opacity:1}
 .menu-account-choice{display:flex;align-items:center;gap:12px}.menu-account-choice .avatar{width:32px;height:32px;font-size:15px}.account-login-choices{max-width:420px;margin:0 auto;padding:16px;display:grid;gap:8px}
+
+/* A folder rail exists only while there are actual folders. */
+[data-desktop=true] .desktop-no-folders{display:flex;flex-direction:column}
+[data-desktop=true] .desktop-no-folders>.sidebar-head .main-menu{position:relative;flex:0 0 32px}
+[data-desktop=true] .desktop-no-folders>.sidebar-head>.search{flex:1;min-width:0}
+[data-desktop=true] .sidebar-head>.search{border-radius:18px}
+[data-desktop=true] .desktop-folder-sidebar{background:color-mix(in srgb,var(--bg) 70%,var(--panel))}
+[data-desktop=true] .desktop-folder-sidebar>.sidebar-head,[data-desktop=true] .desktop-folder-sidebar>.chat-list,[data-desktop=true] .desktop-folder-sidebar>.search-tabs{background:var(--panel)}
+[data-desktop=true] .folder-rail-edit{color:var(--muted);min-height:60px}
+[data-desktop=true] .archive-entry:has(.archive-avatar){height:64px;display:flex;align-items:center;gap:12px;padding:8px 10px;margin:0;background:transparent;color:var(--text);text-align:left;border-radius:0;width:100%;flex-shrink:0}
+[data-desktop=true] .archive-entry .archive-avatar{display:grid;place-items:center;flex:0 0 46px;width:46px;height:46px;border-radius:50%;background:#56738b;color:white}
+[data-desktop=true] .archive-avatar>svg{width:26px;height:26px}
+[data-desktop=true] .archive-copy{display:grid;gap:4px;background:transparent;padding:0;min-width:0}
+[data-desktop=true] .archive-copy strong{font-size:14px;font-weight:500;color:var(--text)}
+[data-desktop=true] .archive-copy small{font-size:13px;color:var(--muted)}
+[data-desktop=true] .chat-row .avatar:has(svg){background:#4a9be1;color:white}
+[data-desktop=true] .chat-row .avatar>svg{width:27px;height:27px}

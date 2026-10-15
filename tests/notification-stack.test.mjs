@@ -32,4 +32,6 @@ test('notification host stays inside the correct monitor, does not take focus an
  const id=window.rows.at(-1).id;ipc.emit('vln:toast-open',{sender:{},senderFrame:window.webContents.mainFrame},id);assert.equal(opened.length,0);
  ipc.emit('vln:toast-open',{sender:window.webContents,senderFrame:{}},id);assert.equal(opened.length,0);
  ipc.emit('vln:toast-open',{sender:window.webContents,senderFrame:window.webContents.mainFrame},id);assert.equal(opened[0].chatId,7);assert.equal(opened[0].accountId,2);
+ host.configure({corner:'top-left',stackLimit:2});assert.equal(window.rows.length,2);assert.equal(window.bounds.x,area.x+10);assert.equal(window.bounds.y,area.y+10);
+ host.clear();host.playSound(30);assert.equal(window.visible,false,'sound must not reveal a blank notification window');
 });
