@@ -1,0 +1,13 @@
+.composer-emoji-control{position:relative;order:3;flex:0 0 40px;align-self:flex-end}
+.composer-emoji-control>.composer-emoji{width:40px;min-width:40px;height:48px;padding:8px;color:var(--muted);background:transparent}
+.composer-emoji-control>.composer-emoji svg{width:24px;height:24px}
+.quick-emoji-popup{position:absolute;right:0;bottom:calc(100% + 7px);width:min(272px,calc(100vw - 32px));padding:8px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:12px;box-shadow:0 5px 24px #0004;z-index:110}
+.quick-emoji-popup:after{content:'';position:absolute;top:100%;right:0;width:100%;height:12px}
+.quick-emoji-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:1px}
+.quick-emoji-grid>button{min-width:0;width:100%;height:32px;padding:2px;font-size:23px;border-radius:6px;background:transparent}
+.quick-emoji-grid>button:hover,.quick-emoji-grid>button:focus-visible{background:var(--hover)}
+.quick-emoji-popup>.quick-emoji-more{display:block;width:100%;margin-top:5px;padding:7px;color:var(--accent);font-size:12px}
+/* A click opens the full Windows drawer at the right, including smaller windows. */
+[data-desktop=true] .composer>.emoji-panel.emoji-docked{position:fixed;left:auto;right:0;top:0;bottom:0;width:min(300px,calc(100vw - 40px));height:100dvh;max-height:100dvh;border-radius:0;border-left:1px solid var(--border);box-shadow:-3px 0 15px #0002;z-index:100}
+[data-desktop=true] body:has(.call-panel.call-minimized) .composer>.emoji-panel.emoji-docked{top:44px;height:calc(100dvh - 44px)}
+@media(max-width:600px){.composer-emoji-control{flex-basis:36px}.composer-emoji-control>.composer-emoji{width:36px;min-width:36px;padding:6px}}

@@ -1,9 +1,27 @@
 /* Each tile opens its own photo; adjacent thumbnails form a seamless collage. */
 .media-album {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border-radius:var(--bubble-radius);isolation:isolate}
-.media-album>.message {padding:0;margin:0;border-radius:0;min-width:0;width:100%;max-width:none}
+.media-album .message {padding:0;margin:0;border-radius:0;min-width:0;width:100%;max-width:none}
 .media-album .photo-attachment,.media-album .image-open {margin:0;padding:0;border-radius:0;width:100%;max-width:none;display:block;overflow:hidden}
 .media-album .image-open img {display:block;width:100%;height:180px;max-height:none;object-fit:cover;border-radius:0;margin:0}
-.media-album>.message:last-of-type:nth-of-type(odd) {grid-column:1/-1}
-.media-album>.message:first-of-type .image-open {border-top-left-radius:var(--bubble-radius)}
-.media-album>.message:nth-of-type(2) .image-open {border-top-right-radius:var(--bubble-radius)}
-.media-album>.message:before,.media-album>.message:after {content:none}
+.media-album.album-odd>.message-row:last-child {grid-column:1/-1}
+.media-album>.message-row:first-of-type .image-open {border-top-left-radius:var(--bubble-radius)}
+.media-album>.message-row:nth-of-type(2) .image-open {border-top-right-radius:var(--bubble-radius)}
+.media-album .message:before,.media-album .message:after {content:none}
+
+.message-row{position:relative;width:100%;min-width:0;display:flex;justify-content:flex-start;align-items:flex-end}
+.message-row.outgoing-row{justify-content:flex-end}
+.selecting-messages>.conversation-head{display:none}
+.selecting-messages .message-row{padding-right:32px}
+.selecting-messages .message-row>.message-select{position:absolute;left:auto;right:0;top:auto;bottom:7px;width:20px;height:20px;padding:2px;border:2px solid color-mix(in srgb,var(--muted) 18%,var(--bg));background:color-mix(in srgb,var(--panel) 90%,var(--muted));color:transparent;border-radius:50%;box-shadow:none}
+.selecting-messages .message-row>.message-select[aria-pressed=true]{background:#529de0;border-color:color-mix(in srgb,#529de0 50%,var(--panel));color:white}
+.selecting-messages .message-select svg{width:13px;height:13px;stroke-width:2.5}
+.selecting-messages .message.message-selected{outline:0;box-shadow:none;background:#2e73a5;color:#fff}
+.selecting-messages .message-selected .message-meta,.selecting-messages .message-selected .message-meta time{color:#e2eef8}
+.selecting-messages .message-selected .reactions button{background:#67a9dd;color:white}
+.selecting-messages .message-selected .reaction-avatars .avatar{border-color:#67a9dd}
+.selecting-messages .message-actions{display:none}
+.selecting-messages>.selection-bar{display:flex;align-items:center;gap:10px;min-height:56px;padding:10px 12px;border:0;background:var(--panel);flex-shrink:0;max-width:none;width:100%;align-self:stretch;border-radius:0;margin:0}
+.selecting-messages>.selection-bar .selection-action{display:inline-flex;gap:6px;min-height:34px;padding:8px 16px;border-radius:5px;background:#2e73a5;color:white;font-size:12px;font-weight:500;text-transform:uppercase;white-space:nowrap}
+.selection-action span{opacity:.65}
+.selecting-messages>.selection-bar .selection-cancel{margin-left:auto;padding:8px;min-height:34px;color:var(--accent);font-size:12px;font-weight:500;text-transform:uppercase}
+@media(max-width:480px){.selecting-messages>.selection-bar{gap:7px;padding:8px}.selecting-messages>.selection-bar .selection-action{padding:8px 10px}}

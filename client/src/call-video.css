@@ -67,3 +67,19 @@ html[data-animations=false] section.call-panel.call-minimized::before,html[data-
 .call-panel .call-topbar>span:first-child {flex-shrink:0}
 .call-panel .call-encryption {display:block;min-width:0;overflow-wrap:anywhere;line-height:1.5}
 @media(max-width:600px){.call-panel .call-topbar {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 16px}.call-panel .call-topbar>span:first-child{grid-column:1;grid-row:1}.call-panel .call-encryption{grid-column:1;grid-row:2}.call-panel .call-topbar .call-minimize{grid-column:2;grid-row:1/3;align-self:center}}
+/* A Windows audio call uses a compact centred window. */
+[data-desktop=true] section.call-panel:not(.call-minimized):not(.has-video){inset:50% auto auto 50%;transform:translate(-50%,-50%);width:min(420px,calc(100vw - 24px));height:auto;max-height:calc(100dvh - 24px);min-height:0;padding:18px;border:1px solid var(--border);border-radius:16px;box-shadow:0 16px 70px #0008;gap:14px;scrollbar-width:thin;scrollbar-color:var(--muted) var(--panel);overflow-x:hidden}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .call-topbar{font-size:12px;gap:5px 12px;flex-shrink:0}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .call-person{margin:0;padding:10px 0 0}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .call-avatar{width:132px;height:132px;margin-bottom:16px}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .call-avatar>.avatar{font-size:48px}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) h2{font-size:23px}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .call-person p{font-size:13px}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .call-person time{font-size:27px;margin-top:10px}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .call-controls{gap:14px;margin:0;flex-shrink:0;flex-wrap:wrap}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .call-control{min-width:60px;font-size:10px;gap:7px}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .call-control b{width:46px;height:46px}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .call-control b svg{width:21px;height:21px}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .audio-output{margin:0;padding:10px;width:100%;flex-shrink:0}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video) .audio-output label{font-size:12px}
+[data-desktop=true] .call-panel:not(.call-minimized):not(.has-video)>small{margin:0;font-size:11px;flex-shrink:0}
