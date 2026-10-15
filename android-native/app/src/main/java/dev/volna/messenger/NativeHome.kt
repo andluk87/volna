@@ -177,7 +177,7 @@ internal fun ChatListScreen(
         NativeHomeNavigation(tab, user, token,
             chats.count { !it.archived && (it.unread > 0 || it.manualUnread) },
             onSelect = { tab = it; onQuery("") }, onProfile = { user?.id?.let(onOpenProfile) },
-            modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { navigationHeight = with(chromeDensity) { it.height.toDp() } }.padding(horizontal = 28.dp, vertical = 6.dp).fillMaxWidth())
+            modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { navigationHeight = with(chromeDensity) { it.height.toDp() } }.padding(horizontal = appearance.navigationStyle.sideInset.dp, vertical = 6.dp).fillMaxWidth())
         if (drawerOpen) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .45f)).clickable { drawerOpen = false })
             Column(Modifier.fillMaxHeight().widthIn(max = 304.dp).fillMaxWidth(.85f).background(Panel)) {

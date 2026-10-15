@@ -69,6 +69,7 @@ internal fun NativeAppearanceEditor(value: NativeAppearance, onChange: (NativeAp
             } }
             if (status.isNotBlank()) NativeText(status, color = Accent, fontSize = 13.sp)
             if (chat == null) {
+                NativeNavigationCustomization(value, onChange)
                 AppearanceChoices("Тема интерфейса", listOf("system" to "В системе", "light" to "Светлая", "dark" to "Тёмная", "schedule" to "По времени"), value.theme) { onChange(value.copy(theme = it)) }
                 if (value.theme == "schedule") Row {
                     TextButton(onClick = { TimePickerDialog(context, { _, h, m -> onChange(value.copy(nightStart = h * 60 + m)) }, value.nightStart / 60, value.nightStart % 60, true).show() }, Modifier.weight(1f)) { NativeText("Ночь с ${nativeTimeLabel(value.nightStart)}") }

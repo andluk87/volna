@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -41,13 +42,13 @@ import androidx.compose.ui.unit.sp
 internal data class NativePillColors(val surface: Color, val selected: Color, val selectedText: Color, val text: Color)
 
 @Composable
-internal fun nativePillColors(): NativePillColors {
+internal fun nativePillColors(style: NativeNavigationStyle = NativeNavigationStyle.Folders): NativePillColors {
     val dark = Ink.luminance() < .5f
     val surface = if (dark) lerp(Ink, TextMain, .065f) else Input
-    return NativePillColors(surface,
-        if (dark) lerp(surface, Accent, .20f) else Panel,
-        if (dark) lerp(Accent, TextMain, .15f) else Accent,
-        if (dark) lerp(surface, TextMain, .72f) else Muted)
+    return NativePillColors(if (style.surface == 0L) surface else Color(style.surface.toInt()),
+        if (style.selected != 0L) Color(style.selected.toInt()) else if (dark) lerp(surface, Accent, .20f) else Panel,
+        if (style.selectedText != 0L) Color(style.selectedText.toInt()) else if (dark) lerp(Accent, TextMain, .15f) else Accent,
+        if (style.text != 0L) Color(style.text.toInt()) else if (dark) lerp(surface, TextMain, .72f) else Muted)
 }
 
 // Share the entire viewport equally while every tab still fits. Distribute the
@@ -71,8 +72,9 @@ internal fun NativeFolderTabs(
     if (tabs.isEmpty()) return
     val scroll = rememberScrollState()
     val density = LocalDensity.current
-    val colors = nativePillColors()
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp).clip(RoundedCornerShape(24.dp)).background(colors.surface).padding(3.dp)) {
+    val style = LocalNativeAppearance.current.foldersStyle
+    val colors = nativePillColors(style)
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = style.sideInset.dp, vertical = 3.dp).clip(RoundedCornerShape(style.radius.dp)).background(colors.surface).padding(3.dp)) {
         val viewportWidth = with(density) { maxWidth.roundToPx() }
         Layout(
             modifier = Modifier.fillMaxWidth().horizontalScroll(scroll),
@@ -82,21 +84,21 @@ internal fun NativeFolderTabs(
                     val active = selected == folderKey || folder.rule == "all" && selected == "all"
                     val unread = chats.count { (it.unread > 0 || it.manualUnread) && (if (folder.rule == "all") nativeUnassignedChat(it, tabs) && nativeChatFilter(it, "all") else nativeFolderMatches(folder, it)) }
                     Row(
-                        Modifier.heightIn(min = 40.dp).widthIn(min = 48.dp).clip(CircleShape)
+                        Modifier.heightIn(min = style.height.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(style.radius.dp))
                             .background(if (active) colors.selected else Color.Transparent)
-                            .selectable(selected = active, role = Role.Tab, onClick = { onSelect(folderKey) })
+                            .semantics { contentDescription = folder.name }.selectable(selected = active, role = Role.Tab, onClick = { onSelect(folderKey) })
                             .padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
                     ) {
                         NativeText(
-                            folder.icon + folder.name,
+                            (if (style.icons) folder.icon else "") + (if (style.labels) folder.name else if (folder.icon.isBlank()) "▤" else ""),
                             modifier = Modifier.weight(1f, fill = false),
                             color = if (active) colors.selectedText else colors.text,
-                            fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                            fontSize = style.textSize.sp, fontWeight = FontWeight.Medium,
                             maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis
                         )
-                        NativeUnreadBadge(
+                        if (style.badges) NativeUnreadBadge(
                             unread, Modifier.padding(start = 5.dp),
                             containerColor = if (active) Accent else Muted, contentColor = Panel,
                             countDescription = "Непрочитанных чатов"

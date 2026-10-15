@@ -16,26 +16,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun NativeHomeNavigation(selected: String, user: VolnaUser?, token: String, unread: Int,
     onSelect: (String) -> Unit, onProfile: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = nativePillColors()
-    Box(modifier.clip(RoundedCornerShape(32.dp)).background(colors.surface).padding(3.dp)) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+    val style = LocalNativeAppearance.current.navigationStyle
+    val colors = nativePillColors(style)
+    Box(modifier.clip(RoundedCornerShape(style.radius.dp)).background(colors.surface).padding(3.dp)) {
+        Row(Modifier.fillMaxWidth().heightIn(min = style.height.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf(Triple("chats", "Чаты", Icons.Outlined.ChatBubbleOutline), Triple("contacts", "Контакты", Icons.Outlined.AccountCircle),
                 Triple("profile", "Настройки", Icons.Outlined.Settings), Triple("account", "Профиль", Icons.Outlined.PersonOutline)).forEach { (key, label, icon) ->
                 val active = selected == key
                 val tint = if (active) colors.selectedText else colors.text
-                Column(Modifier.weight(1f).clip(CircleShape).background(if (active) colors.selected else Color.Transparent)
-                    .clickable { if (key == "account") onProfile() else onSelect(key) }.padding(vertical = 5.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    NativeNavigationIconBadge(if (key == "chats") unread else 0) {
-                        if (key == "account") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = 23.dp)
-                        else Icon(icon, label, tint = tint, modifier = Modifier.size(23.dp))
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(style.radius.dp)).background(if (active) colors.selected else Color.Transparent)
+                    .semantics { contentDescription = label }.clickable { if (key == "account") onProfile() else onSelect(key) }.padding(vertical = 5.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (style.icons) NativeNavigationIconBadge(if (key == "chats" && style.badges) unread else 0) {
+                        if (key == "account") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = style.iconSize.dp)
+                        else Icon(icon, label, tint = tint, modifier = Modifier.size(style.iconSize.dp))
                     }
-                    NativeText(label, color = tint, fontSize = 10.sp, modifier = Modifier.padding(top = 3.dp))
+                    if (style.labels) Row(verticalAlignment = Alignment.CenterVertically) {
+                        NativeText(label, color = tint, fontSize = style.textSize.sp, modifier = Modifier.weight(1f, fill = false).padding(top = if (style.icons) 3.dp else 0.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        if (!style.icons && style.badges && key == "chats") NativeUnreadBadge(unread, Modifier.padding(start = 3.dp), fontSize = 10.sp)
+                    }
                 }
             }
         }

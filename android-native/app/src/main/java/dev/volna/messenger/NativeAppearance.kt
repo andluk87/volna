@@ -41,7 +41,9 @@ data class NativeAppearance(
     val animations: Boolean = true, val powerSaving: Boolean = false,
     val design: NativeTheme? = null, val glass: Boolean = false, val glassOpacity: Float = .78f,
     val blurMode: String = "simple", val blurIntensity: Int = 18, val quality: String = "balanced",
-    val nightStart: Int = 22 * 60, val nightEnd: Int = 7 * 60
+    val nightStart: Int = 22 * 60, val nightEnd: Int = 7 * 60,
+    val foldersStyle: NativeNavigationStyle = NativeNavigationStyle.Folders,
+    val navigationStyle: NativeNavigationStyle = NativeNavigationStyle.Bottom
 ) {
     val spacing: Int get() = when (density) { "minimal" -> 1; "compact" -> 3; "large" -> 9; else -> 5 }
     val padding: Int get() = when (density) { "minimal" -> 3; "compact" -> 5; "large" -> 12; else -> 8 }
@@ -53,7 +55,8 @@ data class NativeAppearance(
             .putBoolean("animations", animations).putBoolean("powerSaving", powerSaving)
             .putString("design", design?.json()?.toString()).putBoolean("glass", glass).putFloat("glassOpacity", glassOpacity)
             .putString("blurMode", blurMode).putInt("blurIntensity", blurIntensity).putString("quality", quality)
-            .putInt("nightStart", nightStart).putInt("nightEnd", nightEnd).apply()
+            .putInt("nightStart", nightStart).putInt("nightEnd", nightEnd)
+            .putString("foldersStyle", foldersStyle.json()).putString("navigationStyle", navigationStyle.json()).apply()
     }
     companion object {
         fun load(prefs: SharedPreferences) = NativeAppearance(
@@ -70,7 +73,9 @@ data class NativeAppearance(
             glass = prefs.getBoolean("glass", false), glassOpacity = prefs.getFloat("glassOpacity", .78f).takeIf { it.isFinite() }?.coerceIn(.65f, 1f) ?: .78f,
             blurMode = prefs.getString("blurMode", "simple").takeIf { it in listOf("full", "simple", "off") } ?: "simple",
             blurIntensity = prefs.getInt("blurIntensity", 18).coerceIn(0, 30), quality = prefs.getString("quality", "balanced").takeIf { it in listOf("max", "balanced", "economy") } ?: "balanced",
-            nightStart = prefs.getInt("nightStart", 1320).coerceIn(0, 1439), nightEnd = prefs.getInt("nightEnd", 420).coerceIn(0, 1439)
+            nightStart = prefs.getInt("nightStart", 1320).coerceIn(0, 1439), nightEnd = prefs.getInt("nightEnd", 420).coerceIn(0, 1439),
+            foldersStyle = NativeNavigationStyle.parse(prefs.getString("foldersStyle", null), NativeNavigationStyle.Folders),
+            navigationStyle = NativeNavigationStyle.parse(prefs.getString("navigationStyle", null), NativeNavigationStyle.Bottom)
         )
     }
 }

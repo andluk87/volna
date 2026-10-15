@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -39,9 +41,9 @@ class NativeMessageBubbleLayoutTest {
     @Before fun startActivity() { activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible() }
     @After fun closeActivity() { compose.runOnUiThread { activity.pause().stop().destroy() } }
     private fun content(text: String, edited: Boolean = false, timeOnTap: Boolean = false, reactions: List<VolnaReaction> = emptyList()) { compose.runOnUiThread { activity.get().setContent { Bubble(text, edited, timeOnTap, reactions) } } }
-    private fun screenshot(name: String) {
+    private fun screenshot(name: String, dialog: Boolean = false) {
         compose.runOnUiThread {
-            val view = activity.get().window.decorView
+            val view = (if (dialog) org.robolectric.shadows.ShadowDialog.getShownDialogs().lastOrNull { it.isShowing }?.window?.decorView else null) ?: activity.get().window.decorView
             val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
             view.draw(Canvas(bitmap))
             val file = File("build/reports/bubbles/$name.png"); file.parentFile?.mkdirs()
@@ -115,6 +117,45 @@ class NativeMessageBubbleLayoutTest {
         compose.onNodeWithText("РРЦПД").assertIsDisplayed()
         compose.onNodeWithText("Все чаты").assertIsDisplayed()
         screenshot("folders")
+    }
+
+    @Test fun navigationControlsPersistAndResetOnlyTheirOwnSettings() {
+        val prefs = activity.get().getSharedPreferences("navigation-ui", 0)
+        prefs.edit().clear().commit()
+        compose.runOnUiThread { activity.get().setContent {
+            var value by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(NativeAppearance(theme = "dark", radius = 22,
+                foldersStyle = NativeNavigationStyle.Folders.copy(height = 56), navigationStyle = NativeNavigationStyle.Bottom.copy(radius = 14))) }
+            VolnaTheme(value) { NativeNavigationCustomization(value, { value = it; it.save(prefs) }) }
+        } }
+        screenshot("navigation-settings")
+        compose.onNodeWithText("Нижняя навигация").performClick()
+        compose.onNodeWithContentDescription("Скругление").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(8f) }
+        compose.onNodeWithContentDescription("Показывать подписи").performScrollTo().performClick()
+        compose.runOnIdle {
+            org.junit.Assert.assertEquals(8, NativeAppearance.load(prefs).navigationStyle.radius)
+            org.junit.Assert.assertFalse(NativeAppearance.load(prefs).navigationStyle.labels)
+        }
+        compose.onNodeWithContentDescription("Чаты").assertIsDisplayed()
+        compose.onNodeWithText("Подложка").performScrollTo().performClick()
+        compose.onNode(hasSetTextAction()).performScrollTo().performTextReplacement("#203040")
+        compose.onNodeWithText("Готово").performScrollTo().performClick()
+        compose.runOnIdle { org.junit.Assert.assertEquals(0xFF203040L, NativeAppearance.load(prefs).navigationStyle.surface) }
+        screenshot("navigation-controls", dialog = true)
+        compose.onNodeWithText("Сбросить нижнюю навигацию").performScrollTo().performClick()
+        compose.runOnIdle {
+            val saved = NativeAppearance.load(prefs)
+            org.junit.Assert.assertEquals(NativeNavigationStyle.Bottom, saved.navigationStyle)
+            org.junit.Assert.assertEquals(56, saved.foldersStyle.height)
+            org.junit.Assert.assertEquals(22, saved.radius)
+        }
+        compose.onNodeWithContentDescription("Назад").performClick()
+        compose.onNodeWithText("Сбросить папки и навигацию").performClick()
+        compose.runOnIdle {
+            val saved = NativeAppearance.load(prefs)
+            org.junit.Assert.assertEquals(NativeNavigationStyle.Folders, saved.foldersStyle)
+            org.junit.Assert.assertEquals(NativeNavigationStyle.Bottom, saved.navigationStyle)
+            org.junit.Assert.assertEquals(22, saved.radius)
+        }
     }
 
 }
