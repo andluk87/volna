@@ -55,11 +55,12 @@ internal fun NativeNavigationStyleEditor(value: NativeAppearance, folders: Boole
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             NativeText("Изменения применяются сразу и сохраняются для этого аккаунта. Автоматические цвета следуют выбранной теме.", color = Muted, fontSize = 12.sp)
             NativeSettingsCard { Column(Modifier.padding(14.dp)) {
-                NavigationSlider("Минимальная высота", style.height, 36..80, "dp") { change(style.copy(height = it)) }
-                NavigationSlider("Скругление", style.radius, 0..40, "dp") { change(style.copy(radius = it)) }
-                NavigationSlider("Отступ по краям", style.sideInset, 0..40, "dp") { change(style.copy(sideInset = it)) }
-                NavigationSlider(if (folders) "Размер текста и значков" else "Размер подписей", style.textSize, 10..20, "sp") { change(style.copy(textSize = it)) }
-                if (!folders) NavigationSlider("Размер иконок", style.iconSize, 18..32, "dp") { change(style.copy(iconSize = it)) }
+                NativeText("Высота может увеличиваться, чтобы вместить текст, значки и счётчики.", color = Muted, fontSize = 12.sp)
+                NavigationSlider("Высота элементов", style.height, NativeNavigationStyle.HeightRange, "dp") { change(style.copy(height = it)) }
+                NavigationSlider("Скругление", style.radius, NativeNavigationStyle.RadiusRange, "dp") { change(style.copy(radius = it)) }
+                NavigationSlider("Отступ по краям", style.sideInset, NativeNavigationStyle.SideInsetRange, "dp") { change(style.copy(sideInset = it)) }
+                NavigationSlider(if (folders) "Размер текста и значков" else "Размер подписей", style.textSize, NativeNavigationStyle.TextSizeRange, "sp") { change(style.copy(textSize = it)) }
+                if (!folders) NavigationSlider("Размер иконок", style.iconSize, NativeNavigationStyle.IconSizeRange, "dp") { change(style.copy(iconSize = it)) }
             } }
             NativeSettingsCard { Column(Modifier.padding(14.dp)) {
                 NavigationSwitch("Показывать подписи", style.labels) { change(style.copy(labels = it, icons = if (!it) true else style.icons)) }

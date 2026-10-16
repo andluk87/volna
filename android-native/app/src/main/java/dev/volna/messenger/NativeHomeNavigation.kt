@@ -32,8 +32,8 @@ internal fun NativeHomeNavigation(selected: String, user: VolnaUser?, token: Str
                 Triple("profile", "Настройки", Icons.Outlined.Settings), Triple("account", "Профиль", Icons.Outlined.PersonOutline)).forEach { (key, label, icon) ->
                 val active = selected == key
                 val tint = if (active) colors.selectedText else colors.text
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(style.radius.dp)).background(if (active) colors.selected else Color.Transparent)
-                    .semantics { contentDescription = label }.clickable { if (key == "account") onProfile() else onSelect(key) }.padding(vertical = 5.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.weight(1f).heightIn(min = style.height.dp).clip(RoundedCornerShape(style.radius.dp)).background(if (active) colors.selected else Color.Transparent)
+                    .semantics { contentDescription = label }.clickable { if (key == "account") onProfile() else onSelect(key) }.padding(vertical = 5.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     if (style.icons) NativeNavigationIconBadge(if (key == "chats" && style.badges) unread else 0) {
                         if (key == "account") Avatar(user?.name ?: "В", user?.id ?: 0, user?.avatarUrl, token, size = style.iconSize.dp)
                         else Icon(icon, label, tint = tint, modifier = Modifier.size(style.iconSize.dp))
