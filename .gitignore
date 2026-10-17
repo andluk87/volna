@@ -22,3 +22,6 @@ client/electron-builder.windows.json
 android-native/.kotlin/
 
 work/
+
+echo-offset.json
+echo-offset.json.tmp

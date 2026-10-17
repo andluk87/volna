@@ -1,6 +1,6 @@
 {
   "name": "volna-messenger",
-  "version": "0.12.58",
+  "version": "0.12.59",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "test": "node --test --test-concurrency=4 tests/*.test.mjs",
     "migrate:postgres": "node scripts/migrate-postgres.mjs",
     "test:render": "node tests/render-ui.mjs",
+    "test:bot-ui": "node tests/bot-ui.mjs",
     "test:admin-ui": "node tests/admin-ui.mjs"
   },
   "engines": {
