@@ -39,8 +39,16 @@ jobs:
             client/package-lock.json
       - run: npm ci
       - run: npm ci --prefix client
-      - name: Bot API and main bot integration
-        run: node --test tests/bot-api.test.mjs
+      - name: PostgreSQL 17 client tools
+        run: |
+          mkdir -p "$RUNNER_TEMP/postgres17/bin" "$RUNNER_TEMP/postgres17/lib"
+          docker cp ${{ job.services.postgres.id }}:/usr/lib/postgresql/17/bin/pg_dump "$RUNNER_TEMP/postgres17/bin/pg_dump"
+          docker cp ${{ job.services.postgres.id }}:/usr/lib/postgresql/17/bin/pg_restore "$RUNNER_TEMP/postgres17/bin/pg_restore"
+          docker cp -L ${{ job.services.postgres.id }}:/usr/lib/x86_64-linux-gnu/libpq.so.5 "$RUNNER_TEMP/postgres17/lib/libpq.so.5"
+          echo "$RUNNER_TEMP/postgres17/bin" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/postgres17/lib" >> "$GITHUB_ENV"
+      - name: Full PostgreSQL integration suite
+        run: npm test
       - name: Web build
         run: npm run build --prefix client
       - name: Install browser
