@@ -1,4 +1,5 @@
 import {randomBytes,randomUUID,createHash} from 'node:crypto';
+import {createBotFather} from './bot-father.mjs';
 import {initBotSchema} from './bot-schema.mjs';
 import {canonicalUsername,usernameProblem} from './usernames.mjs';
 import {readAdminSettings} from './admin-config.mjs';
@@ -67,11 +68,13 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
   const command=String(data.text).match(/^\/([a-z0-9_]{1,32})(?:@([a-z0-9_]{4,32}))?(?:\s|$)/i);
   return new RegExp('(^|[^a-z0-9_])@'+escaped+'(?![a-z0-9_])','i').test(data.text)||!!(command&&(!command[2]||command[2].toLowerCase()===bot.username.toLowerCase()))||!!(data.reply_to_message_id&&db.prepare('SELECT 1 FROM messages WHERE id=? AND chat_id=? AND sender_id=?').get(number(data.reply_to_message_id),chat.id,bot.account_id));
  }
+ const father=createBotFather({db,get,owned,info,issue,audit,wake,createBot:(uid,data)=>createBot(uid,data,fn=>fn()),defaultScopes});
  function drain(){
-  if(closed||draining)return;draining=true;const notify=new Set();
+  if(closed||draining)return;draining=true;const notify=new Set(),replies=[];
   try{tx(()=>{
    const events=db.prepare('SELECT * FROM bot_message_outbox WHERE processed IS NULL ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED').all();
    for(const event of events){
+    const reply=father.process(event);if(reply)replies.push(messaging.insert(event.chat_id,father.accountId,{text:reply,client_id:hash('botfather:'+event.id)}).row);
     const candidates=db.prepare('SELECT b.id FROM bots b JOIN bot_chat_grants g ON g.bot_id=b.id WHERE g.chat_id=? AND g.active=1 AND g.cutoff_id<?').all(event.chat_id,event.id);
     for(const candidate of candidates){
      const bot=get(candidate.id),data=JSON.parse(event.payload);
@@ -88,11 +91,11 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
     }
     db.prepare('UPDATE bot_message_outbox SET processed=? WHERE id=?').run(Date.now(),event.id);
    }
-  });for(const id of notify)wake(id);}finally{draining=false;}
+  });for(const row of replies)messaging.publish(row);for(const id of notify)wake(id);}finally{draining=false;}
  }
  const tick=()=>{try{drain();}catch{console.error('[bots] outbox processing failed; events retained');}};
  const timer=setInterval(tick,1000);timer.unref();
- const retention=setInterval(()=>{try{for(const [key,item] of buckets)if(item.until<Date.now())buckets.delete(key);db.prepare('DELETE FROM bot_updates WHERE expires<?').run(Date.now());db.prepare('DELETE FROM bot_idempotency WHERE created<?').run(Date.now()-86400000);db.prepare('DELETE FROM bot_message_outbox WHERE processed<?').run(Date.now()-86400000);}catch{console.error('[bots] retention failed');}},60000);retention.unref();
+ const retention=setInterval(()=>{try{for(const [key,item] of buckets)if(item.until<Date.now())buckets.delete(key);db.prepare('DELETE FROM bot_father_sessions WHERE updated<?').run(Date.now()-3600000);db.prepare('DELETE FROM bot_updates WHERE expires<?').run(Date.now());db.prepare('DELETE FROM bot_idempotency WHERE created<?').run(Date.now()-86400000);db.prepare('DELETE FROM bot_message_outbox WHERE processed<?').run(Date.now()-86400000);}catch{console.error('[bots] retention failed');}},60000);retention.unref();
  async function poll(req,res,url){
   let bot=authenticate(req,'messages:read_events');rate('poll:'+bot.id,120);
   const offset=Number(url.searchParams.get('offset')||1),count=Number(url.searchParams.get('limit')||100),timeout=Number(url.searchParams.get('timeout')??30);
@@ -158,20 +161,23 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
   throw fail(404,'METHOD_NOT_FOUND','Метод Bot API не найден');
  }
  function messageInfo(row){return {id:String(row.id),chat_id:String(row.chat_id),sender_id:String(row.sender_id),status:'accepted',revision:row.revision,created_at:row.created_at};}
+ function createBot(uid,data,atomic=tx){
+    const username=canonicalUsername(data.username),problem=usernameProblem(username),name=typeof data.display_name==='string'?data.display_name.trim():'',description=data.description??'',allowed=scopes(data.scopes??defaultScopes);
+    if(problem||!name||name.length>128||typeof description!=='string'||description.length>1000)throw fail(400,'INVALID_BOT',problem||'Название: 1–128, описание: до 1000 символов');
+    return atomic(()=>{
+     if(db.prepare('SELECT COUNT(*) n FROM bots WHERE owner_id=? AND status<>?').get(uid,'deleted').n>=20)throw fail(409,'BOT_LIMIT','Не более 20 ботов');
+     const id=randomUUID();let account;
+     try{account=db.prepare("INSERT INTO users(username,name,phone,bio,account_type) VALUES(?,?,?,?,'bot')").run(username,name,'bot:'+id,description).lastInsertRowid;}catch(e){if(e.code==='23505')throw fail(409,'USERNAME_TAKEN','Username занят');throw e;}
+     db.prepare('INSERT INTO bots(id,account_id,owner_id,created) VALUES(?,?,?,?)').run(id,account,uid,Date.now());audit(id,uid,'bot.create');const bot=get(id);return {bot:info(bot),...issue(bot,uid,allowed)};
+    });
+ }
  async function developer(req,res,url,uid){
   const path=url.pathname.replace(/^\/api(?=\/developer\/)/,''),method=req.method;
   if(path==='/developer/v1/bots'){
    if(method==='GET')return json(res,200,{bots:db.prepare('SELECT id FROM bots WHERE owner_id=? ORDER BY created,id').all(uid).map(b=>info(get(b.id)))});
    if(method==='POST'){
     const data=await body(req);authorizeOwner(req);only(data,['username','display_name','description','scopes']);
-    const username=canonicalUsername(data.username),problem=usernameProblem(username),name=typeof data.display_name==='string'?data.display_name.trim():'',description=data.description??'',allowed=scopes(data.scopes??defaultScopes);
-    if(problem||!name||name.length>128||typeof description!=='string'||description.length>1000)throw fail(400,'INVALID_BOT',problem||'Название: 1–128, описание: до 1000 символов');
-    const result=tx(()=>{
-     if(db.prepare('SELECT COUNT(*) n FROM bots WHERE owner_id=? AND status<>?').get(uid,'deleted').n>=20)throw fail(409,'BOT_LIMIT','Не более 20 ботов');
-     const id=randomUUID();let account;
-     try{account=db.prepare("INSERT INTO users(username,name,phone,bio,account_type) VALUES(?,?,?,?,'bot')").run(username,name,'bot:'+id,description).lastInsertRowid;}catch(e){if(e.code==='23505')throw fail(409,'USERNAME_TAKEN','Username занят');throw e;}
-     db.prepare('INSERT INTO bots(id,account_id,owner_id,created) VALUES(?,?,?,?)').run(id,account,uid,Date.now());audit(id,uid,'bot.create');const bot=get(id);return {bot:info(bot),...issue(bot,uid,allowed)};
-    });return json(res,201,result);
+    const result=createBot(uid,data);return json(res,201,result);
    }
   }
   const match=path.match(/^\/developer\/v1\/bots\/([a-f0-9-]{36})(?:\/(tokens|audit)(?:\/([a-f0-9]{32}))?)?$/);
@@ -196,6 +202,7 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
   throw fail(404,'METHOD_NOT_FOUND','Метод Developer API не найден');
  }
  async function userHandle(req,res,url,uid){
+  if(url.pathname==='/api/bots/manager'&&req.method==='POST'){await body(req);authorizeOwner(req);const chat=privateChat(uid,father.accountId,true);const welcome=tx(()=>{if(db.prepare('SELECT 1 FROM messages WHERE chat_id=? AND sender_id=?').get(chat.id,father.accountId))return null;return messaging.insert(chat.id,father.accountId,{text:father.help,client_id:randomUUID()}).row;});if(welcome)messaging.publish(welcome);json(res,200,{...chat,username:father.username});return true;}
   if(url.pathname==='/api/bots/resolve'&&req.method==='GET'){const row=db.prepare('SELECT b.id FROM bots b JOIN users u ON u.id=b.account_id WHERE u.username_normalized=?').get(canonicalUsername(url.searchParams.get('username')));const bot=available(row&&get(row.id));json(res,200,info(bot));return true;}
   const match=url.pathname.match(/^\/api\/bots\/([a-f0-9-]{36})\/(start|block)$/);
   if(match&&req.method==='POST'){
@@ -213,6 +220,7 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
   if(c.encryption_mode!=='server_readable')throw fail(409,'E2EE_BOT_UNSUPPORTED','Боты недоступны в E2EE-чатах');
   const bot=get(group[2]);if(!bot)throw fail(404,'BOT_NOT_FOUND','Бот не найден');
   if(req.method==='PUT'){
+   if(bot.account_id===father.accountId)throw fail(403,'SYSTEM_BOT','Главный бот доступен только в личном чате');
    available(bot);
    only(data,['visibility','can_send']);if(data.visibility!==undefined&&!['restricted','full_read'].includes(data.visibility)||data.can_send!==undefined&&typeof data.can_send!=='boolean')throw fail(400,'INVALID_GRANT','Некорректные разрешения');
    tx(()=>{if(db.prepare('SELECT 1 FROM community_bans WHERE chat_id=? AND user_id=?').get(chat,bot.account_id))throw fail(403,'BOT_BANNED','Бот заблокирован в группе');if(!db.prepare('SELECT 1 FROM members WHERE chat_id=? AND user_id=?').get(chat,bot.account_id)&&db.prepare('SELECT COUNT(*) n FROM members WHERE chat_id=?').get(chat).n>=300)throw fail(409,'GROUP_FULL','Группа заполнена');db.prepare('INSERT OR IGNORE INTO members(chat_id,user_id) VALUES(?,?)').run(chat,bot.account_id);grant(bot,chat,uid,data);});

@@ -164,3 +164,78 @@ test('documented Python echo bot processes a real event and persists its polling
  }
  assert.equal(reply?.text,'Проверка Python-бота',error);assert.ok(offset>1);assert.equal(reply.sender_is_bot,true);
 });
+
+test('main bot manages owned bots through ordinary chat, isolates owners and commits commands exactly once',async t=>{
+ const f=await fixture(t);
+ const manager=(await f.call('/api/bots/manager',f.owner.token,{})).data;
+ assert.ok(manager.id);assert.ok(manager.username);
+ const again=(await f.call('/api/bots/manager',f.owner.token,{})).data;assert.equal(again.id,manager.id);
+ const master=f.app.db.prepare('SELECT b.* FROM bot_father f JOIN bots b ON b.id=f.bot_id').get();
+ assert.equal(f.app.db.prepare('SELECT COUNT(*) n FROM bot_tokens WHERE bot_id=?').get(master.id).n,0);
+ async function command(text,who=f.owner,chat=manager.id){
+  const sent=await f.send(chat,who,text);assert.equal(sent.status,201,JSON.stringify(sent.data));
+  for(let i=0;i<40;i++){
+   const reply=f.app.db.prepare('SELECT * FROM messages WHERE chat_id=? AND sender_id=? AND id>? ORDER BY id LIMIT 1').get(chat,master.account_id,sent.data.id);
+   if(reply)return reply.text;
+   await new Promise(r=>setTimeout(r,50));
+  }
+  assert.fail('main bot did not reply');
+ }
+ assert.match(await command('/start'),/\/newbot/);
+ assert.match(await command('/newbot'),/название/);
+ await command('Мой новый бот');
+ assert.match(await command('ab'),/4 до 32/);
+ const created=await command('managed_bot');assert.match(created,/@managed_bot создан/);
+ const token=created.match(/vbot_[a-f0-9]{32}\.[A-Za-z0-9_-]{43}/)[0];
+ const bot=(await f.call('/bot/v1/me',token)).data;assert.equal(bot.display_name,'Мой новый бот');
+ assert.match(await command('/mybots'),/@managed_bot/);
+ const otherManager=(await f.call('/api/bots/manager',f.other.token,{})).data;
+ assert.match(await command('/token @managed_bot',f.other,otherManager.id),/не найден/);
+ assert.equal((await f.call('/bot/v1/me',token)).status,200);
+ await command('/setname @managed_bot Новое имя');await command('/setdescription @managed_bot Описание');
+ assert.equal((await f.call('/bot/v1/me',token)).data.display_name,'Новое имя');
+ await command('/pause @managed_bot');assert.equal((await f.call('/bot/v1/me',token)).status,403);
+ await command('/resume @managed_bot');assert.equal((await f.call('/bot/v1/me',token)).status,200);
+ const rotated=await command('/token @managed_bot'),next=rotated.match(/vbot_[a-f0-9]{32}\.[A-Za-z0-9_-]{43}/)[0];
+ assert.equal((await f.call('/bot/v1/me',token)).status,401);
+ assert.equal((await f.call('/bot/v1/me',next)).status,200);
+ const full=await command('/groups @managed_bot on'),fullToken=full.match(/vbot_[a-f0-9]{32}\.[A-Za-z0-9_-]{43}/)[0];
+ assert.equal((await f.call('/bot/v1/me',next)).status,401);
+ assert.ok(JSON.parse(f.app.db.prepare('SELECT scopes FROM bot_tokens WHERE token_hash=?').get(createHash('sha256').update(fullToken).digest('hex')).scopes).includes('groups:read_all'));
+ const before=f.app.db.prepare('SELECT COUNT(*) n FROM messages WHERE sender_id=?').get(master.account_id).n;
+ // A later poll/drain must not replay any of the accepted commands.
+ await f.call('/bot/v1/updates?timeout=0',fullToken);
+ assert.equal(f.app.db.prepare('SELECT COUNT(*) n FROM messages WHERE sender_id=?').get(master.account_id).n,before);
+ await command('/revoke @managed_bot');assert.equal((await f.call('/bot/v1/me',fullToken)).status,401);
+ const group=(await f.call('/api/communities',f.owner.token,{kind:'group',title:'No master in groups',client_id:randomUUID()})).data.id;
+ assert.equal((await f.call(`/api/chats/${group}/bots/${master.id}`,f.owner.token,{},'PUT')).status,403);
+ await command('/newbot');await command('Duplicate');assert.match(await command('managed_bot'),/занят/);
+ assert.match(await command('managed_second'),/создан/);
+ await command('/newbot');assert.match(await command('/cancel'),/отменено/);
+ assert.equal(f.app.db.prepare('SELECT COUNT(*) n FROM bot_father_sessions').get().n,0);
+});
+
+
+test('main bot resumes creation after restart and does not replay the committed token issue',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'volna-father-restart-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
+ const database=join(dir,'db'),uploads=join(dir,'uploads'),f=await fixture(t,{database,uploads});
+ const manager=(await f.call('/api/bots/manager',f.owner.token,{})).data;
+ await f.send(manager.id,f.owner,'/newbot');await f.send(manager.id,f.owner,'Restart Bot');
+ assert.equal(f.app.db.prepare('SELECT step FROM bot_father_sessions WHERE user_id=?').get(f.owner.id).step,'username');
+ // Commit a command without publishing. It must be processed by the next API process.
+ f.app.db.prepare('INSERT INTO messages(chat_id,sender_id,text,client_id,created_at) VALUES(?,?,?,?,?)').run(manager.id,f.owner.id,'restart_managed_bot',randomUUID(),new Date().toISOString());
+ await f.app.close();f.app.close=async()=>{};
+ let app=createApp({database,uploads,newsEnabled:false});t.after(()=>app.close());
+ await new Promise(r=>app.server.listen(0,'127.0.0.1',r));
+ let bot;
+ for(let n=0;n<60;n++){bot=app.db.prepare('SELECT b.* FROM bots b JOIN users u ON u.id=b.account_id WHERE u.username=?').get('restart_managed_bot');if(bot)break;await new Promise(r=>setTimeout(r,50));}
+ assert.ok(bot);assert.equal(bot.owner_id,f.owner.id);
+ const credentials=app.db.prepare('SELECT id FROM bot_tokens WHERE bot_id=?').all(bot.id);assert.equal(credentials.length,1);
+ const master=app.db.prepare('SELECT b.* FROM bot_father f JOIN bots b ON b.id=f.bot_id').get();
+ assert.equal(master.id,manager.bot_id);
+ assert.equal(app.db.prepare("SELECT COUNT(*) n FROM messages WHERE sender_id=? AND text LIKE '%@restart_managed_bot создан%'").get(master.account_id).n,1);
+ await app.close();app=createApp({database,uploads,newsEnabled:false});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));
+ await new Promise(r=>setTimeout(r,1100));
+ assert.deepEqual(app.db.prepare('SELECT id FROM bot_tokens WHERE bot_id=?').all(bot.id),credentials);
+ assert.equal(app.db.prepare("SELECT COUNT(*) n FROM messages WHERE sender_id=? AND text LIKE '%@restart_managed_bot создан%'").get(master.account_id).n,1);
+});
