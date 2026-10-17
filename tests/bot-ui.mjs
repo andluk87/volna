@@ -46,7 +46,9 @@ try{
  const keyboard=await botCall('/messages',{chat_id:String(botChat.id),type:'text',text:'Выберите действие',reply_markup:{inline_keyboard:[[{text:'Каталог',callback_data:'private-payload'},{text:'Помощь',callback_data:'help'}]]}});
  const commandResponse=await fetch(target+'/bot/v1/commands',{method:'PUT',headers:{Authorization:'Bearer '+externalToken,'Content-Type':'application/json'},body:JSON.stringify({commands:[{command:'catalog',description:'Открыть каталог'}]})});assert.equal(commandResponse.status,204);
  await page.getByRole('button',{name:'Bot chat',exact:true}).click();
- const action=page.getByRole('button',{name:'Каталог',exact:true});await action.waitFor();await action.click();
+ const action=page.getByRole('button',{name:'Каталог',exact:true});await action.waitFor();
+ const contrast=await action.evaluate(el=>{const s=getComputedStyle(el);const luminance=color=>{const c=color.match(/[0-9.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;});return .2126*c[0]+.7152*c[1]+.0722*c[2];};const fg=luminance(s.color),bg=luminance(s.backgroundColor);return (Math.max(fg,bg)+.05)/(Math.min(fg,bg)+.05);});assert.ok(contrast>=4.5,'Inline button text contrast: '+contrast);
+ await action.click();
  assert.equal(await page.locator('.bot-inline').first().evaluate(el=>el.scrollWidth>el.clientWidth),false);
  let callback;for(let i=0;i<50;i++){callback=(await botCall('/updates?timeout=0')).updates.find(e=>e.event_type==='callback.created');if(callback)break;await new Promise(r=>setTimeout(r,50));}
  assert.ok(callback);assert.equal(callback.data.actor.id,String(uid));assert.equal(callback.data.data,'private-payload');
