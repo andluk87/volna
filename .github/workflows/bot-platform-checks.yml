@@ -60,6 +60,7 @@ jobs:
         run: |
           export CHROMIUM_PATH="$(node --input-type=module -e 'import {chromium} from "./client/node_modules/playwright/index.mjs";console.log(chromium.executablePath())')"
           npm run test:bot-ui
+          node tests/bot-docs-ui.mjs
 
   android:
     runs-on: ubuntu-24.04
