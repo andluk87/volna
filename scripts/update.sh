@@ -40,9 +40,9 @@ if [ "$calls" -eq 0 ]; then
   echo 'TURN is not configured. To enable calls across networks: sh scripts/enable-calls.sh'
 fi
 python3 scripts/clean-windows-downloads.py
-compose build server web transcription
+compose build server web transcription webhook-egress
 sh scripts/backup.sh
-set -- server web transcription
+set -- server web transcription webhook-egress
 if [ "$calls" -eq 1 ]; then set -- "$@" turn; fi
 if [ "$https" -eq 1 ]; then set -- "$@" gateway; fi
 if ! compose up -d --wait --wait-timeout 600 "$@"; then

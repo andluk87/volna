@@ -1,7 +1,7 @@
 import {createSmsRouter} from './sms-providers.mjs';
 import http from 'node:http';
 import {randomBytes,createHash,createHmac,randomInt,timingSafeEqual} from 'node:crypto';
-import {readFileSync,mkdirSync,statSync,statfsSync,createReadStream,readdirSync,linkSync,chmodSync,existsSync,rmSync} from 'node:fs';
+import {readFileSync,copyFileSync,mkdirSync,statSync,statfsSync,createReadStream,readdirSync,linkSync,chmodSync,existsSync,rmSync} from 'node:fs';
 import {rm,rename} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -66,9 +66,10 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
   try{mkdirSync(stage,{recursive:true,mode:0o700});mkdirSync(join(stage,'uploads'),{mode:0o700});
    // Pin exactly the immutable files referenced by the exported PostgreSQL snapshot.
    await db.backup(join(stage,'volna.dump'),{onSnapshot:files=>{
+    const keyPath=process.env.WEBHOOK_KEY_PATH||join(dirname(uploads),'bot-webhook.key');if(existsSync(keyPath)){copyFileSync(keyPath,join(stage,'bot-webhook.key'));chmodSync(join(stage,'bot-webhook.key'),0o600);}
     for(const id of files){if(!/^[a-f0-9]{48}$/.test(id))throw Error('Invalid attachment ID');linkSync(join(uploads,id),join(stage,'uploads',id));}
    }});
-   await run('tar',['-czf',target+'.part','-C',stage,'volna.dump','uploads'],{timeout:600000,maxBuffer:1024*1024});
+   await run('tar',['-czf',target+'.part','-C',stage,'volna.dump','uploads',...(existsSync(join(stage,'bot-webhook.key'))?['bot-webhook.key']:[])],{timeout:600000,maxBuffer:1024*1024});
    chmodSync(target+'.part',0o600);await rename(target+'.part',target);const size=statSync(target).size,created=clock();
    db.prepare('INSERT INTO admin_backups VALUES(?,?,?,?)').run(id,filename,created,size);audit('backup.create',id,reason,{size});return {id,filename,created,size};
   }catch(e){await rm(target+'.part',{force:true}).catch(()=>{});throw fail(503,'Не удалось создать полную резервную копию. Проверьте место на диске и доступ к файлам.');}

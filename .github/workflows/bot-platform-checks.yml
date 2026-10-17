@@ -6,6 +6,9 @@ on:
       - 'client/**'
       - 'android-native/**'
       - 'tests/bot*'
+      - 'docker/webhook*'
+      - 'compose.yaml'
+      - 'scripts/test-webhook-egress.sh'
       - '.github/workflows/bot-platform-checks.yml'
 permissions:
   contents: read
@@ -82,3 +85,11 @@ jobs:
         run: python3 android-native/scripts/prepare-expressions.py --cache "$RUNNER_TEMP/volna-emoji-cache"
       - name: Android tests and APK build
         run: gradle -p android-native --no-daemon testDebugUnitTest assembleDebug
+
+  webhook-egress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify isolated egress network
+        run: sh scripts/test-webhook-egress.sh
