@@ -78,5 +78,7 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - name: Android SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Prepare bundled emoji assets
+        run: python3 android-native/scripts/prepare-expressions.py --cache "$RUNNER_TEMP/volna-emoji-cache"
       - name: Android tests and APK build
         run: gradle -p android-native --no-daemon testDebugUnitTest assembleDebug
