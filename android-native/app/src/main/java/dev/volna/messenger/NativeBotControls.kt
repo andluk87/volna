@@ -72,9 +72,12 @@ internal fun NativeBotCommands(chat: VolnaChat, token: String, api: NativeApi, e
     var revision by remember(chat.id, token) { mutableStateOf(0) }
     var error by remember(chat.id, token) { mutableStateOf("") }
     LaunchedEffect(chat.id, token, revision) {
-        try { commands = withContext(Dispatchers.IO) { api.botCommands(token, chat.id) }; error = "" }
-        catch (cancelled: CancellationException) { throw cancelled }
-        catch (problem: Exception) { error = problem.message.orEmpty() }
+        while (true) {
+            try { commands = withContext(Dispatchers.IO) { api.botCommands(token, chat.id) }; error = "" }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (problem: Exception) { error = problem.message.orEmpty() }
+            delay(30000)
+        }
     }
     if (commands.isNotEmpty()) Box(Modifier.padding(horizontal = 12.dp)) {
         TextButton(enabled = enabled, onClick = { expanded = !expanded; revision++ }) { NativeText("Команды") }
