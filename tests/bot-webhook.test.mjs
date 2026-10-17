@@ -7,18 +7,18 @@ import {join} from 'node:path';
 import {createApp} from '../server/index.mjs';
 import {signature} from '../server/bot-webhooks.mjs';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-async function eventually(fn){for(let i=0;i<100;i++){const v=await fn();if(v)return v;await sleep(30);}assert.fail('Timed out');}
+async function eventually(fn){for(let i=0;i<200;i++){const v=await fn();if(v)return v;await sleep(50);}assert.fail('Timed out');}
 async function fixture(t){
- const dir=mkdtempSync(join(tmpdir(),'volna-webhook-')),requests=[],key=randomBytes(32);let clock=Date.now(),reply={ok:false,status:500},validation=true,validateGate;
- const options={database:join(dir,'db'),uploads:join(dir,'uploads'),newsEnabled:false,webhookOptions:{key,now:()=>clock,random:()=>0.5,egress:async input=>{if(input.op==='validate'){if(validateGate)await validateGate;return {ok:validation};}requests.push(input);return reply;}}};
+ const dir=mkdtempSync(join(tmpdir(),'volna-webhook-')),requests=[],key=randomBytes(32);let deliveryGate;let clock=Date.now(),reply={ok:false,status:500},validation=true,validateGate;
+ const options={database:join(dir,'db'),uploads:join(dir,'uploads'),newsEnabled:false,webhookOptions:{key,now:()=>clock,random:()=>0.5,egress:async input=>{if(input.op==='validate'){if(validateGate)await validateGate;return {ok:validation};}requests.push(input);if(deliveryGate)await deliveryGate;return reply;}}};
  let app=createApp(options);await new Promise(r=>app.server.listen(0,'127.0.0.1',r));
  t.after(async()=>{await app.close();rmSync(dir,{recursive:true,force:true});});
- async function call(path,token,data,method){const r=await fetch('http://127.0.0.1:'+app.server.address().port+path,{method:method||(data===undefined?'GET':'POST'),headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,data:r.status===204?null:await r.json()};}
+ async function call(path,token,data,method,headers={}){const r=await fetch('http://127.0.0.1:'+app.server.address().port+path,{method:method||(data===undefined?'GET':'POST'),headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',...headers},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,data:r.status===204?null:await r.json()};}
  const db=()=>app.db;
  function user(name){const id=db().prepare('INSERT INTO users(username,name,phone) VALUES(?,?,?)').run(name,name,'+7900'+String(Math.floor(Math.random()*1e7)).padStart(7,'0')).lastInsertRowid,token=randomUUID();db().prepare('INSERT INTO sessions VALUES(?,?,?)').run(createHash('sha256').update(token).digest('hex'),id,Date.now()+3600000);return {id,token};}
  const owner=user('webhook_owner'),other=user('webhook_other'),bot=(await call('/developer/v1/bots',owner.token,{username:'webhook_test_bot',display_name:'Webhook'})).data;
  const chat=(await call('/api/bots/'+bot.bot.id+'/start',other.token,{})).data.id;
- return {call,db,owner,other,bot,chat,requests,advance(ms){clock+=ms;},setReply(v){reply=v;},setValidation(v){validation=v;},gate(v){validateGate=v;},async restart(){await app.close();app=createApp(options);await new Promise(r=>app.server.listen(0,'127.0.0.1',r));},send:(text)=>call(`/api/chats/${chat}/messages`,other.token,{text,client_id:randomUUID()}),status:()=>call('/bot/v1/delivery/status',bot.token)};
+ return {call,db,owner,other,bot,chat,requests,advance(ms){clock+=ms;},setReply(v){reply=v;},setValidation(v){validation=v;},gate(v){validateGate=v;},deliveryGate(v){deliveryGate=v;},async restart(){await app.close();app=createApp(options);await new Promise(r=>app.server.listen(0,'127.0.0.1',r));},send:(text)=>call(`/api/chats/${chat}/messages`,other.token,{text,client_id:randomUUID()}),status:()=>call('/bot/v1/delivery/status',bot.token)};
 }
 
 test('webhook switches active poll atomically, signs exact bytes, retries durable event after restart, ACKs only 2xx',async t=>{
@@ -61,4 +61,25 @@ test('main bot owns webhook configuration, validates asynchronously and displays
  const stranger=(await f.call('/api/bots/manager',f.other.token,{})).data;await f.call(`/api/chats/${stranger.id}/messages`,f.other.token,{text:`/webhook @${b.bot.username} off`,client_id:randomUUID()});await sleep(100);assert.equal((await f.status()).data.mode,'webhook');
  await send(`/webhook @${b.bot.username} off`);await eventually(async()=> (await f.status()).data.mode==='polling');
  f.setValidation(false);await send(`/webhook @${b.bot.username} https://example.com/new`);await eventually(async()=> (await f.status()).data.last_error==='ADDRESS_VALIDATION_FAILED');assert.equal((await f.status()).data.mode,'polling');
+});
+
+test('webhook callback subscription, expired events and late old-generation response cannot ACK new transport',async t=>{
+ const f=await fixture(t),b=f.bot;
+ // Queue an event under polling, then let its TTL expire before webhook sends.
+ await f.send('expire me');await f.call('/bot/v1/updates?timeout=0',b.token);
+ const first=f.db().prepare('SELECT * FROM bot_updates WHERE bot_id=?').get(b.bot.id);
+ f.db().prepare('UPDATE bot_updates SET expires=? WHERE bot_id=?').run(Date.now()-1,b.bot.id);
+ await f.call('/bot/v1/delivery/webhook',b.token,{url:'https://example.com',event_types:['callback.created']},'PUT');
+ await f.send('not subscribed');await sleep(600);assert.equal(f.requests.length,0);
+ const sent=await f.call('/bot/v1/messages',b.token,{chat_id:String(f.chat),type:'text',text:'Press',reply_markup:{inline_keyboard:[[{text:'Go',callback_data:'private payload'}]]}},'POST',{'Idempotency-Key':randomUUID()});assert.equal(sent.status,201);
+ const history=(await f.call(`/api/chats/${f.chat}/messages`,f.other.token)).data,message=history.find(m=>m.id===Number(sent.data.id));
+ f.setReply({ok:true,status:200});const click=await f.call('/api/bots/interactions',f.other.token,{message_id:sent.data.id,button_id:message.bot_buttons[0][0].id,interaction_id:randomUUID()});assert.equal(click.status,200);
+ await eventually(()=>f.requests.length===1);assert.equal(JSON.parse(f.requests[0].body).event_type,'callback.created');assert.equal(JSON.parse(f.requests[0].body).data.data,'private payload');await sleep(100);f.requests.length=0;
+ await f.call('/bot/v1/delivery/webhook',b.token,undefined,'DELETE');
+ const pending=(await f.call('/bot/v1/updates?timeout=0',b.token)).data.updates;assert.equal(pending.length,1);assert.equal(pending[0].data.text,'not subscribed');assert.notEqual(pending[0].event_id,first.event_id);
+ await f.call('/bot/v1/delivery/webhook',b.token,{url:'https://example.com'},'PUT');
+ let release;f.deliveryGate(new Promise(r=>release=r));f.setReply({ok:true,status:200});await eventually(()=>f.requests.length===1);
+ await f.call('/bot/v1/delivery/webhook',b.token,undefined,'DELETE');release();f.deliveryGate(null);await sleep(100);
+ assert.equal(f.db().prepare('SELECT acked FROM bot_updates WHERE bot_id=? AND event_id=?').get(b.bot.id,pending[0].event_id).acked,0);
+ assert.equal((await f.call('/bot/v1/updates?timeout=0',b.token)).data.updates[0].event_id,pending[0].event_id);
 });

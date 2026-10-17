@@ -64,7 +64,7 @@ export function botWebhooks({db,tx,get,access,wake,audit,deliverable,masterReply
   if(!scopes.includes('messages:read_events'))return false;
   try{const chat=access(bot,row.chat_id),value=JSON.parse(row.payload);return chat.version===row.grant_version&&(row.restricted_allowed||chat.kind==='direct'||chat.visibility==='full_read'&&scopes.includes('groups:read_all'))&&(value.event_type!=='callback.created'||deliverable(value));}catch(e){if(e.status)return false;throw e;}
  }
- async function process(c){
+ async function deliverBot(c){
   const bot=get(c.bot_id);
   if(!bot||bot.status!=='active'||bot.admin_blocked||bot.owner_blocked)return;
   if(c.pending){
@@ -108,7 +108,7 @@ export function botWebhooks({db,tx,get,access,wake,audit,deliverable,masterReply
   // One API process; one concurrent delivery per bot, max four globally. Retry state survives restart.
   for(const c of db.prepare('SELECT * FROM bot_webhooks w WHERE (pending=1 OR enabled=1 AND EXISTS(SELECT 1 FROM bot_updates u WHERE u.bot_id=w.bot_id AND u.acked=0 AND u.expires>?)) AND next_attempt<=? ORDER BY next_attempt,updated LIMIT 100').all(now(),now())){
    if(busy.size>=4)break;if(busy.has(c.bot_id))continue;busy.add(c.bot_id);
-   const task=process(c).catch(()=>console.error('[bots] webhook worker failed; queue retained')).finally(()=>{busy.delete(c.bot_id);inflight.delete(task);});inflight.add(task);
+   const task=deliverBot(c).catch(()=>console.error('[bots] webhook worker failed; queue retained')).finally(()=>{busy.delete(c.bot_id);inflight.delete(task);});inflight.add(task);
   }
  }
  const timer=setInterval(tick,500);timer.unref();
