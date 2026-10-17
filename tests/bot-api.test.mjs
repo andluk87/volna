@@ -239,3 +239,86 @@ test('main bot resumes creation after restart and does not replay the committed 
  assert.deepEqual(app.db.prepare('SELECT id FROM bot_tokens WHERE bot_id=?').all(bot.id),credentials);
  assert.equal(app.db.prepare("SELECT COUNT(*) n FROM messages WHERE sender_id=? AND text LIKE '%@restart_managed_bot создан%'").get(master.account_id).n,1);
 });
+
+
+test('inline buttons keep callback payload server-side, bind actor and bot, deduplicate taps and answer once',async t=>{
+ const f=await fixture(t),b=await f.bot(),otherBot=await f.bot(),chat=(await f.call('/api/bots/'+b.bot.id+'/start',f.other.token,{})).data.id;
+ const payload={chat_id:String(chat),type:'text',text:'Выберите',reply_markup:{inline_keyboard:[[{text:'Каталог',callback_data:'private_catalog_payload'}]]}};
+ const key=randomUUID(),sent=await f.call('/bot/v1/messages',b.token,payload,'POST',{'Idempotency-Key':key});assert.equal(sent.status,201,JSON.stringify(sent.data));
+ let message=(await f.call('/api/chats/'+chat+'/messages',f.other.token)).data.find(m=>m.id===Number(sent.data.id));
+ assert.equal(message.bot_buttons[0][0].text,'Каталог');assert.ok(!JSON.stringify(message).includes('private_catalog_payload'));
+ assert.equal((await f.call('/bot/v1/messages',b.token,payload,'POST',{'Idempotency-Key':key})).data.id,sent.data.id);
+ const button=message.bot_buttons[0][0],tap={message_id:message.id,button_id:button.id,interaction_id:randomUUID()};
+ assert.equal((await f.call('/api/bots/interactions',f.other.token,{...tap,actor_id:f.owner.id})).status,400);
+ assert.equal((await f.call('/api/bots/interactions',f.other.token,{...tap,callback_data:'forged'})).status,400);
+ assert.equal((await f.call('/api/bots/interactions',f.owner.token,tap)).status,403);
+ const clicked=await f.call('/api/bots/interactions',f.other.token,tap);assert.equal(clicked.status,200,JSON.stringify(clicked.data));assert.equal(clicked.data.status,'pending');
+ assert.equal((await f.call('/api/bots/interactions',f.other.token,tap)).data.callback_id,clicked.data.callback_id);
+ const updates=(await f.call('/bot/v1/updates?timeout=0',b.token)).data.updates;assert.equal(updates.length,1);
+ const event=updates[0];assert.equal(event.event_type,'callback.created');assert.equal(event.data.actor.id,String(f.other.id));assert.equal(event.data.data,'private_catalog_payload');assert.equal(event.data.message_id,String(message.id));assert.ok(!JSON.stringify(event).includes('+7900'));
+ const answerPath='/bot/v1/callbacks/'+clicked.data.callback_id+'/answer',answer={text:'Каталог открыт',show_alert:true};
+ assert.equal((await f.call(answerPath,otherBot.token,answer)).status,404);
+ assert.equal((await f.call('/api/bots/interactions/'+clicked.data.callback_id,f.owner.token)).status,404);
+ assert.equal((await f.call(answerPath,b.token,answer)).status,204);
+ assert.equal((await f.call(answerPath,b.token,answer)).status,204);
+ assert.equal((await f.call(answerPath,b.token,{text:'Другой ответ'})).status,409);
+ assert.deepEqual((await f.call('/api/bots/interactions/'+clicked.data.callback_id,f.other.token)).data.answer,answer);
+ assert.equal((await f.call('/api/bots/interactions',f.other.token,tap)).data.status,'answered');
+ assert.deepEqual((await f.call('/bot/v1/updates?timeout=0',b.token)).data.updates,[]);
+ assert.equal(f.app.db.prepare('SELECT COUNT(*) n FROM bot_callback_requests').get().n,1);
+});
+
+test('keyboard validation, idempotency and markup-only revision changes invalidate old callbacks',async t=>{
+ const f=await fixture(t),b=await f.bot(),chat=(await f.call('/api/bots/'+b.bot.id+'/start',f.other.token,{})).data.id;
+ const payload={chat_id:String(chat),type:'text',text:'Keyboard'},good={inline_keyboard:[[{text:'🙂'.repeat(64),callback_data:'ю'.repeat(64)}]]};
+ for(const reply_markup of [{inline_keyboard:[[{text:'x',url:'https://example.com'}]]},{inline_keyboard:Array.from({length:9},()=>[{text:'x',callback_data:'x'}])},{inline_keyboard:[[]]},{inline_keyboard:[[{text:'x'.repeat(65),callback_data:'x'}]]},{inline_keyboard:[[{text:'x',callback_data:'ю'.repeat(65)}]]},{inline_keyboard:[[{text:'x',callback_data:'\ud800'}]]}]){
+  assert.equal((await f.call('/bot/v1/messages',b.token,{...payload,reply_markup},'POST',{'Idempotency-Key':randomUUID()})).status,400);
+ }
+ const key=randomUUID(),sent=await f.call('/bot/v1/messages',b.token,{...payload,reply_markup:good},'POST',{'Idempotency-Key':key});assert.equal(sent.status,201);
+ assert.equal((await f.call('/bot/v1/messages',b.token,{...payload,reply_markup:null},'POST',{'Idempotency-Key':key})).status,409);
+ const message=(await f.call('/api/chats/'+chat+'/messages',f.other.token)).data.find(m=>m.id===Number(sent.data.id)),tap={message_id:message.id,button_id:message.bot_buttons[0][0].id,interaction_id:randomUUID()};
+ const callback=(await f.call('/api/bots/interactions',f.other.token,tap)).data.callback_id;
+ const patched=await f.call('/bot/v1/messages/'+message.id,b.token,{revision:0,reply_markup:null},'PATCH');assert.equal(patched.status,200,JSON.stringify(patched.data));assert.equal(patched.data.revision,1);
+ assert.equal((await f.call('/bot/v1/messages/'+message.id,b.token,{revision:0,reply_markup:good},'PATCH')).status,409);
+ const changed=(await f.call('/api/chats/'+chat+'/messages',f.other.token)).data.find(m=>m.id===message.id);assert.deepEqual(changed.bot_buttons,[]);assert.equal(changed.text,'Keyboard');
+ assert.equal((await f.call('/api/bots/interactions',f.other.token,tap)).status,403);
+ assert.equal((await f.call('/api/bots/interactions/'+callback,f.other.token)).status,403);
+ assert.equal((await f.call('/bot/v1/callbacks/'+callback+'/answer',b.token,{text:'old'})).status,403);
+ assert.deepEqual((await f.call('/bot/v1/updates?timeout=0',b.token)).data.updates,[]);
+});
+
+test('callback expiry, token scopes, hidden history and group regrant revoke interaction access',async t=>{
+ const f=await fixture(t),b=await f.bot(),chat=(await f.call('/api/bots/'+b.bot.id+'/start',f.other.token,{})).data.id;
+ const send=async c=>{const r=await f.call('/bot/v1/messages',b.token,{chat_id:String(c),type:'text',text:'Tap',reply_markup:{inline_keyboard:[[{text:'Кнопка',callback_data:'action'}]]}},'POST',{'Idempotency-Key':randomUUID()});assert.equal(r.status,201);return (await f.call('/api/chats/'+c+'/messages',f.other.token)).data.find(m=>m.id===Number(r.data.id));};
+ const m=await send(chat),tap={message_id:m.id,button_id:m.bot_buttons[0][0].id,interaction_id:randomUUID()},callback=(await f.call('/api/bots/interactions',f.other.token,tap)).data.callback_id;
+ f.app.db.prepare('UPDATE bot_callback_requests SET expires=? WHERE id=?').run(Date.now()-1,callback);
+ assert.equal((await f.call('/api/bots/interactions/'+callback,f.other.token)).data.status,'expired');
+ assert.equal((await f.call('/bot/v1/callbacks/'+callback+'/answer',b.token,{text:'late'})).status,410);
+ const next=(await f.call('/api/bots/interactions',f.other.token,{...tap,interaction_id:randomUUID()})).data.callback_id;
+ f.app.db.prepare('INSERT INTO chat_visibility(user_id,chat_id,hidden_before) VALUES(?,?,?)').run(f.other.id,chat,m.id);
+ assert.equal((await f.call('/api/bots/interactions/'+next,f.other.token)).status,403);
+ const scope=(await f.call('/developer/v1/bots/'+b.bot.id+'/tokens',f.owner.token,{scopes:['messages:send','messages:read_events']})).data.token;
+ assert.equal((await f.call('/bot/v1/callbacks/'+next+'/answer',scope,{text:'no scope'})).status,403);
+ b.token=(await f.call('/developer/v1/bots/'+b.bot.id+'/tokens',f.owner.token,{scopes:['messages:send','messages:read_events','callbacks:answer']})).data.token;
+ const group=(await f.call('/api/communities',f.other.token,{kind:'group',title:'Callback group',client_id:randomUUID()})).data.id;
+ await f.call('/api/chats/'+group+'/bots/'+b.bot.id,f.other.token,{},'PUT');
+ const gm=await send(group),gcallback=(await f.call('/api/bots/interactions',f.other.token,{message_id:gm.id,button_id:gm.bot_buttons[0][0].id,interaction_id:randomUUID()})).data.callback_id;
+ const events=(await f.call('/bot/v1/updates?timeout=0',b.token)).data.updates;assert.equal(events.filter(e=>e.event_type==='callback.created').length,1);
+ await f.call('/api/chats/'+group+'/bots/'+b.bot.id,f.other.token,{},'PUT');
+ assert.equal((await f.call('/bot/v1/callbacks/'+gcallback+'/answer',b.token,{text:'regrant'})).status,403);
+ assert.deepEqual((await f.call('/bot/v1/updates?timeout=0',b.token)).data.updates,[]);
+});
+
+test('main bot buttons create owner-scoped dialog state; command menus refresh and forwarded messages lose actions',async t=>{
+ const f=await fixture(t),manager=(await f.call('/api/bots/manager',f.owner.token,{})).data;
+ const welcome=(await f.call('/api/chats/'+manager.id+'/messages',f.owner.token)).data[0];assert.ok(welcome.bot_buttons.length);
+ const pressed=await f.call('/api/bots/interactions',f.owner.token,{message_id:welcome.id,button_id:welcome.bot_buttons[0][0].id,interaction_id:randomUUID()});assert.equal(pressed.status,200,JSON.stringify(pressed.data));assert.equal(pressed.data.status,'answered');
+ assert.equal(f.app.db.prepare('SELECT step FROM bot_father_sessions WHERE user_id=?').get(f.owner.id).step,'name');
+ const menu=(await f.call('/api/chats/'+manager.id+'/bot-commands',f.owner.token)).data;assert.ok(menu.bots[0].commands.some(c=>c.command==='newbot'));
+ assert.equal((await f.call('/api/chats/'+manager.id+'/bot-commands',f.other.token)).status,403);
+ const b=await f.bot(),chat=(await f.call('/api/bots/'+b.bot.id+'/start',f.other.token,{})).data.id;
+ assert.equal((await f.call('/bot/v1/commands',b.token,{commands:[{command:'catalog',description:'Каталог'}]},'PUT')).status,204);
+ assert.equal((await f.call('/api/chats/'+chat+'/bot-commands',f.other.token)).data.bots[0].commands[0].command,'catalog');
+ const privateChat=(await f.call('/api/chats',f.owner.token,{user_id:f.other.id})).data.id;
+ const forwarded=await f.call('/api/messages/'+welcome.id+'/forward',f.owner.token,{chat_id:privateChat,client_id:randomUUID()});assert.equal(forwarded.status,201,JSON.stringify(forwarded.data));assert.deepEqual(forwarded.data.bot_buttons,[]);
+});

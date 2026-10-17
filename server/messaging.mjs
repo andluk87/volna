@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 const error=(status,message)=>Object.assign(new Error(message),{status});
 const emojis=['👍','❤️','😂','🔥','🎉','😢','👏','😍','🤔','😮','🙏','💯','👎','🥰','🤣','😎','😭','🤝','💪','👋','✨','💙','😡','🤗'];
-export function messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions=()=>null,authorizeSend=()=>{}}) {
+export function messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions=()=>null,authorizeSend=()=>{},botButtons=()=>[]}) {
   mkdirSync(uploads,{recursive:true});
   db.exec('CREATE TABLE IF NOT EXISTS chat_visibility(user_id INTEGER NOT NULL REFERENCES users(id),chat_id INTEGER NOT NULL REFERENCES chats(id),hidden_before INTEGER NOT NULL DEFAULT 0,deleted INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(user_id,chat_id))');
   const cutoff=(chat,uid)=>db.prepare('SELECT hidden_before FROM chat_visibility WHERE user_id=? AND chat_id=?').get(uid,chat)?.hidden_before||0;
@@ -36,10 +36,10 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   const hydrate=row=>{
     if(!row)return null;
     const topic=db.prepare("SELECT c.parent_id,c.title,c.general_name,c.topics_enabled,(SELECT title FROM chats WHERE id=c.parent_id) AS group_title FROM chats c WHERE c.id=?").get(row.chat_id);row={...row,group_id:topic?.parent_id||row.chat_id,topic_id:topic?.parent_id||topic?.topics_enabled?row.chat_id:null,message_thread_id:topic?.parent_id||topic?.topics_enabled?row.chat_id:null,topic_name:topic?.parent_id?topic.title:topic?.topics_enabled?topic.general_name:null,group_name:topic?.parent_id?topic.group_title:topic?.title||null};
-    if(row.deleted_at)return {...row,text:'',attachment_id:null,expression_id:null,emoji_entities:[],reply_to:null,forwarded_name:null,attachment:null,reply:null,reactions:[],pinned:false,poll:null,checklist:null,interactive:null};
+    if(row.deleted_at)return {...row,text:'',attachment_id:null,expression_id:null,emoji_entities:[],reply_to:null,forwarded_name:null,attachment:null,reply:null,reactions:[],pinned:false,poll:null,checklist:null,interactive:null,bot_buttons:[]};
     const reply=row.reply_to?get(row.reply_to):null;
     const sender=userById(row.sender_id);
-    return {...row,...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_is_bot:!!sender?.is_bot,sender_name:sender?.name||'Пользователь',sender_username:sender?.username||'',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
+    return {...row,bot_buttons:botButtons(row),...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_is_bot:!!sender?.is_bot,sender_name:sender?.name||'Пользователь',sender_username:sender?.username||'',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
       reply:reply?{id:reply.id,sender_id:reply.sender_id,name:userById(reply.sender_id)?.name,text:reply.deleted_at?'Сообщение удалено':reply.text||'Вложение',deleted:!!reply.deleted_at}:null,
       reactions:db.prepare('SELECT r.emoji,r.user_id,u.name FROM reactions r JOIN users u ON u.id=r.user_id WHERE r.message_id=? ORDER BY r.emoji,r.reaction_order').all(row.id).map(reaction=>({...reaction,avatar_url:userById(reaction.user_id)?.avatar_url||null})),
       pinned:!!db.prepare('SELECT 1 FROM pins WHERE message_id=?').get(row.id)};
@@ -322,7 +322,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(row.deleted_at)throw error(410,'Сообщение удалено');
     if(row.revision!==data.revision)throw Object.assign(error(409,'Сообщение уже изменилось'),{code:'REVISION_CONFLICT'});
     const text=data.text.trim();if(!text||text.length>4000)throw error(400,'Текст: 1–4000 символов');
-    db.prepare('UPDATE messages SET text=?,edited_at=? WHERE id=?').run(text,new Date().toISOString(),id);expressions()?.recordEntities(id,[]);return get(id);
+    db.prepare('UPDATE messages SET text=?,edited_at=? WHERE id=?').run(text,new Date(Math.max(Date.now(),Date.parse(row.edited_at||'1970-01-01')+1)).toISOString(),id);expressions()?.recordEntities(id,[]);return get(id);
   };
   handle.deleteOwn=(id,uid)=>{
     const row=authorized(id,uid);if(row.sender_id!==uid)throw error(403,'Можно удалять только свои сообщения');if(row.deleted_at)return row;

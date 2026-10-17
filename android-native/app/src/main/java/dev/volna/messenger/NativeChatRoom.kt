@@ -298,7 +298,7 @@ internal fun ChatRoomScreen(
                         joined = nativeSameAuthor(previous, message), showAuthor = chat.kind == "group", me = user?.id,
                         selected = group.any { it.id in selection }, selectionMode = selection.isNotEmpty(), onSelect = ::select,
                         onSelectGroup = { val ids = group.map { it.id }.toSet(); selection = if (ids.all { it in selection }) selection - ids else (selection + ids).take(50).toSet() },
-                    onJump = ::jump, highlighted = group.any { it.id == highlighted }, onProfile = onOpenProfile, canReply = chat.canSend)
+                    onJump = ::jump, highlighted = group.any { it.id == highlighted }, onProfile = onOpenProfile, canReply = chat.canSend, botApi = api)
                     }
                 }
             }
@@ -310,6 +310,7 @@ internal fun ChatRoomScreen(
             Column(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 8.dp)) { NativeText(if (editTarget != null) "Редактирование" else "Ответ ${replyTo?.senderName}", color = Accent, fontWeight = FontWeight.Medium, fontSize = 12.sp); NativeText((editTarget?.text ?: replyTo?.text).orEmpty().ifBlank { "Вложение" }, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp) }
             IconButton(onClick = { if (editTarget != null) { input = drafts.input(chat.id); entities = drafts.entities(chat.id) }; replyTo = null; editTarget = null }) { Icon(Icons.Outlined.Close, "Отменить ответ или редактирование", tint = Muted) }
         }
+        NativeBotCommands(chat, token, api, chat.canSend && !busy && !recorder.recording && editTarget == null) { value -> input = TextFieldValue(value, TextRange(value.length)); entities = emptyList(); showKeyboard() }
         if (!chat.canSend) NativeText(if(chat.topicClosed) "Подтема закрыта. История доступна для чтения." else "Публиковать могут только администраторы", Modifier.fillMaxWidth().background(Panel).padding(16.dp), color = Muted, fontSize = 13.sp)
         else NativeGlassSurface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp).onSizeChanged { composerHeight = it.height / density.density }, radius = 28.dp, floating = true) { Row(Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { if (editTarget != null) panel.tab = "emoji"; togglePanel() }) { Icon(if (panel.open) Icons.Outlined.Keyboard else Icons.Outlined.EmojiEmotions, if (panel.open) "Переключиться на клавиатуру" else "Эмодзи, стикеры и GIF", tint = Muted) }
@@ -384,7 +385,7 @@ internal fun ChatRoomScreen(
 internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isMine: Boolean, peerDelivered: Boolean, peerRead: Boolean, canModerate: Boolean, canPin: Boolean, transcribing: Boolean,
     onReply: (VolnaMessage) -> Unit, onEdit: (VolnaMessage) -> Unit, onForward: (VolnaMessage) -> Unit, onCopy: (VolnaMessage) -> Unit, onAction: (VolnaMessage, String, String) -> Unit,
     onPlayAudio: (VolnaMessage) -> Unit, voicePlayback: NativeVoicePlayback, token: String, onOpenAttachment: (VolnaMessage) -> Unit,
-    joined: Boolean, showAuthor: Boolean, me: Long?, selected: Boolean, selectionMode: Boolean, onSelect: (VolnaMessage) -> Unit, onSelectGroup: () -> Unit, onJump: (Long) -> Unit, highlighted: Boolean, onProfile: (Long) -> Unit, canReply: Boolean
+    joined: Boolean, showAuthor: Boolean, me: Long?, selected: Boolean, selectionMode: Boolean, onSelect: (VolnaMessage) -> Unit, onSelectGroup: () -> Unit, onJump: (Long) -> Unit, highlighted: Boolean, onProfile: (Long) -> Unit, canReply: Boolean, botApi: NativeApi? = null
 ) {
     var menu by remember(message.id) { mutableStateOf(false) }
     var targetId by remember(message.id) { mutableStateOf(message.id) }
@@ -398,7 +399,7 @@ internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isM
     val screenWidth = maxWidth
     val available = screenWidth - 20.dp - (if (selectionMode) 44.dp else 0.dp) - (if (appearance.avatars && showAuthor && !isMine) 36.dp else 0.dp)
     val maxWidth = (screenWidth * .75f).coerceAtMost(available).coerceAtMost(560.dp).coerceAtLeast(80.dp)
-    val compactText = message.text.isNotBlank() && message.attachmentId == null && message.reply == null && message.forwardedName == null && !message.deleted && !message.edited && message.reactions.isEmpty() && message.emojiEntities.isEmpty() && group.size == 1 && !(showAuthor && !isMine)
+    val compactText = message.text.isNotBlank() && message.attachmentId == null && message.reply == null && message.forwardedName == null && !message.deleted && !message.edited && message.reactions.isEmpty() && message.emojiEntities.isEmpty() && group.size == 1 && message.botButtons.isEmpty() && !(showAuthor && !isMine)
     val minWidth = when {
         message.deleted -> 0.dp
         group.size > 1 -> maxWidth
@@ -442,6 +443,8 @@ internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isM
                     }, stamp = { NativeMessageStamp(message, isMine, peerDelivered, peerRead, !appearance.timeOnTap || detail) })
                     else NativeLinkedText(message.text, Modifier.padding(top = if (message.attachmentId == null) 0.dp else 5.dp), message.emojiEntities, token, me ?: 0)
                 }
+
+                if (botApi != null) NativeBotButtons(message, token, botApi)
 
             }
         }, footer = {

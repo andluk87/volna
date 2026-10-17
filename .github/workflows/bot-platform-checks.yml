@@ -4,6 +4,7 @@ on:
     paths:
       - 'server/**'
       - 'client/**'
+      - 'android-native/**'
       - 'tests/bot*'
       - '.github/workflows/bot-platform-checks.yml'
 permissions:
@@ -56,3 +57,22 @@ jobs:
         run: |
           export CHROMIUM_PATH="$(node --input-type=module -e 'import {chromium} from "./client/node_modules/playwright/index.mjs";console.log(chromium.executablePath())')"
           npm run test:bot-ui
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      ANDROID_API_URL: https://volna.example.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+      - name: Android SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Android tests and APK build
+        run: gradle -p android-native --no-daemon testDebugUnitTest assembleDebug

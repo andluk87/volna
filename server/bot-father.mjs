@@ -11,6 +11,7 @@ const help=`Я главный бот Волны. Управляю только �
 /setname @username Название — изменить название
 /setdescription @username Описание — изменить описание
 /groups @username on|off — разрешить или запретить полное чтение групп
+/callbacks @username on|off — разрешить ответы на кнопки (новый токен)
 /cancel — отменить создание
 /help — помощь
 
@@ -38,6 +39,7 @@ export function createBotFather({db,get,owned,info,issue,audit,wake,createBot,de
    db.exec('COMMIT');
   }catch(e){db.exec('ROLLBACK');throw e;}
  }
+ db.prepare('UPDATE bots SET commands=? WHERE id=?').run("[{\"command\":\"newbot\",\"description\":\"Создать бота\"},{\"command\":\"mybots\",\"description\":\"Мои боты\"},{\"command\":\"token\",\"description\":\"Перевыпустить токен: @username\"},{\"command\":\"revoke\",\"description\":\"Отозвать токен: @username\"},{\"command\":\"pause\",\"description\":\"Отключить бота: @username\"},{\"command\":\"resume\",\"description\":\"Включить бота: @username\"},{\"command\":\"setname\",\"description\":\"Изменить название: @username название\"},{\"command\":\"setdescription\",\"description\":\"Описание: @username текст\"},{\"command\":\"groups\",\"description\":\"Полное чтение групп: @username on|off\"},{\"command\":\"callbacks\",\"description\":\"Ответы на кнопки: @username on|off\"},{\"command\":\"cancel\",\"description\":\"Отменить создание\"},{\"command\":\"help\",\"description\":\"Помощь\"}]",ref.bot_id);
  const master=get(ref.bot_id);
  const setState=(uid,step,name='')=>db.prepare('INSERT INTO bot_father_sessions VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET step=excluded.step,name=excluded.name,updated=excluded.updated').run(uid,step,name,Date.now());
  const clear=uid=>db.prepare('DELETE FROM bot_father_sessions WHERE user_id=?').run(uid);
@@ -60,16 +62,17 @@ export function createBotFather({db,get,owned,info,issue,audit,wake,createBot,de
    const result=createBot(uid,{username:text.trim().replace(/^@/,''),display_name:state.name});clear(uid);
    return `Бот @${result.bot.username} создан.\n${tokenText(result)}\n\nПодключите программу к Bot API. /help — управление.`;
   }
-  const actions=['/token','/revoke','/pause','/resume','/setname','/setdescription','/groups'];
+  const actions=['/token','/revoke','/pause','/resume','/setname','/setdescription','/groups','/callbacks'];
   if(!actions.includes(cmd))return 'Неизвестная команда. /help — помощь.';
   const username=canonicalUsername((arg||'').replace(/^@/,''));
   const row=db.prepare('SELECT b.id FROM bots b JOIN users u ON u.id=b.account_id WHERE u.username_normalized=? AND b.owner_id=?').get(username,uid);
   if(!row) return 'Ваш бот не найден. Укажите @username из /mybots.';
   const bot=owned(row.id,uid);if(bot.status==='deleted')return 'Бот удалён.';
-  if(cmd==='/token'||cmd==='/groups'){
+  if(cmd==='/token'||cmd==='/groups'||cmd==='/callbacks'){
    const previous=JSON.parse(db.prepare('SELECT scopes FROM bot_tokens WHERE bot_id=? ORDER BY created DESC LIMIT 1').get(bot.id)?.scopes||JSON.stringify(defaultScopes));
-   if(cmd==='/groups'&&!['on','off'].includes(value))return 'Использование: /groups @username on|off. Изменение разрешений перевыпускает токен.';
-   const allowed=cmd==='/groups'?[...previous.filter(s=>s!=='groups:read_all'),...(value==='on'?['groups:read_all']:[])]:previous;
+   if(cmd!=='/token'&&!['on','off'].includes(value))return 'Использование: '+cmd+' @username on|off. Изменение разрешений перевыпускает токен.';
+   const scope=cmd==='/callbacks'?'callbacks:answer':'groups:read_all';
+   const allowed=cmd!=='/token'?[...previous.filter(s=>s!==scope),...(value==='on'?[scope]:[])]:previous;
    return tokenText(issue(bot,uid,allowed));
   }
   if(cmd==='/revoke'){
@@ -84,7 +87,7 @@ export function createBotFather({db,get,owned,info,issue,audit,wake,createBot,de
   else db.prepare('UPDATE users SET bio=? WHERE id=?').run(value,bot.account_id);
   audit(bot.id,uid,'bot.update');return 'Настройки сохранены.';
  }
- return {accountId:master.account_id,username:master.username,help,process(event){
+ return {id:master.id,accountId:master.account_id,username:master.username,help,command,markup:{inline_keyboard:[[{text:'Создать бота',callback_data:'/newbot'},{text:'Мои боты',callback_data:'/mybots'}],[{text:'Помощь',callback_data:'/help'}]]},process(event){
   if(event.event_type!=='message.created')return null;
   const chat=db.prepare("SELECT c.id FROM chats c JOIN members m ON m.chat_id=c.id WHERE c.id=? AND c.kind='direct' AND c.admin_locked=0 AND c.admin_deleted=0 AND c.encryption_mode='server_readable' AND m.user_id=?").get(event.chat_id,master.account_id);
   if(!chat)return null;

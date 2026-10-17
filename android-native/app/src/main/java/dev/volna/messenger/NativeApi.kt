@@ -38,6 +38,8 @@ data class VolnaChat(
     val role: String = "member", val canSend: Boolean = true, val memberCount: Int = 0,
     val avatarUrl: String? = null, val lastId: Long = 0, val lastSenderId: Long = 0, val peerOnline: Boolean = false, val parentId: Long = 0, val topicClosed: Boolean = false, val isContact: Boolean = false, val manualUnread: Boolean = false, val peerLastSeen: Long = 0, val topicsEnabled: Boolean = false
 )
+data class NativeBotButton(val id: String, val text: String)
+data class NativeBotCommand(val command: String, val description: String, val username: String)
 data class VolnaReaction(val emoji: String, val userId: Long, val name: String, val avatarUrl: String? = null)
 data class VolnaReply(val id: Long, val name: String, val text: String, val deleted: Boolean)
 data class VolnaMessage(
@@ -58,7 +60,7 @@ data class VolnaMessage(
     val forwardedName: String? = null,
     val attachmentSize: Long = 0, val albumId: String? = null, val chatId: Long = 0,
     val expressionKind: String? = null, val expressionId: String? = null,
-    val emojiEntities: List<NativeEmojiEntity> = emptyList(), val topicName: String = ""
+    val emojiEntities: List<NativeEmojiEntity> = emptyList(), val topicName: String = "", val botButtons: List<List<NativeBotButton>> = emptyList()
 )
 data class VolnaSession(val token: String, val user: VolnaUser, val refreshToken: String = "")
 internal class NativeApiException(val status: Int, message: String, val errorCode: String = "", val retryAt: Long = 0, val serverTime: Long = 0) : IllegalStateException(message)
@@ -293,6 +295,17 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         }
     }
 
+    fun botCommands(token: String, chat: Long): List<NativeBotCommand> {
+        val bots = call("/chats/$chat/bot-commands", token = token).getJSONArray("bots")
+        return (0 until bots.length()).flatMap { i ->
+            val bot = bots.getJSONObject(i); val commands = bot.getJSONArray("commands")
+            (0 until commands.length()).map { c -> commands.getJSONObject(c).let { NativeBotCommand(it.getString("command"), it.getString("description"), bot.getString("username")) } }
+        }
+    }
+    fun botInteraction(token: String, message: Long, button: String, interaction: String): JSONObject =
+        call("/bots/interactions", "POST", token, JSONObject().put("message_id", message).put("button_id", button).put("interaction_id", interaction))
+    fun botInteractionStatus(token: String, callback: String): JSONObject = call("/bots/interactions/$callback", token = token)
+
     fun updateMessage(token: String, id: Long, text: String) = parseMessage(call("/messages/$id/edit", "POST", token, JSONObject().put("text", text)))
     fun updateRichMessage(token: String, id: Long, text: String, entities: List<NativeEmojiEntity>) = parseMessage(call("/messages/$id/edit", "POST", token, JSONObject().put("text", text).put("emoji_entities", JSONArray(entities.map { it.json() }))))
     internal fun expressionPacks(token: String, query: String = ""): List<NativeExpressionPack> = arrayCall("/expressions/packs?q=" + java.net.URLEncoder.encode(query, "UTF-8"), token).let { rows -> (0 until rows.length()).map { NativeExpressionPack.parse(rows.getJSONObject(it)) } }
@@ -473,7 +486,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
             !row.isNull("edited_at") && row.optString("edited_at").isNotBlank() && row.optString("edited_at") != "null",
             row.optBoolean("pinned"), row.optString("transcript").takeIf { it.isNotBlank() && it != "null" },
             row.optString("forwarded_name").takeIf { it.isNotBlank() && it != "null" }, file?.optLong("size") ?: 0L, nullableText(row, "album_id"), row.optLong("chat_id"), row.optJSONObject("expression")?.optString("kind"), nullableText(row, "expression_id"),
-            row.optJSONArray("emoji_entities")?.let { values -> (0 until values.length()).map { NativeEmojiEntity.parse(values.getJSONObject(it)) } } ?: emptyList(), topicName = nullableText(row,"topic_name").orEmpty())
+            row.optJSONArray("emoji_entities")?.let { values -> (0 until values.length()).map { NativeEmojiEntity.parse(values.getJSONObject(it)) } } ?: emptyList(), topicName = nullableText(row,"topic_name").orEmpty(), botButtons = if (deletedAt != null) emptyList() else row.optJSONArray("bot_buttons")?.let { rows -> (0 until rows.length()).map { r -> rows.getJSONArray(r).let { buttons -> (0 until buttons.length()).map { c -> buttons.getJSONObject(c).let { NativeBotButton(it.getString("id"), it.getString("text")) } } } } } ?: emptyList())
     }
     private fun nullableText(row: JSONObject, key: String): String? = row.optString(key).takeIf { it.isNotBlank() && it != "null" }
     private fun apiError(body: String, code: Int): Exception = try {

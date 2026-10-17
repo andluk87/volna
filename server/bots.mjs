@@ -1,3 +1,4 @@
+import {botInteractions} from './bot-interactions.mjs';
 import {randomBytes,randomUUID,createHash} from 'node:crypto';
 import {createBotFather} from './bot-father.mjs';
 import {initBotSchema} from './bot-schema.mjs';
@@ -6,7 +7,7 @@ import {readAdminSettings} from './admin-config.mjs';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const fail=(status,code,message)=>Object.assign(Error(message),{status,code});
 const number=value=>{if(!['string','number'].includes(typeof value)||typeof value==='string'&&!/^[1-9]\d*$/.test(value))throw fail(400,'INVALID_ID','Некорректный идентификатор');const n=Number(value);if(!Number.isSafeInteger(n)||n<1)throw fail(400,'INVALID_ID','Некорректный идентификатор');return n;};
-const defaultScopes=['messages:send','messages:edit_own','messages:delete_own','messages:read_events','chats:read_basic','commands:manage'];
+const defaultScopes=['messages:send','messages:edit_own','messages:delete_own','messages:read_events','chats:read_basic','commands:manage','callbacks:answer'];
 const allScopes=new Set([...defaultScopes,'groups:read_all']);
 const scopes=value=>{if(!Array.isArray(value)||!value.length||value.length>allScopes.size||new Set(value).size!==value.length||value.some(s=>!allScopes.has(s)))throw fail(400,'INVALID_SCOPES','Некорректные разрешения');return value;};
 const only=(data,keys)=>{if(Object.keys(data).some(key=>!keys.includes(key)))throw fail(400,'UNKNOWN_FIELD','Неизвестное поле запроса');};
@@ -69,12 +70,13 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
   return new RegExp('(^|[^a-z0-9_])@'+escaped+'(?![a-z0-9_])','i').test(data.text)||!!(command&&(!command[2]||command[2].toLowerCase()===bot.username.toLowerCase()))||!!(data.reply_to_message_id&&db.prepare('SELECT 1 FROM messages WHERE id=? AND chat_id=? AND sender_id=?').get(number(data.reply_to_message_id),chat.id,bot.account_id));
  }
  const father=createBotFather({db,get,owned,info,issue,audit,wake,createBot:(uid,data)=>createBot(uid,data,fn=>fn()),defaultScopes});
+ const interactions=botInteractions({db,get,access,member,publish,wake,tx,messaging,master:father});
  function drain(){
   if(closed||draining)return;draining=true;const notify=new Set(),replies=[];
   try{tx(()=>{
    const events=db.prepare('SELECT * FROM bot_message_outbox WHERE processed IS NULL ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED').all();
    for(const event of events){
-    const reply=father.process(event);if(reply)replies.push(messaging.insert(event.chat_id,father.accountId,{text:reply,client_id:hash('botfather:'+event.id)}).row);
+    const reply=father.process(event);if(reply){const row=messaging.insert(event.chat_id,father.accountId,{text:reply,client_id:hash('botfather:'+event.id)}).row;interactions.setMarkup(row,get(father.id),interactions.markup(father.markup));replies.push(row);}
     const candidates=db.prepare('SELECT b.id FROM bots b JOIN bot_chat_grants g ON g.bot_id=b.id WHERE g.chat_id=? AND g.active=1 AND g.cutoff_id<?').all(event.chat_id,event.id);
     for(const candidate of candidates){
      const bot=get(candidate.id),data=JSON.parse(event.payload);
@@ -95,7 +97,7 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
  }
  const tick=()=>{try{drain();}catch{console.error('[bots] outbox processing failed; events retained');}};
  const timer=setInterval(tick,1000);timer.unref();
- const retention=setInterval(()=>{try{for(const [key,item] of buckets)if(item.until<Date.now())buckets.delete(key);db.prepare('DELETE FROM bot_father_sessions WHERE updated<?').run(Date.now()-3600000);db.prepare('DELETE FROM bot_updates WHERE expires<?').run(Date.now());db.prepare('DELETE FROM bot_idempotency WHERE created<?').run(Date.now()-86400000);db.prepare('DELETE FROM bot_message_outbox WHERE processed<?').run(Date.now()-86400000);}catch{console.error('[bots] retention failed');}},60000);retention.unref();
+ const retention=setInterval(()=>{try{interactions.cleanup();for(const [key,item] of buckets)if(item.until<Date.now())buckets.delete(key);db.prepare('DELETE FROM bot_father_sessions WHERE updated<?').run(Date.now()-3600000);db.prepare('DELETE FROM bot_updates WHERE expires<?').run(Date.now());db.prepare('DELETE FROM bot_idempotency WHERE created<?').run(Date.now()-86400000);db.prepare('DELETE FROM bot_message_outbox WHERE processed<?').run(Date.now()-86400000);}catch{console.error('[bots] retention failed');}},60000);retention.unref();
  async function poll(req,res,url){
   let bot=authenticate(req,'messages:read_events');rate('poll:'+bot.id,120);
   const offset=Number(url.searchParams.get('offset')||1),count=Number(url.searchParams.get('limit')||100),timeout=Number(url.searchParams.get('timeout')??30);
@@ -110,7 +112,7 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
     bot=authenticate(req,'messages:read_events');drain();
     const pending=db.prepare('SELECT * FROM bot_updates WHERE bot_id=? AND update_id>=? AND acked=0 AND expires>? ORDER BY update_id LIMIT 1000').all(bot.id,offset,Date.now()),updates=[];
     for(const row of pending){let chat;try{chat=access(bot,row.chat_id);}catch(e){if(e.status){db.prepare('UPDATE bot_updates SET acked=1 WHERE bot_id=? AND update_id=?').run(bot.id,row.update_id);continue;}throw e;}
-     const value=JSON.parse(row.payload);if(chat.version!==row.grant_version||!(row.restricted_allowed||chat.kind==='direct'||chat.visibility==='full_read'&&bot.scopes.includes('groups:read_all'))){db.prepare('UPDATE bot_updates SET acked=1 WHERE bot_id=? AND update_id=?').run(bot.id,row.update_id);continue;}
+     const value=JSON.parse(row.payload);if(value.event_type==='callback.created'&&!interactions.deliverable(value)||chat.version!==row.grant_version||!(row.restricted_allowed||chat.kind==='direct'||chat.visibility==='full_read'&&bot.scopes.includes('groups:read_all'))){db.prepare('UPDATE bot_updates SET acked=1 WHERE bot_id=? AND update_id=?').run(bot.id,row.update_id);continue;}
      updates.push(value);if(updates.length===count)break;
     }
     if(aborted||closed)return;
@@ -130,23 +132,27 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
    if(method==='PUT'){
     const data=await body(req);bot=authenticate(req,'commands:manage');only(data,['commands']);
     if(!Array.isArray(data.commands)||data.commands.length>100||data.commands.some(c=>!c||typeof c!=='object'||Array.isArray(c)||Object.keys(c).some(k=>!['command','description'].includes(k))||typeof c.command!=='string'||!/^[a-z0-9_]{1,32}$/.test(c.command)||typeof c.description!=='string'||!c.description.trim()||c.description.length>256)||new Set(data.commands.map(c=>c.command)).size!==data.commands.length)throw fail(400,'INVALID_COMMANDS','Некорректные команды');
-    db.prepare('UPDATE bots SET commands=? WHERE id=?').run(JSON.stringify(data.commands),bot.id);res.writeHead(204);return res.end();
+    db.prepare('UPDATE bots SET commands=? WHERE id=?').run(JSON.stringify(data.commands),bot.id);for(const chat of db.prepare('SELECT chat_id FROM bot_chat_grants WHERE bot_id=? AND active=1').all(bot.id))broadcast(chat.chat_id,{type:'bot-commands',chat_id:chat.chat_id});res.writeHead(204);return res.end();
    }
   }
+  const callbackMatch=path.match(/^\/bot\/v1\/callbacks\/([a-f0-9-]{36})\/answer$/);
+  if(callbackMatch&&method==='POST'){const data=await body(req);bot=authenticate(req,'callbacks:answer');const result=interactions.answer(bot,callbackMatch[1],data);if(result)interactions.emit(result);res.writeHead(204);return res.end();}
   const chatMatch=path.match(/^\/bot\/v1\/chats\/(\d+)$/);
   if(chatMatch&&method==='GET'){bot=authenticate(req,'chats:read_basic');const c=access(bot,number(chatMatch[1]));return json(res,200,{id:String(c.id),type:c.kind==='direct'?'private':'group',encryption_mode:c.encryption_mode,effective_permissions:{'messages:send':!!c.can_send&&bot.scopes.includes('messages:send'),'messages:read_events':bot.scopes.includes('messages:read_events'),'groups:read_all':c.visibility==='full_read'&&bot.scopes.includes('groups:read_all')}});}
   if(path==='/bot/v1/messages'&&method==='POST'){
-   const data=await body(req);bot=authenticate(req,'messages:send');only(data,['chat_id','type','text','reply_to_message_id']);
+   const data=await body(req);bot=authenticate(req,'messages:send');only(data,['chat_id','type','text','reply_to_message_id','reply_markup']);
+   const markup=interactions.markup(data.reply_markup);
    if(data.type!=='text'||typeof data.text!=='string'||!data.text.trim()||data.text.length>4000)throw fail(400,'INVALID_MESSAGE','Текст: от 1 до 4000 символов');
    const chat=number(data.chat_id);rate('send:'+bot.id,60);rate('send-chat:'+bot.id+':'+chat,20);const reply=data.reply_to_message_id==null?null:number(data.reply_to_message_id),key=req.headers['idempotency-key'];
    if(typeof key!=='string'||!/^[a-zA-Z0-9._:-]{16,128}$/.test(key))throw fail(400,'IDEMPOTENCY_KEY_REQUIRED','Нужен Idempotency-Key: 16–128 символов');
-   const fingerprint=hash(JSON.stringify({chat_id:chat,type:data.type,text:data.text,reply_to_message_id:reply}));
+   const fingerprint=hash(JSON.stringify({chat_id:chat,type:data.type,text:data.text,reply_to_message_id:reply,...(markup!==undefined?{reply_markup:markup}:{})}));
    const result=tx(()=>{
     const c=access(bot,chat);if(!c.can_send)throw fail(403,'SEND_DENIED','Отправка боту не разрешена');
     const old=db.prepare('SELECT * FROM bot_idempotency WHERE bot_id=? AND key=?').get(bot.id,key);
     if(old&&old.created>Date.now()-86400000){if(old.request_hash!==fingerprint)throw fail(409,'IDEMPOTENCY_CONFLICT','Этот ключ использован с другим запросом');return {response:JSON.parse(old.response_body)};}
     if(old)db.prepare('DELETE FROM bot_idempotency WHERE bot_id=? AND key=?').run(bot.id,key);
     const sent=messaging.insert(chat,bot.account_id,{text:data.text,reply_to:reply,client_id:hash(bot.id+'\0'+key+'\0'+Date.now())});
+    interactions.setMarkup(sent.row,bot,markup);
     const response=messageInfo(sent.row);
     db.prepare('INSERT INTO bot_idempotency VALUES(?,?,?,?,?)').run(bot.id,key,fingerprint,JSON.stringify(response),Date.now());return {row:sent.row,response};
    });if(result.row)messaging.publish(result.row);return json(res,201,result.response);
@@ -154,8 +160,9 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
   const messageMatch=path.match(/^\/bot\/v1\/messages\/(\d+)$/);
   if(messageMatch&&['PATCH','DELETE'].includes(method)){
    const data=method==='PATCH'?await body(req):{};bot=authenticate(req,method==='PATCH'?'messages:edit_own':'messages:delete_own');
-   if(method==='PATCH'){only(data,['revision','text']);if(!Number.isSafeInteger(data.revision)||data.revision<0||typeof data.text!=='string'||!data.text.trim()||data.text.length>4000)throw fail(400,'INVALID_MESSAGE','Нужны текст и текущая revision');}
-   const row=tx(()=>{const old=db.prepare('SELECT * FROM messages WHERE id=?').get(number(messageMatch[1]));if(!old||old.sender_id!==bot.account_id)throw fail(403,'MESSAGE_ACCESS_DENIED','Сообщение недоступно');access(bot,old.chat_id);return method==='PATCH'?messaging.editOwn(old.id,bot.account_id,data):messaging.deleteOwn(old.id,bot.account_id);});
+   if(method==='PATCH'){only(data,['revision','text','reply_markup']);if(!Number.isSafeInteger(data.revision)||data.revision<0||data.text===undefined&&data.reply_markup===undefined||data.text!==undefined&&(typeof data.text!=='string'||!data.text.trim()||data.text.length>4000))throw fail(400,'INVALID_MESSAGE','Нужны текст и текущая revision');}
+   const markup=method==='PATCH'?interactions.markup(data.reply_markup):undefined;
+   const row=tx(()=>{const old=db.prepare('SELECT * FROM messages WHERE id=?').get(number(messageMatch[1]));if(!old||old.sender_id!==bot.account_id)throw fail(403,'MESSAGE_ACCESS_DENIED','Сообщение недоступно');access(bot,old.chat_id);const changed=method==='PATCH'?messaging.editOwn(old.id,bot.account_id,{...data,text:data.text??old.text}):messaging.deleteOwn(old.id,bot.account_id);if(method==='PATCH')interactions.setMarkup(changed,bot,markup);return changed;});
    messaging.publish(row,'message-update');if(method==='DELETE'){res.writeHead(204);return res.end();}return json(res,200,messageInfo(row));
   }
   throw fail(404,'METHOD_NOT_FOUND','Метод Bot API не найден');
@@ -202,7 +209,12 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
   throw fail(404,'METHOD_NOT_FOUND','Метод Developer API не найден');
  }
  async function userHandle(req,res,url,uid){
-  if(url.pathname==='/api/bots/manager'&&req.method==='POST'){await body(req);authorizeOwner(req);const chat=privateChat(uid,father.accountId,true);const welcome=tx(()=>{if(db.prepare('SELECT 1 FROM messages WHERE chat_id=? AND sender_id=?').get(chat.id,father.accountId))return null;return messaging.insert(chat.id,father.accountId,{text:father.help,client_id:randomUUID()}).row;});if(welcome)messaging.publish(welcome);json(res,200,{...chat,username:father.username});return true;}
+  if(url.pathname==='/api/bots/interactions'&&req.method==='POST'){const data=await body(req);authorizeOwner(req);rate('interaction:'+uid,60);const result=interactions.create(uid,data);interactions.emit(result);json(res,200,result.response);return true;}
+  const interaction=url.pathname.match(/^\/api\/bots\/interactions\/([a-f0-9-]{36})$/);
+  if(interaction&&req.method==='GET'){json(res,200,interactions.getStatus(interaction[1],uid));return true;}
+  const commands=url.pathname.match(/^\/api\/chats\/(\d+)\/bot-commands$/);
+  if(commands&&req.method==='GET'){json(res,200,{bots:interactions.commands(number(commands[1]),uid)});return true;}
+  if(url.pathname==='/api/bots/manager'&&req.method==='POST'){await body(req);authorizeOwner(req);const chat=privateChat(uid,father.accountId,true);const welcome=tx(()=>{if(db.prepare('SELECT 1 FROM messages WHERE chat_id=? AND sender_id=?').get(chat.id,father.accountId))return null;const row=messaging.insert(chat.id,father.accountId,{text:father.help,client_id:randomUUID()}).row;interactions.setMarkup(row,get(father.id),interactions.markup(father.markup));return row;});if(welcome)messaging.publish(welcome);json(res,200,{...chat,username:father.username});return true;}
   if(url.pathname==='/api/bots/resolve'&&req.method==='GET'){const row=db.prepare('SELECT b.id FROM bots b JOIN users u ON u.id=b.account_id WHERE u.username_normalized=?').get(canonicalUsername(url.searchParams.get('username')));const bot=available(row&&get(row.id));json(res,200,info(bot));return true;}
   const match=url.pathname.match(/^\/api\/bots\/([a-f0-9-]{36})\/(start|block)$/);
   if(match&&req.method==='POST'){
@@ -228,7 +240,7 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
   broadcast(chat,{type:'community',chat_id:chat});json(res,200,{ok:true});return true;
  }
  return {
-  privateChat,drain:tick,
+  privateChat,drain:tick,buttons:interactions.buttons,
   checkHumanSend(chat,uid){const bot=db.prepare("SELECT b.id FROM bots b JOIN members m ON m.user_id=b.account_id WHERE m.chat_id=? AND b.account_id<>? AND (SELECT kind FROM chats WHERE id=?)='direct'").get(chat,uid,chat);if(bot){const row=db.prepare('SELECT active FROM bot_chat_grants WHERE bot_id=? AND chat_id=?').get(bot.id,chat);if(!row?.active)throw fail(403,'BOT_BLOCKED','Сначала разблокируйте бота');available(get(bot.id));}},
   async handle(req,res,url,uid){
    const botPath=/^\/(?:api\/)?bot\/v1(?:\/|$)/.test(url.pathname),devPath=/^\/(?:api\/)?developer\/v1(?:\/|$)/.test(url.pathname);

@@ -101,7 +101,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   const handleProfiles = profiles({db,uploads,auth,publish,userById,json,body});
   usernameService=usernames({db,body,json,userById,publish,uploads});
   let expressionService;
-  const handleMessaging = messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions:()=>expressionService,authorizeSend:(chat,uid)=>botService?.checkHumanSend(chat,uid)});
+  const handleMessaging = messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions:()=>expressionService,authorizeSend:(chat,uid)=>botService?.checkHumanSend(chat,uid),botButtons:row=>botService?.buttons(row)||[]});
   expressionService=expressions({db,uploads,body,json,member,publish});
   handleMessaging.cleanupUnused();
   const handleCommunities = communities({db,member,broadcast,publish,json,body,userById,online:id=>!!streams.get(id)?.size});
@@ -140,7 +140,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
       const session = auth(req), uid = session.user_id;
       res.volnaViewer=uid;
       adminService.guard(req,url,session);
-      if(/^\/(?:api\/)?developer\/v1(?:\/|$)/.test(path)||/^\/api\/(bots\/|chats\/\d+\/bots(?:\/|$))/.test(path)){limit(`bot-control:${uid}`,120);if(await botService.handle(req,res,url,uid))return;}
+      if(/^\/(?:api\/)?developer\/v1(?:\/|$)/.test(path)||/^\/api\/(bots\/|chats\/\d+\/(?:bots(?:\/|$)|bot-commands$))/.test(path)){limit(`bot-control:${uid}`,120);if(await botService.handle(req,res,url,uid))return;}
       if(await handleFolders(req,res,url,uid))return;
       if (path === '/api/me' && method === 'GET') {
         const user=userById(uid,true);
