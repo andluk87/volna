@@ -251,7 +251,7 @@ test('inline buttons keep callback payload server-side, bind actor and bot, dedu
  const button=message.bot_buttons[0][0],tap={message_id:message.id,button_id:button.id,interaction_id:randomUUID()};
  assert.equal((await f.call('/api/bots/interactions',f.other.token,{...tap,actor_id:f.owner.id})).status,400);
  assert.equal((await f.call('/api/bots/interactions',f.other.token,{...tap,callback_data:'forged'})).status,400);
- assert.equal((await f.call('/api/bots/interactions',f.owner.token,tap)).status,403);
+ assert.equal((await f.call('/api/bots/interactions',f.owner.token,tap)).status,404);
  const clicked=await f.call('/api/bots/interactions',f.other.token,tap);assert.equal(clicked.status,200,JSON.stringify(clicked.data));assert.equal(clicked.data.status,'pending');
  assert.equal((await f.call('/api/bots/interactions',f.other.token,tap)).data.callback_id,clicked.data.callback_id);
  const updates=(await f.call('/bot/v1/updates?timeout=0',b.token)).data.updates;assert.equal(updates.length,1);
@@ -315,7 +315,7 @@ test('main bot buttons create owner-scoped dialog state; command menus refresh a
  const pressed=await f.call('/api/bots/interactions',f.owner.token,{message_id:welcome.id,button_id:welcome.bot_buttons[0][0].id,interaction_id:randomUUID()});assert.equal(pressed.status,200,JSON.stringify(pressed.data));assert.equal(pressed.data.status,'answered');
  assert.equal(f.app.db.prepare('SELECT step FROM bot_father_sessions WHERE user_id=?').get(f.owner.id).step,'name');
  const menu=(await f.call('/api/chats/'+manager.id+'/bot-commands',f.owner.token)).data;assert.ok(menu.bots[0].commands.some(c=>c.command==='newbot'));
- assert.equal((await f.call('/api/chats/'+manager.id+'/bot-commands',f.other.token)).status,403);
+ assert.equal((await f.call('/api/chats/'+manager.id+'/bot-commands',f.other.token)).status,404);
  const b=await f.bot(),chat=(await f.call('/api/bots/'+b.bot.id+'/start',f.other.token,{})).data.id;
  assert.equal((await f.call('/bot/v1/commands',b.token,{commands:[{command:'catalog',description:'Каталог'}]},'PUT')).status,204);
  assert.equal((await f.call('/api/chats/'+chat+'/bot-commands',f.other.token)).data.bots[0].commands[0].command,'catalog');
