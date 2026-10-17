@@ -8,7 +8,7 @@ pg.types.setTypeParser(1700,value=>{const n=Number(value);if(!Number.isFinite(n)
 const client=new pg.Client({connectionString,application_name:'volna',connectionTimeoutMillis:10000,statement_timeout:30000});
 let closed=false;
 const identities=new Set();
-const respond=value=>{port.postMessage(value);Atomics.store(state,0,1);Atomics.notify(state,0);};
+const respond=(value,id=0)=>{port.postMessage({...value,id});Atomics.store(state,0,1);Atomics.notify(state,0);};
 try {
  await client.connect();
  if(schema){if(!/^volna_test_[a-f0-9]+$/.test(schema))throw Error('Invalid test schema');await client.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);await client.query(`SET search_path TO "${schema}", public`);}
@@ -33,6 +33,6 @@ port.on('message',async request=>{
   if(request.op==='close'){closed=true;await client.end();result=null;}
   else if(request.op==='exec'){for(const sql of sqlParts(request.sql))await query(sql);result=null;}
   else result=await query(request.sql,request.params,request.op);
-  respond({result});if(closed)port.close();
- }catch(e){respond({error:{message:e.code==='23505'?'UNIQUE constraint violation':e.message,code:e.code,detail:undefined}});}
+  respond({result},request.id);if(closed)port.close();
+ }catch(e){respond({error:{message:e.code==='23505'?'UNIQUE constraint violation':e.message,code:e.code,detail:undefined}},request.id);}
 });
