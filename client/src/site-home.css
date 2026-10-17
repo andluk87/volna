@@ -5,3 +5,5 @@ html:has(.site-home),body:has(.site-home),#root:has(.site-home){height:auto;min-
 .site-home .site-arrow{display:inline-block;width:16px;height:16px;vertical-align:-3px;margin-left:4px}
 
 .site-hero figure img{aspect-ratio:1;height:auto}.site-news img{aspect-ratio:16/9;object-fit:cover}
+
+@media(max-width:760px){.site-nav{height:auto;min-height:76px;flex-wrap:wrap;gap:12px;padding:16px 0}.site-nav nav{flex-wrap:wrap}.site-nav nav a[href="#downloads"]{display:none}.site-home>footer{flex-wrap:wrap}}

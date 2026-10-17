@@ -7,6 +7,7 @@ import {notificationUnreadCount,syncDesktopNotificationSettings} from './desktop
 import AccountCalls from './AccountCalls';
 import useCloudAppearance from './useCloudAppearance';
 import SiteHome from './SiteHome';
+import BotDeveloperDocs from './BotDeveloperDocs';
 import {presenceLabel} from './presence.mjs';
 import {preparePhoto} from './prepare-photo.mjs';
 import useColumnLayout from './useColumnLayout';
@@ -360,5 +361,5 @@ function App({demo=false}){
  {deleting&&<div className="modal-backdrop"><section role="dialog" aria-modal="true" aria-label="Удалить сообщение" className="modal"><h2>Удалить сообщение у всех?</h2><p>Вместо него останется отметка об удалении. Пересланные копии сохранятся.</p><footer><button onClick={()=>setDeleting(null)}>Отмена</button><button className="danger" onClick={async()=>{const targets=deleting.selection||[deleting];for(const m of targets)await action(m,'delete',{});setSelectedIds(new Set());setDeleting(null);}}>Удалить</button></footer></section></div>}
  </main>;
 }
-function Entry(){if(import.meta.env.DEV&&new URLSearchParams(location.search).get('demo')==='1')return <App demo/>;const path=location.pathname.match(/^\/([a-zA-Z0-9_]{4,32})$/);return path&&path[1]!=='app'?<PublicProfile username={path[1]}/>:<App/>;}
+function Entry(){if(/^\/developers\/bots\/?$/.test(location.pathname))return <BotDeveloperDocs/>;if(import.meta.env.DEV&&new URLSearchParams(location.search).get('demo')==='1')return <App demo/>;const path=location.pathname.match(/^\/([a-zA-Z0-9_]{4,32})$/);return path&&path[1]!=='app'?<PublicProfile username={path[1]}/>:<App/>;}
 createRoot(document.getElementById('root')).render(<><Entry/><DesktopUpdate/></>);
