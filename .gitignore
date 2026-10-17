@@ -20,3 +20,5 @@ client/.desktop-public/
 client/electron/config.json
 client/electron-builder.windows.json
 android-native/.kotlin/
+
+work/

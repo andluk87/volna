@@ -73,6 +73,6 @@ test('group/channel permissions, roles, invitations, bans, ownership and realtim
   // The server never persists a raw invitation secret.
   const secret=(await call(`/communities/${channel}/invite`,a.token,{})).data.token;
   assert.notEqual(app.db.prepare('SELECT token_hash FROM community_invites WHERE chat_id=?').get(channel).token_hash,secret);
-  assert.equal(app.db.prepare('PRAGMA user_version').get().user_version,7);
+  assert.equal(app.db.schemaVersion,7);
  }finally{await app.close();rmSync(dir,{recursive:true,force:true});}
 });

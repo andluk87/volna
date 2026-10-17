@@ -17,7 +17,7 @@ test('phone login, fresh IDs, phone privacy, one-use SMS, retries and old auth r
  f.advance(60001);const b=await f.login('+79001112233');assert.equal(a.user.id,b.user.id);assert.equal(f.sent[1].reference,'ext_id_006');assert.notEqual(f.sent[0].code,f.sent[1].code);
  const outsider=await f.login('+79009998877');assert.equal((await f.call('/users/'+a.user.id,undefined,outsider.token)).data.phone,undefined);
  for(const path of ['/register','/login','/password','/auth/telegram/config','/auth/telegram/start','/auth/telegram/exchange'])assert.equal((await f.call(path,{})).status,404);
- assert.deepEqual(f.app.db.prepare('PRAGMA table_info(users)').all().map(x=>x.name).filter(x=>/salt|hash|telegram|password/.test(x)),[]);
+ assert.deepEqual(f.app.db.columns('users').map(x=>x.name).filter(x=>/salt|hash|telegram|password/.test(x)),[]);
 });
 test('Web keeps separate HttpOnly account cookies and refreshes the requested account only',async t=>{
  const f=await fixture(t),a=await f.login('+79001112233'),b=await f.login('+79002223344'),jar=new Map();

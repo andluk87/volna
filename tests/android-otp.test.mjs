@@ -62,7 +62,7 @@ test('Android pending concurrent start sends only one SMS and expiry/attempt lim
 
 test('Android hourly/day limits expose the actual server-controlled next request time',async t=>{
  const f=await fixture(t),a=(await f.start()).body;
- f.app.db.prepare('INSERT OR REPLACE INTO admin_config(id,value) VALUES(1,?)').run(JSON.stringify({sms_day:1}));
+ f.app.db.prepare('INSERT INTO admin_config(id,value) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(JSON.stringify({sms_day:1}));
  f.advance(60001);const limited=await f.start({request_id:'test-request-00000002'});
  assert.equal(limited.status,429);assert.equal(limited.body.retry_at,a.server_time+86400000);assert.equal(f.sent.length,1);
 });

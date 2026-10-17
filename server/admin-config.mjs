@@ -8,10 +8,10 @@ export function initAdminSchema(db){
  CREATE TABLE IF NOT EXISTS admin_sessions(id TEXT PRIMARY KEY,token_hash TEXT UNIQUE NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,last_seen INTEGER NOT NULL,agent TEXT NOT NULL,ip TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS admin_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,created INTEGER NOT NULL,actor TEXT NOT NULL,action TEXT NOT NULL,target TEXT NOT NULL,reason TEXT NOT NULL,details TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS admin_backups(id TEXT PRIMARY KEY,filename TEXT NOT NULL,created INTEGER NOT NULL,size INTEGER NOT NULL);`);
- if(!db.prepare('PRAGMA table_info(admin_sms)').all().some(c=>c.name==='provider'))db.exec("ALTER TABLE admin_sms ADD COLUMN provider TEXT NOT NULL DEFAULT 'notificore'");
+ if(!db.columns('admin_sms').some(c=>c.name==='provider'))db.exec("ALTER TABLE admin_sms ADD COLUMN provider TEXT NOT NULL DEFAULT 'notificore'");
  for(const [table,columns] of Object.entries({users:{admin_blocked:'INTEGER NOT NULL DEFAULT 0',admin_reason:"TEXT NOT NULL DEFAULT ''"},chats:{admin_locked:'INTEGER NOT NULL DEFAULT 0',admin_deleted:'INTEGER NOT NULL DEFAULT 0'},attachments:{admin_blocked:'INTEGER NOT NULL DEFAULT 0'}})){
-  if(!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table))continue;
-  const present=new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c=>c.name));
+  if(!db.hasTable(table))continue;
+  const present=new Set(db.columns(table).map(c=>c.name));
   for(const [name,type] of Object.entries(columns))if(!present.has(name))db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
  }
 }

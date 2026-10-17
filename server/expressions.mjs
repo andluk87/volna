@@ -17,8 +17,8 @@ export function expressions({db,uploads,body,json,member,publish}) {
  CREATE TABLE IF NOT EXISTS expression_usage(user_id INTEGER NOT NULL REFERENCES users(id),item_id TEXT NOT NULL REFERENCES expression_items(id) ON DELETE CASCADE,used INTEGER NOT NULL DEFAULT 0,count INTEGER NOT NULL DEFAULT 0,favorite INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(user_id,item_id));
  CREATE INDEX IF NOT EXISTS expression_files ON expression_items(attachment_id);
  CREATE INDEX IF NOT EXISTS expression_pack_items ON expression_items(pack_id,position);`);
- if(!db.prepare('PRAGMA table_info(expression_packs)').all().some(c=>c.name==='builtin'))db.exec('ALTER TABLE expression_packs ADD COLUMN builtin INTEGER NOT NULL DEFAULT 0');
- for(const name of ['client_id','fingerprint'])if(!db.prepare('PRAGMA table_info(expression_packs)').all().some(c=>c.name===name))db.exec(`ALTER TABLE expression_packs ADD COLUMN ${name} TEXT`);
+ if(!db.columns('expression_packs').some(c=>c.name==='builtin'))db.exec('ALTER TABLE expression_packs ADD COLUMN builtin INTEGER NOT NULL DEFAULT 0');
+ for(const name of ['client_id','fingerprint'])if(!db.columns('expression_packs').some(c=>c.name===name))db.exec(`ALTER TABLE expression_packs ADD COLUMN ${name} TEXT`);
  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS expression_pack_nonce ON expression_packs(owner_id,client_id) WHERE client_id IS NOT NULL;');
  db.exec('CREATE TABLE IF NOT EXISTS expression_seeded(user_id INTEGER PRIMARY KEY REFERENCES users(id));');
  function seed(uid) {

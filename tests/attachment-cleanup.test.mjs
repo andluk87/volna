@@ -23,7 +23,7 @@ test('startup and subsequent uploads retain old pack, avatar, message and foreig
   app.db.prepare('UPDATE users SET avatar_id=? WHERE id=1').run(attachment('avatar'));
   app.db.exec("INSERT INTO chats(id,pair) VALUES(1,'cleanup'); INSERT INTO members(chat_id,user_id) VALUES(1,1)");
   app.db.prepare('INSERT INTO messages(chat_id,sender_id,text,client_id,created_at,attachment_id) VALUES(1,1,?,?,?,?)').run('retained message','cleanup-message-id',new Date(old).toISOString(),attachment('message'));
-  // Additional FK references must never result in an unlink before SQLite rejects deletion.
+  // Additional FK references must never result in an unlink before PostgreSQL rejects deletion.
   app.db.exec('CREATE TABLE retained_media(id INTEGER PRIMARY KEY, attachment_id TEXT REFERENCES attachments(id))');
   app.db.prepare('INSERT INTO retained_media(attachment_id) VALUES(?)').run(attachment('foreign-key'));
   attachment('unused');attachment('recent',Date.now());
@@ -42,10 +42,10 @@ test('startup and subsequent uploads retain old pack, avatar, message and foreig
    assert.equal(app.db.prepare('SELECT 1 FROM attachments WHERE id=?').get(ids.missing),undefined);
    assert.ok(app.db.prepare('SELECT 1 FROM attachments WHERE id=?').get(ids['blocked-path']),'failed unlink restores the attachment row');
    assert.ok(existsSync(join(uploads,ids['blocked-path'])));
-   assert.deepEqual(app.db.prepare('PRAGMA foreign_key_check').all(),[]);
+   assert.equal(app.db.prepare("SELECT COUNT(*) AS n FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND contype='f' AND NOT convalidated").get().n,0);
    // Exercise the same collector on upload, after the server has started.
    const token='cleanup-session-token';
-   const {createHash}=await import('node:crypto');app.db.prepare('INSERT OR REPLACE INTO sessions(token,user_id,expires) VALUES(?,1,?)').run(createHash('sha256').update(token).digest('hex'),Date.now()+60000);
+   const {createHash}=await import('node:crypto');app.db.prepare('INSERT INTO sessions(token,user_id,expires) VALUES(?,1,?) ON CONFLICT(token) DO UPDATE SET expires=excluded.expires').run(createHash('sha256').update(token).digest('hex'),Date.now()+60000);
    const upload=await fetch(base+'/api/uploads',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'image/png','X-File-Name':'new.png'},body:Buffer.from('new upload')});assert.equal(upload.status,201);await upload.json();
    assert.equal(readFileSync(join(uploads,ids['foreign-key']),'utf8'),'original foreign-key');
    await app.close();app=null;

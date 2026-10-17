@@ -11,16 +11,22 @@ export function topicNotification(db,chat,uid,text,replyTo=null){
  return mode!=='mentions'||mentioned(text,user.username)||!!(replyTo&&db.prepare('SELECT 1 FROM messages WHERE id=? AND chat_id=? AND sender_id=? AND deleted_at IS NULL').get(replyTo,chat,uid));
 }
 export function topics({db,body,json,member,broadcast,publish}){
- const preferenceColumns=new Set(db.prepare('PRAGMA table_info(chat_preferences)').all().map(c=>c.name));
+ const preferenceColumns=new Set(db.columns('chat_preferences').map(c=>c.name));
  if(!preferenceColumns.has('notification_override'))db.exec('ALTER TABLE chat_preferences ADD COLUMN notification_override INTEGER NOT NULL DEFAULT 0');
- db.exec(`CREATE TRIGGER IF NOT EXISTS topic_member_add AFTER INSERT ON members BEGIN
- INSERT OR IGNORE INTO members(chat_id,user_id,role) SELECT id,NEW.user_id,NEW.role FROM chats WHERE parent_id=NEW.chat_id AND topic_deleted=0; END;
- CREATE TRIGGER IF NOT EXISTS topic_member_remove AFTER DELETE ON members BEGIN
- DELETE FROM members WHERE user_id=OLD.user_id AND chat_id IN (SELECT id FROM chats WHERE parent_id=OLD.chat_id); END;
- CREATE TRIGGER IF NOT EXISTS topic_member_role AFTER UPDATE OF role ON members BEGIN
- UPDATE members SET role=NEW.role WHERE user_id=NEW.user_id AND chat_id IN (SELECT id FROM chats WHERE parent_id=NEW.chat_id AND topic_deleted=0); END;
- CREATE TRIGGER IF NOT EXISTS topic_posting_policy AFTER UPDATE OF posting_policy ON chats BEGIN
- UPDATE chats SET posting_policy=NEW.posting_policy WHERE parent_id=NEW.id; END;`);
+ db.exec(`CREATE OR REPLACE FUNCTION volna_topic_members() RETURNS trigger LANGUAGE plpgsql AS $fn$
+ BEGIN
+ IF TG_OP='INSERT' THEN
+ INSERT INTO members(chat_id,user_id,role) SELECT id,NEW.user_id,NEW.role FROM chats WHERE parent_id=NEW.chat_id AND topic_deleted=0 ON CONFLICT DO NOTHING;
+ ELSIF TG_OP='DELETE' THEN DELETE FROM members WHERE user_id=OLD.user_id AND chat_id IN (SELECT id FROM chats WHERE parent_id=OLD.chat_id);
+ ELSE UPDATE members SET role=NEW.role WHERE user_id=NEW.user_id AND chat_id IN (SELECT id FROM chats WHERE parent_id=NEW.chat_id AND topic_deleted=0);
+ END IF; RETURN NULL;
+ END $fn$;
+ DROP TRIGGER IF EXISTS volna_topic_members ON members;
+ CREATE TRIGGER volna_topic_members AFTER INSERT OR DELETE OR UPDATE OF role ON members FOR EACH ROW EXECUTE FUNCTION volna_topic_members();
+ CREATE OR REPLACE FUNCTION volna_topic_posting() RETURNS trigger LANGUAGE plpgsql AS $fn$
+ BEGIN UPDATE chats SET posting_policy=NEW.posting_policy WHERE parent_id=NEW.id; RETURN NULL; END $fn$;
+ DROP TRIGGER IF EXISTS volna_topic_posting ON chats;
+ CREATE TRIGGER volna_topic_posting AFTER UPDATE OF posting_policy ON chats FOR EACH ROW EXECUTE FUNCTION volna_topic_posting();`);
  const group=(id,uid)=>{member(id,uid);const c=db.prepare('SELECT c.*,m.role FROM chats c JOIN members m ON m.chat_id=c.id AND m.user_id=? WHERE c.id=?').get(uid,id);if(c.kind!=='group'||c.parent_id)throw fail(400,'Темы доступны в основной группе');return c;};
  const get=(gid,id,uid)=>{group(gid,uid);const c=id===gid?db.prepare('SELECT * FROM chats WHERE id=?').get(gid):db.prepare('SELECT * FROM chats WHERE id=? AND parent_id=? AND topic_deleted=0 AND admin_deleted=0').get(id,gid);if(!c)throw fail(404,'Тема не найдена');member(id,uid);return c;};
  const canManage=(c,g,uid)=>g.role==='owner'||g.role==='admin'||c.created_by===uid;

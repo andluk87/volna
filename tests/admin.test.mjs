@@ -84,7 +84,7 @@ test('admin list pages have safe SQL, full backup contains database/files and do
  assert.equal((await f.admin('files/'+file+'/block',{blocked:true,reason:'Опасный файл'})).status,200);
  assert.equal((await f.call('/files/'+file,undefined,u.token)).status,404);
  const backup=await f.admin('backups',{reason:'Перед обновлением'});assert.equal(backup.status,201,JSON.stringify(backup.data));
- const archive=join(f.dir,'admin-backups',backup.data.filename);const names=execFileSync('tar',['-tzf',archive],{encoding:'utf8'});assert.match(names,/volna.db/);assert.match(names,new RegExp('uploads/'+file));
+ const archive=join(f.dir,'admin-backups',backup.data.filename);const names=execFileSync('tar',['-tzf',archive],{encoding:'utf8'});assert.match(names,/volna.dump/);assert.match(names,new RegExp('uploads/'+file));
  const url=f.base+'/admin/api/backups/'+backup.data.id+'/download';assert.equal((await fetch(url)).status,401);const download=await fetch(url,{headers:{Cookie:f.cookie()}});assert.equal(download.status,200);assert.match(download.headers.get('content-disposition'),/attachment/);await download.arrayBuffer();
  assert.equal((await f.admin('backups/'+backup.data.id+'/delete',{confirm:backup.data.id,reason:'Проверочная копия'})).status,200);
  const r=await fetch(f.base+'/');assert.equal(r.status,200);assert.match(r.headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.match(await r.text(),/Панель|Администратор/);

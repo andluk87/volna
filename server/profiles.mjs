@@ -4,11 +4,11 @@ const fail=(status,message)=>Object.assign(new Error(message),{status});
 export function profiles({db,uploads,auth,publish,userById,json,body}){
  db.exec('BEGIN IMMEDIATE');
  try{
-  if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='bio'))db.exec("ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''");
-  const columns=new Set(db.prepare('PRAGMA table_info(users)').all().map(c=>c.name));
+  if(!db.columns('users').some(c=>c.name==='bio'))db.exec("ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''");
+  const columns=new Set(db.columns('users').map(c=>c.name));
   if(!columns.has('avatar_id'))db.exec('ALTER TABLE users ADD COLUMN avatar_id TEXT');
   if(!columns.has('avatar_hidden'))db.exec('ALTER TABLE users ADD COLUMN avatar_hidden INTEGER NOT NULL DEFAULT 0 CHECK(avatar_hidden IN (0,1))');
-  if(db.prepare('PRAGMA user_version').get().user_version<7)db.exec('PRAGMA user_version=7');
+  if(db.schemaVersion<7)db.schemaVersion=7;
   db.exec('COMMIT');
  }catch(e){db.exec('ROLLBACK');throw e;}
  return async(req,res,url,uid)=>{

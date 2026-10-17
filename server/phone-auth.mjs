@@ -18,7 +18,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
   loginCheck=()=>{},logger=event=>console.info('[sms]',JSON.stringify(event)),
   referenceStart=Number(process.env.SMS_REFERENCE_START||0),smsReady,appHashes=androidSmsHashes()}){
   const sms=createSmsRouter({db,...smsOptions});sender??=sms.send;const isSmsReady=()=>typeof smsReady==='function'?smsReady():smsReady??sms.ready();
-  if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='phone_verified_at'))db.exec('ALTER TABLE users ADD COLUMN phone_verified_at INTEGER NOT NULL DEFAULT 0');
+  if(!db.columns('users').some(c=>c.name==='phone_verified_at'))db.exec('ALTER TABLE users ADD COLUMN phone_verified_at INTEGER NOT NULL DEFAULT 0');
   db.exec(`CREATE TABLE IF NOT EXISTS auth_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sms_challenges(id TEXT PRIMARY KEY,phone TEXT NOT NULL,code_hash TEXT NOT NULL,
       reference TEXT UNIQUE NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,used INTEGER,attempts INTEGER NOT NULL DEFAULT 0,
@@ -32,8 +32,8 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
     CREATE TABLE IF NOT EXISTS qr_challenges(id TEXT PRIMARY KEY,scan_hash TEXT UNIQUE NOT NULL,poll_hash TEXT NOT NULL,
       platform TEXT NOT NULL,agent TEXT NOT NULL,ip TEXT NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',user_id INTEGER REFERENCES users(id),approved_by TEXT);`);
-  if(!db.prepare('PRAGMA table_info(sms_challenges)').all().some(c=>c.name==='provider'))db.exec("ALTER TABLE sms_challenges ADD COLUMN provider TEXT NOT NULL DEFAULT 'notificore'");
-  for(const [name,type] of [['android','INTEGER NOT NULL DEFAULT 0'],['app_hash',"TEXT NOT NULL DEFAULT ''"],['request_id','TEXT'],['purpose',"TEXT NOT NULL DEFAULT 'login'"],['owner','INTEGER']])if(!db.prepare('PRAGMA table_info(sms_challenges)').all().some(c=>c.name===name))db.exec(`ALTER TABLE sms_challenges ADD COLUMN ${name} ${type}`);
+  if(!db.columns('sms_challenges').some(c=>c.name==='provider'))db.exec("ALTER TABLE sms_challenges ADD COLUMN provider TEXT NOT NULL DEFAULT 'notificore'");
+  for(const [name,type] of [['android','INTEGER NOT NULL DEFAULT 0'],['app_hash',"TEXT NOT NULL DEFAULT ''"],['request_id','TEXT'],['purpose',"TEXT NOT NULL DEFAULT 'login'"],['owner','INTEGER']])if(!db.columns('sms_challenges').some(c=>c.name===name))db.exec(`ALTER TABLE sms_challenges ADD COLUMN ${name} ${type}`);
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS sms_idempotency ON sms_challenges(phone,request_id)');
   db.prepare('INSERT OR IGNORE INTO auth_settings VALUES(?,?)').run('hmac',randomBytes(32).toString('hex'));
   if(!Number.isSafeInteger(referenceStart)||referenceStart<0)throw Error('SMS_REFERENCE_START must be a non-negative integer');

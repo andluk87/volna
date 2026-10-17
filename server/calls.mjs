@@ -8,8 +8,8 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   CREATE INDEX IF NOT EXISTS call_history_caller ON call_history(caller,created);
   CREATE INDEX IF NOT EXISTS call_history_callee ON call_history(callee,created);`);
  db.exec('CREATE TABLE IF NOT EXISTS call_history_hidden(user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,call_id TEXT NOT NULL REFERENCES call_history(id) ON DELETE CASCADE,PRIMARY KEY(user_id,call_id))');
- if(!db.prepare('PRAGMA table_info(call_history)').all().some(column=>column.name==='video'))db.exec('ALTER TABLE call_history ADD COLUMN video INTEGER NOT NULL DEFAULT 0');
- if(!db.prepare('PRAGMA table_info(call_history)').all().some(column=>column.name==='ringed'))db.exec('ALTER TABLE call_history ADD COLUMN ringed INTEGER NOT NULL DEFAULT 1');
+ if(!db.columns('call_history').some(column=>column.name==='video'))db.exec('ALTER TABLE call_history ADD COLUMN video INTEGER NOT NULL DEFAULT 0');
+ if(!db.columns('call_history').some(column=>column.name==='ringed'))db.exec('ALTER TABLE call_history ADD COLUMN ringed INTEGER NOT NULL DEFAULT 1');
  db.prepare("UPDATE call_history SET ended=?,status='interrupted' WHERE ended IS NULL").run(clock());
  const finish=(c,status)=>{active.delete(c.id);db.prepare('UPDATE call_history SET ended=?,status=? WHERE id=?').run(clock(),status,c.id);onEnd(c.id);};
  const device=value=>{if(typeof value!=='string'||!/^[a-f0-9]{32}$/.test(value))throw fail(400,'Некорректное устройство');return value;};

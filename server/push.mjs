@@ -20,7 +20,7 @@ export function notifications({db,auth,body,json,contactDisplay=(uid,id,name)=>n
  db.prepare("DELETE FROM push_jobs WHERE kind='call'").run();
  let keys=db.prepare('SELECT * FROM push_keys WHERE id=1').get();
  if(!keys){const k=webpush.generateVAPIDKeys();db.prepare('INSERT INTO push_keys VALUES(1,?,?)').run(k.publicKey,k.privateKey);keys=db.prepare('SELECT * FROM push_keys WHERE id=1').get();}
- if(db.prepare('PRAGMA user_version').get().user_version<5)db.exec('PRAGMA user_version=5');
+ if(db.schemaVersion<5)db.schemaVersion=5;
  let closed=false,inflight=null;
  const remove=id=>db.prepare('DELETE FROM push_jobs WHERE id=?').run(id);
  function enqueue(users,chat,kind,messageId,topic,expires){
