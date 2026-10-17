@@ -13,17 +13,28 @@ export class PostgresDatabase {
   this.connectionString=connectionString;this.schema=schema;this.dialect='postgres';
   const {port1,port2}=new MessageChannel();this.port=port1;this.signal=new Int32Array(new SharedArrayBuffer(4));
   this.worker=new Worker(new URL('./database-worker.mjs',import.meta.url),{workerData:{connectionString,schema,port:port2,signal:this.signal.buffer},transferList:[port2],execArgv:[]});
-  this.worker.unref();this.port.unref();
-  try{this.receive();}catch(e){this.worker.terminate();throw e;}
+  this.worker.unref();this.port.unref();this.sequence=0;
+  try{this.receive(0);}catch(e){this.worker.terminate();throw e;}
  }
- receive(){
-  if(Atomics.wait(this.signal,0,0,45000)==='timed-out'){this.closed=true;this.worker.terminate();throw Error('PostgreSQL worker timed out; restart the server before retrying writes');}
-  const response=receiveMessageOnPort(this.port)?.message;Atomics.store(this.signal,0,0);
-  if(!response)throw Error('PostgreSQL worker returned no response');
-  if(response.error)throw Object.assign(Error(response.error.message),response.error);
-  return response.result;
+ receive(expected){
+  const deadline=Date.now()+45000;
+  for(;;){
+   // The port is the source of truth. A notification may arrive after its
+   // message was already read, so clear the flag BEFORE checking the queue.
+   Atomics.store(this.signal,0,0);
+   const packet=receiveMessageOnPort(this.port);
+   if(packet){
+    const response=packet.message;
+    if(response.id!==expected){this.closed=true;this.worker.terminate();throw Error('PostgreSQL worker response mismatch; restart the server before retrying writes');}
+    if(response.error)throw Object.assign(Error(response.error.message),response.error);
+    return response.result;
+   }
+   const remaining=deadline-Date.now();
+   if(remaining<=0){this.closed=true;this.worker.terminate();throw Error('PostgreSQL worker timed out; restart the server before retrying writes');}
+   Atomics.wait(this.signal,0,0,remaining);
+  }
  }
- request(op,sql,params){if(this.closed)throw Error('Database is closed');this.port.postMessage({op,sql,params});return this.receive();}
+ request(op,sql,params){if(this.closed)throw Error('Database is closed');const id=++this.sequence;this.port.postMessage({id,op,sql,params});return this.receive(id);}
  exec(sql){this.request('exec',sql);}
  prepare(sql){return {all:(...params)=>this.request('all',sql,params),get:(...params)=>this.request('all',sql,params)[0],run:(...params)=>this.request('run',sql,params)};}
  columns(table){return this.prepare('SELECT column_name AS name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=? ORDER BY ordinal_position').all(table);}
