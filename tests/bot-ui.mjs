@@ -35,6 +35,7 @@ try{
  const bot=(await api('/developer/v1/bots')).bots[0];const credentials=app.db.prepare('SELECT scopes FROM bot_tokens WHERE bot_id=? AND revoked IS NULL').get(bot.id);assert.ok(JSON.parse(credentials.scopes).includes('groups:read_all'));
  await page.setViewportSize({width:390,height:844});assert.equal(await access.evaluate(el=>el.scrollWidth>el.clientWidth),false);
  await page.screenshot({path:'work/bot-ui/group-mobile.png'});await access.getByRole('button',{name:'Удалить из группы',exact:true}).click();await access.getByText('В группе пока нет ботов с разрешениями.',{exact:true}).waitFor();
+ await access.getByRole('button',{name:'Закрыть Боты и доступ к группе',exact:true}).click();
  const botChat=await api('/bots/'+bot.id+'/start',{});
  await page.evaluate(id=>{window.__botChatId=id;},botChat.id);
  const botToken=app.db.prepare('SELECT id FROM bot_tokens WHERE bot_id=? AND revoked IS NULL').get(bot.id);
