@@ -1,4 +1,4 @@
-import {randomBytes,randomUUID,createCipheriv,createDecipheriv,createHmac} from 'node:crypto';
+import {randomBytes,randomUUID,createCipheriv,createDecipheriv,createHmac,createHash} from 'node:crypto';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {dirname} from 'node:path';
 import {webhookUrl,egressClient} from './webhook-egress.mjs';
@@ -12,6 +12,7 @@ export function secretBox(key){
 export function botWebhooks({db,tx,get,access,wake,audit,deliverable,masterReply,masterId,egress,keyPath,key,paused=()=>false,now=Date.now,random=Math.random}){
  db.exec(`CREATE TABLE IF NOT EXISTS bot_webhooks(bot_id TEXT PRIMARY KEY REFERENCES bots(id),generation TEXT NOT NULL,url TEXT NOT NULL,secret TEXT NOT NULL,event_types TEXT NOT NULL,enabled BIGINT NOT NULL DEFAULT 0,pending BIGINT NOT NULL DEFAULT 0,failures BIGINT NOT NULL DEFAULT 0,next_attempt BIGINT NOT NULL DEFAULT 0,last_status BIGINT,last_error TEXT,updated BIGINT NOT NULL);
  CREATE TABLE IF NOT EXISTS bot_delivery_attempts(bot_id TEXT NOT NULL REFERENCES bots(id),update_id BIGINT NOT NULL,generation TEXT NOT NULL,attempts BIGINT NOT NULL DEFAULT 0,next_attempt BIGINT NOT NULL DEFAULT 0,last_status BIGINT,last_error TEXT,finished BIGINT NOT NULL DEFAULT 0,updated BIGINT NOT NULL,PRIMARY KEY(bot_id,update_id,generation));
+ CREATE TABLE IF NOT EXISTS bot_webhook_claims(ticket_hash TEXT PRIMARY KEY,bot_id TEXT NOT NULL REFERENCES bots(id),generation TEXT NOT NULL,expires BIGINT NOT NULL,used BIGINT);
  CREATE INDEX IF NOT EXISTS bot_delivery_retention ON bot_delivery_attempts(updated);`);
  const send=egress||(process.env.WEBHOOK_EGRESS_SOCKET?egressClient(process.env.WEBHOOK_EGRESS_SOCKET):null);
  let box;
@@ -52,9 +53,17 @@ export function botWebhooks({db,tx,get,access,wake,audit,deliverable,masterReply
   const data=validate({url:value});
   // Store the origin chat for an atomic owner-only reply after asynchronous validation.
   save(bot,data,true);db.prepare('UPDATE bot_webhooks SET reply_chat=? WHERE bot_id=?').run(chat,bot.id);
-  return 'Проверяю адрес webhook. После проверки пришлю результат и отдельный секрет подписи в этот чат. Он сохранится в истории.';
+  return 'Проверяю адрес webhook. После проверки пришлю одноразовую ссылку для получения секрета подписи. Ссылка действует 5 минут.';
  }
  if(!db.columns('bot_webhooks').some(c=>c.name==='reply_chat'))db.exec('ALTER TABLE bot_webhooks ADD COLUMN reply_chat BIGINT');
+ function claim(ticket){
+  if(typeof ticket!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(ticket))throw problem(400,'INVALID_SECRET_LINK');
+  return tx(()=>{
+   const ticketHash=createHash('sha256').update(ticket).digest('hex'),record=db.prepare('SELECT * FROM bot_webhook_claims WHERE ticket_hash=? FOR UPDATE').get(ticketHash),c=record&&config(record.bot_id),bot=c&&get(c.bot_id);
+   if(!record||record.used||record.expires<=now()||!c?.enabled||c.generation!==record.generation||!bot||bot.status!=='active'||bot.admin_blocked||bot.owner_blocked||!db.prepare('SELECT 1 FROM members WHERE chat_id=? AND user_id=?').get(c.reply_chat,bot.owner_id)||!db.prepare('SELECT 1 FROM bot_chat_grants WHERE bot_id=? AND chat_id=? AND active=1').get(masterId,c.reply_chat))throw problem(410,'SECRET_LINK_EXPIRED_OR_USED');
+   const secret=secrets().open(c.secret);db.prepare('UPDATE bot_webhook_claims SET used=? WHERE ticket_hash=?').run(now(),ticketHash);return {webhook_secret:secret};
+  });
+ }
  let closed=false;const busy=new Set(),inflight=new Set();
  const current=(c)=>{const fresh=config(c.bot_id);return fresh&&fresh.generation===c.generation?fresh:null;};
  function usable(bot,row){
@@ -73,7 +82,9 @@ export function botWebhooks({db,tx,get,access,wake,audit,deliverable,masterReply
    const freshBot=get(c.bot_id);if(!freshBot||freshBot.status!=='active'||freshBot.admin_blocked||freshBot.owner_blocked)return;
    let reply;
    tx(()=>{
-    if(valid){db.prepare('UPDATE bot_webhooks SET enabled=1,pending=0,last_error=NULL WHERE bot_id=? AND generation=?').run(c.bot_id,c.generation);db.prepare('UPDATE bots SET poll_lease=NULL,poll_until=0 WHERE id=?').run(c.bot_id);audit(bot.id,bot.owner_id,'webhook.enable');reply=masterReply(c.reply_chat,`Webhook @${bot.username} включён. Polling отключён.\nСекрет подписи (храните в секрете):\n${secrets().open(c.secret)}\n\nАлгоритм: HMAC-SHA256(timestamp + "." + raw body). Секрет сохранён в истории этого личного чата.`);}
+    if(valid){db.prepare('UPDATE bot_webhooks SET enabled=1,pending=0,last_error=NULL WHERE bot_id=? AND generation=?').run(c.bot_id,c.generation);db.prepare('UPDATE bots SET poll_lease=NULL,poll_until=0 WHERE id=?').run(c.bot_id);audit(bot.id,bot.owner_id,'webhook.enable');const ticket=randomBytes(32).toString('base64url');db.prepare('INSERT INTO bot_webhook_claims(ticket_hash,bot_id,generation,expires) VALUES(?,?,?,?)').run(createHash('sha256').update(ticket).digest('hex'),bot.id,c.generation,now()+300000);
+    const origin=(process.env.PUBLIC_BASE_URL||(process.env.CHAT_DOMAIN?'https://'+process.env.CHAT_DOMAIN:'')).replace(/\/$/,'');
+    reply=masterReply(c.reply_chat,`Webhook @${bot.username} включён. Polling отключён.\nПолучите секрет подписи по одноразовой ссылке (5 минут):\n${origin}/bot/v1/delivery/secret#${ticket}\n\nСам секрет в истории чата не сохраняется. Откройте ссылку и нажмите «Показать секрет». Сохраните его в конфигурации программы бота. Повторная команда /webhook создаст новый секрет.`);}
     else{db.prepare("UPDATE bot_webhooks SET pending=0,enabled=0,last_error='ADDRESS_VALIDATION_FAILED',secret='' WHERE bot_id=? AND generation=?").run(c.bot_id,c.generation);reply=masterReply(c.reply_chat,'Адрес webhook не прошёл проверку. Проверьте публичный HTTPS, DNS и доступность сервиса доставки. Polling доступен.');}
    });reply?.();wake(c.bot_id);return;
   }
@@ -112,5 +123,5 @@ export function botWebhooks({db,tx,get,access,wake,audit,deliverable,masterReply
   }
  }
  const timer=setInterval(tick,500);timer.unref();
- return {enabled,configure,save,off,status,ownerCommand,tick,async idle(){await Promise.all([...inflight]);},cleanup(){db.prepare("UPDATE bot_delivery_attempts SET finished=2,last_error='UPDATE_EXPIRED' WHERE finished=0 AND EXISTS(SELECT 1 FROM bot_updates u WHERE u.bot_id=bot_delivery_attempts.bot_id AND u.update_id=bot_delivery_attempts.update_id AND u.acked=0 AND u.expires<=?)").run(now());db.prepare('DELETE FROM bot_delivery_attempts WHERE updated<?').run(now()-7*86400000);},close(){closed=true;clearInterval(timer);return Promise.allSettled([...inflight]);}};
+ return {enabled,configure,save,off,status,ownerCommand,claim,tick,async idle(){await Promise.all([...inflight]);},cleanup(){db.prepare('DELETE FROM bot_webhook_claims WHERE expires<?').run(now());db.prepare("UPDATE bot_delivery_attempts SET finished=2,last_error='UPDATE_EXPIRED' WHERE finished=0 AND EXISTS(SELECT 1 FROM bot_updates u WHERE u.bot_id=bot_delivery_attempts.bot_id AND u.update_id=bot_delivery_attempts.update_id AND u.acked=0 AND u.expires<=?)").run(now());db.prepare('DELETE FROM bot_delivery_attempts WHERE updated<?').run(now()-7*86400000);},close(){closed=true;clearInterval(timer);return Promise.allSettled([...inflight]);}};
 }

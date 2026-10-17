@@ -1,3 +1,4 @@
+import {secretPage} from './bot-webhook-secret-page.mjs';
 import {botWebhooks} from './bot-webhooks.mjs';
 import {join} from 'node:path';
 import {botInteractions} from './bot-interactions.mjs';
@@ -130,6 +131,8 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
  }
  async function dataHandle(req,res,url){
   const path=url.pathname.replace(/^\/api(?=\/bot\/)/,''),method=req.method;
+  if(path==='/bot/v1/delivery/secret'&&method==='GET')return secretPage(res);
+  if(path==='/bot/v1/delivery/secret/claim'&&method==='POST'){const data=await body(req);only(data,['ticket']);res.setHeader('Cache-Control','no-store');return json(res,200,webhooks.claim(data.ticket));}
   const routes={GET:{'/bot/v1/me':null,'/bot/v1/commands':'commands:manage'},PUT:{'/bot/v1/commands':'commands:manage'}};
   if(path==='/bot/v1/updates'&&method==='GET')return poll(req,res,url);
   let bot=authenticate(req,routes[method]?.[path]);rate('api:'+bot.id,600);

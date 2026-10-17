@@ -13,7 +13,7 @@ async function fixture(t){
  const options={database:join(dir,'db'),uploads:join(dir,'uploads'),newsEnabled:false,webhookOptions:{key,now:()=>clock,random:()=>0.5,egress:async input=>{if(input.op==='validate'){if(validateGate)await validateGate;return {ok:validation};}requests.push(input);if(deliveryGate)await deliveryGate;return reply;}}};
  let app=createApp(options);await new Promise(r=>app.server.listen(0,'127.0.0.1',r));
  t.after(async()=>{await app.close();rmSync(dir,{recursive:true,force:true});});
- async function call(path,token,data,method,headers={}){const r=await fetch('http://127.0.0.1:'+app.server.address().port+path,{method:method||(data===undefined?'GET':'POST'),headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',...headers},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,data:r.status===204?null:await r.json()};}
+ async function call(path,token,data,method,headers={}){const r=await fetch('http://127.0.0.1:'+app.server.address().port+path,{method:method||(data===undefined?'GET':'POST'),headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',...headers},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,headers:r.headers,data:r.status===204?null:r.headers.get('content-type')?.includes('application/json')?await r.json():await r.text()};}
  const db=()=>app.db;
  function user(name){const id=db().prepare('INSERT INTO users(username,name,phone) VALUES(?,?,?)').run(name,name,'+7900'+String(Math.floor(Math.random()*1e7)).padStart(7,'0')).lastInsertRowid,token=randomUUID();db().prepare('INSERT INTO sessions VALUES(?,?,?)').run(createHash('sha256').update(token).digest('hex'),id,Date.now()+3600000);return {id,token};}
  const owner=user('webhook_owner'),other=user('webhook_other'),bot=(await call('/developer/v1/bots',owner.token,{username:'webhook_test_bot',display_name:'Webhook'})).data;
@@ -56,8 +56,13 @@ test('main bot owns webhook configuration, validates asynchronously and displays
  const send=text=>f.call(`/api/chats/${manager.id}/messages`,f.owner.token,{text,client_id:randomUUID()});
  await send(`/webhook @${b.bot.username} https://example.com/events`);
  await eventually(async()=> (await f.status()).data.mode==='webhook');
- const history=(await f.call(`/api/chats/${manager.id}/messages`,f.owner.token)).data,answer=history.find(m=>m.text.includes('Секрет подписи (храните в секрете)'));
- assert.ok(answer);const secret=answer.text.match(/секрете\):\n([A-Za-z0-9_-]{43})/)[1];assert.ok(secret);assert.ok(!JSON.stringify((await f.status()).data).includes(secret));
+ const history=(await f.call(`/api/chats/${manager.id}/messages`,f.owner.token)).data,answer=history.find(m=>m.text.includes('одноразовой ссылке'));
+ assert.ok(answer);const ticket=answer.text.match(/secret#([A-Za-z0-9_-]{43})/)[1];
+ const page=await f.call('/bot/v1/delivery/secret');assert.equal(page.status,200);assert.equal(page.headers.get('cache-control'),'no-store');assert.match(page.headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.match(page.data,/Показать секрет/);
+ const claimed=await f.call('/bot/v1/delivery/secret/claim',undefined,{ticket});assert.equal(claimed.status,200);assert.equal(claimed.headers.get('cache-control'),'no-store');const secret=claimed.data.webhook_secret;assert.match(secret,/^[A-Za-z0-9_-]{43}$/);
+ assert.ok(!JSON.stringify((await f.status()).data).includes(secret));assert.ok(!JSON.stringify(history).includes(secret));assert.ok(!JSON.stringify(f.db().prepare('SELECT * FROM bot_webhook_claims').all()).includes(ticket));
+ assert.equal((await f.call('/bot/v1/delivery/secret/claim',undefined,{ticket})).status,410);
+
  const stranger=(await f.call('/api/bots/manager',f.other.token,{})).data;await f.call(`/api/chats/${stranger.id}/messages`,f.other.token,{text:`/webhook @${b.bot.username} off`,client_id:randomUUID()});await sleep(100);assert.equal((await f.status()).data.mode,'webhook');
  await send(`/webhook @${b.bot.username} off`);await eventually(async()=> (await f.status()).data.mode==='polling');
  f.setValidation(false);await send(`/webhook @${b.bot.username} https://example.com/new`);await eventually(async()=> (await f.status()).data.last_error==='ADDRESS_VALIDATION_FAILED');assert.equal((await f.status()).data.mode,'polling');
@@ -95,4 +100,13 @@ test('paused bots and subscriptions without matching events do not starve active
  }
  await f.call('/bot/v1/delivery/webhook',target.token,{url:'https://example.com'},'PUT');await f.send('must deliver');
  await eventually(()=>f.requests.length===1);assert.equal(JSON.parse(f.requests[0].body).bot_id,target.bot.id);
+});
+
+test('one-time webhook secret links expire, are invalidated by reconfiguration, and concurrent claims reveal only once',async t=>{
+ const f=await fixture(t),b=f.bot,manager=(await f.call('/api/bots/manager',f.owner.token,{})).data;
+ async function link(){await f.call(`/api/chats/${manager.id}/messages`,f.owner.token,{text:`/webhook @${b.bot.username} https://example.com/`+randomUUID(),client_id:randomUUID()});
+  return eventually(async()=>{const h=(await f.call(`/api/chats/${manager.id}/messages`,f.owner.token)).data;const tickets=h.map(m=>m.text.match(/secret#([A-Za-z0-9_-]{43})/)?.[1]).filter(Boolean);return tickets.find(t=>!seen.has(t));});}
+ const seen=new Set(),first=await link();seen.add(first);f.advance(300001);assert.equal((await f.call('/bot/v1/delivery/secret/claim',null,{ticket:first})).status,410);
+ const second=await link();seen.add(second);await f.call('/bot/v1/delivery/webhook',b.token,{url:'https://example.com/new'},'PUT');assert.equal((await f.call('/bot/v1/delivery/secret/claim',null,{ticket:second})).status,410);
+ const third=await link();const claims=await Promise.all([f.call('/bot/v1/delivery/secret/claim',null,{ticket:third}),f.call('/bot/v1/delivery/secret/claim',null,{ticket:third})]);assert.deepEqual(claims.map(c=>c.status).sort(),[200,410]);
 });
