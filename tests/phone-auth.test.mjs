@@ -96,7 +96,7 @@ test('failed provider invalidates the challenge and SMS phone rate persists in t
  for(let i=0;i<5;i++){const result=await call('/auth/sms/request',{phone:'+79001234567'});assert.equal(result.status,503);assert.ok(!JSON.stringify(result.data).includes('private'));assert.equal(result.data.code,undefined);now+=60001;}
  assert.equal((await call('/auth/sms/request',{phone:'+79001234567'})).status,429);
  assert.equal((await call('/auth/sms/verify',{sms_session_id:sent[0].id,code:sent[0].code})).status,410);
- assert.equal(app.db.prepare('SELECT COUNT(*) n FROM users').get().n,0);
+ assert.equal(app.db.prepare('SELECT COUNT(*) n FROM users WHERE account_type=\'user\'').get().n,0);
 });
 
 test('SMS diagnostics distinguish provider rejection without retaining phones, body or secrets',async()=>{

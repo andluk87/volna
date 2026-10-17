@@ -9,7 +9,7 @@ test('legacy reset requires explicit action, produces an intact backup, rejects 
  const run=()=>spawnSync(process.execPath,['server/reset-phone-auth.mjs','--reset-legacy'],{env:{...process.env,DB_PATH:database},encoding:'utf8'});
  const result=run();assert.equal(result.status,0,result.stderr);assert.equal(existsSync(database),false);
  const backup=join(dir,'legacy-auth-backups',readdirSync(join(dir,'legacy-auth-backups'))[0]);const snap=new DatabaseSync(join(backup,'legacy.db'),{readOnly:true});assert.equal(snap.prepare('SELECT username FROM users').get().username,'old');snap.close();assert.ok(existsSync(join(backup,'uploads','old-file')));
- const app=createApp({newsEnabled:false,database});t.after(()=>app.close());await new Promise(r=>app.server.listen(0,'127.0.0.1',r));assert.equal(app.db.prepare('SELECT COUNT(*) n FROM users').get().n,0);
+ const app=createApp({newsEnabled:false,database});t.after(()=>app.close());await new Promise(r=>app.server.listen(0,'127.0.0.1',r));assert.equal(app.db.prepare('SELECT COUNT(*) n FROM users WHERE account_type=\'user\'').get().n,0);
  const response=await fetch(`http://127.0.0.1:${app.server.address().port}/api/me`,{headers:{Authorization:'Bearer old-secret'}});assert.equal(response.status,401);
  assert.equal(run().status,0);assert.equal(readdirSync(join(dir,'legacy-auth-backups')).length,1);assert.equal(existsSync(database),false);
 });

@@ -2,22 +2,8 @@ import React,{useEffect,useState} from 'react';
 import Dialog from './Dialog';
 import {request} from './api';
 import './bots.css';
-export default function BotManager({token,onClose,onOpen}){
- const [bots,setBots]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[issued,setIssued]=useState(null),[rotate,setRotate]=useState(null);
- const [name,setName]=useState(''),[username,setUsername]=useState(''),[description,setDescription]=useState(''),[readGroups,setReadGroups]=useState(false);
- async function load(){const data=await request('/developer/v1/bots',token);setBots(data.bots);}
- useEffect(()=>{let disposed=false;request('/developer/v1/bots',token).then(data=>{if(!disposed)setBots(data.bots);}).catch(e=>{if(!disposed)setError(e.message);});return()=>{disposed=true;};},[token]);
- async function action(fn){setBusy(true);setError('');try{await fn();await load();}catch(e){setError(e.message);}finally{setBusy(false);}}
- return <Dialog title="Мои боты" className="bot-manager" onClose={onClose}>
-  <p>Создайте бота и подключите к нему свою программу. Пользователь первым открывает диалог с ботом.</p>
-  {error&&<p className="error" role="alert">{error}</p>}
-  {issued&&<section className="bot-token" aria-label="Новый токен бота"><strong>Сохраните токен сейчас</strong><p>После закрытия окна он больше не показывается. При замене прежний токен сразу перестаёт работать.</p><textarea aria-label="Токен бота" readOnly value={issued.token} spellCheck={false}/><button onClick={()=>setIssued(null)}>Я сохранил токен</button></section>}
-  <div className="bot-list">{bots.map(bot=><article key={bot.id}><div><strong>{bot.display_name}</strong><small>@{bot.username} · {bot.status==='active'?'Работает':bot.status==='suspended'?'Приостановлен':'Удалён'}</small></div><div className="bot-actions"><button disabled={busy||bot.status!=='active'} onClick={()=>onOpen(bot)}>Открыть чат</button><button disabled={busy||bot.status==='deleted'} onClick={()=>setRotate(bot)}>Заменить токен</button><button disabled={busy||bot.status==='deleted'} onClick={()=>action(()=>request('/developer/v1/bots/'+bot.id,token,{status:bot.status==='active'?'suspended':'active'},undefined,'PATCH'))}>{bot.status==='suspended'?'Включить':'Приостановить'}</button></div></article>)}</div>
-  <form onSubmit={e=>{e.preventDefault();action(async()=>{const result=await request('/developer/v1/bots',token,{username,display_name:name,description,...(readGroups?{scopes:['messages:send','messages:edit_own','messages:delete_own','messages:read_events','chats:read_basic','commands:manage','groups:read_all']}: {})});setIssued(result);setName('');setUsername('');setDescription('');});}}>
-   <h3>Новый бот</h3><label>Название<input required maxLength={128} value={name} onChange={e=>setName(e.target.value)}/></label><label>Username<input required minLength={4} maxLength={32} pattern="[a-zA-Z0-9_]{4,32}" value={username} onChange={e=>setUsername(e.target.value)} autoCapitalize="none" autoCorrect="off"/></label><label>Описание<textarea maxLength={1000} value={description} onChange={e=>setDescription(e.target.value)}/></label><label className="bot-checkbox"><input type="checkbox" checked={readGroups} onChange={e=>setReadGroups(e.target.checked)}/>Разрешить боту обрабатывать обычные сообщения в группах после разрешения администратора</label><button className="primary" disabled={busy}>Создать бота</button>
-  </form>
-  {rotate&&<Dialog title="Заменить токен бота?" onClose={()=>setRotate(null)}><p>Программа бота @{rotate.username} со старым токеном отключится. Новый токен нужно будет сохранить.</p><button disabled={busy} onClick={()=>action(async()=>{const value=await request(`/developer/v1/bots/${rotate.id}/tokens`,token,{});setIssued(value);setRotate(null);})}>Заменить токен</button></Dialog>}
- </Dialog>;
+export async function openBotManager(token,onOpen){
+ const chat=await request('/bots/manager',token,{});await onOpen(chat);
 }
 export function BotChatBanner({chat,token,onChanged}){
  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[blocked,setBlocked]=useState(false);
