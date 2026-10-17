@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+export XTABLES_LOCKFILE=/tmp/xtables.lock
 # Fail closed if the network boundary cannot be installed. This namespace has
 # no connection to Volna's application/DB networks, only public egress + Unix IPC.
 iptables -P OUTPUT DROP
