@@ -24,7 +24,7 @@ try{
  const manager=page.getByRole('region',{name:'Главный бот'});await manager.getByText('@volna_botfather',{exact:true}).waitFor();
  async function command(text,expected){await manager.getByLabel('Сообщение',{exact:true}).fill(text);await manager.getByRole('button',{name:'Отправить',exact:true}).click();await manager.getByText(expected,{exact:false}).last().waitFor();}
  await command('/newbot','Введите название');await command('Браузерный бот','Введите уникальный');await command('browser_test_bot','@browser_test_bot создан');
- const created=await manager.innerText(),secret=created.match(/vbot_[a-f0-9]{32}\\.[A-Za-z0-9_-]{43}/)[0];
+ const created=await manager.innerText(),secret=created.match(/vbot_[a-f0-9]{32}\.[A-Za-z0-9_-]{43}/)[0];
  await command('/groups @browser_test_bot on','Новый токен');await page.waitForFunction(()=>[...document.querySelectorAll('section[aria-label="Главный бот"] p')].filter(p=>p.textContent.includes('Новый токен')).length>=2);
  await command('/pause @browser_test_bot','Бот @browser_test_bot отключён');
  await command('/resume @browser_test_bot','Бот @browser_test_bot включён');
