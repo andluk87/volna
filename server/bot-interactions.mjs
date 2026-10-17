@@ -12,7 +12,7 @@ export function botInteractions({db,get,access,member,publish,wake,tx,messaging,
   if(!Array.isArray(rows)||rows.length>8||rows.some(row=>!Array.isArray(row)||!row.length||row.length>8))throw fail(400,'INVALID_MARKUP','Клавиатура: до 8 строк по 8 кнопок');
   return rows.map(row=>row.map(button=>{
    only(button,['text','callback_data']);
-   if(typeof button.text!=='string'||!button.text.trim()||Array.from(button.text).length>64||typeof button.callback_data!=='string'||Buffer.byteLength(button.callback_data,'utf8')<1||Buffer.byteLength(button.callback_data,'utf8')>128||invalidUnicode(button.text)||invalidUnicode(button.callback_data))throw fail(400,'INVALID_MARKUP','Название: 1–64 символа, callback_data: 1–128 байт UTF-8');
+   if(typeof button.text!=='string'||!button.text.trim()||Array.from(button.text).length>64||typeof button.callback_data!=='string'||Buffer.byteLength(button.callback_data,'utf8')<1||Buffer.byteLength(button.callback_data,'utf8')>128||invalidUnicode(button.text)||invalidUnicode(button.callback_data)||button.text.includes('\0')||button.callback_data.includes('\0'))throw fail(400,'INVALID_MARKUP','Название: 1–64 символа, callback_data: 1–128 байт UTF-8');
    return {text:button.text,callback_data:button.callback_data};
   }));
  }

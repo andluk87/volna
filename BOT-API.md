@@ -127,7 +127,7 @@ Idempotency-Key обязателен: 16–128 ASCII-символов `A-Za-z0-9
 {"chat_id":"123","type":"text","text":"Выберите действие","reply_markup":{"inline_keyboard":[[{"text":"Каталог","callback_data":"catalog"},{"text":"Помощь","callback_data":"help"}]]}}
 ```
 
-До 8 строк по 8 кнопок; подпись 1–64 Unicode code points, callback_data 1–128 байт UTF-8. В этом этапе поддерживаются только callback-кнопки, URL-кнопок нет. Новое поле входит в проверку Idempotency-Key. Запросы прежних версий без reply_markup сохраняют прежний fingerprint.
+До 8 строк по 8 кнопок; подпись 1–64 Unicode code points, callback_data 1–128 байт UTF-8; NUL и непарные суррогаты отклоняются с 400. В этом этапе поддерживаются только callback-кнопки, URL-кнопок нет. Новое поле входит в проверку Idempotency-Key. Запросы прежних версий без reply_markup сохраняют прежний fingerprint.
 
 PATCH /bot/v1/messages/{id} принимает revision и text и/или reply_markup. null либо {"inline_keyboard":[]} удаляет клавиатуру. Изменение только клавиатуры также повышает revision. При замене клавиатуры старые button_id становятся недействительными; изменение текста без reply_markup сохраняет кнопки.
 
