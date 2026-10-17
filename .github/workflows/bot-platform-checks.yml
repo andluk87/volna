@@ -1,7 +1,5 @@
 name: Bot platform checks
 on:
-  push:
-    branches: [codex/botfather-management]
   pull_request:
     paths:
       - 'server/**'
@@ -41,12 +39,12 @@ jobs:
       - run: npm ci --prefix client
       - name: PostgreSQL 17 client tools
         run: |
-          mkdir -p "$RUNNER_TEMP/postgres17/bin" "$RUNNER_TEMP/postgres17/lib"
-          docker cp ${{ job.services.postgres.id }}:/usr/lib/postgresql/17/bin/pg_dump "$RUNNER_TEMP/postgres17/bin/pg_dump"
-          docker cp ${{ job.services.postgres.id }}:/usr/lib/postgresql/17/bin/pg_restore "$RUNNER_TEMP/postgres17/bin/pg_restore"
-          docker cp -L ${{ job.services.postgres.id }}:/usr/lib/x86_64-linux-gnu/libpq.so.5 "$RUNNER_TEMP/postgres17/lib/libpq.so.5"
-          echo "$RUNNER_TEMP/postgres17/bin" >> "$GITHUB_PATH"
-          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/postgres17/lib" >> "$GITHUB_ENV"
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main' | sudo tee /etc/apt/sources.list.d/volna-pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y postgresql-client-17
+          echo '/usr/lib/postgresql/17/bin' >> "$GITHUB_PATH"
       - name: Full PostgreSQL integration suite
         run: npm test
       - name: Web build

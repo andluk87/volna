@@ -54,5 +54,6 @@ test('empty migrated users table retains the deleted-account sequence high-water
  const old=new DatabaseSync(source);old.exec("CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT UNIQUE NOT NULL,name TEXT NOT NULL,phone TEXT UNIQUE NOT NULL); INSERT INTO users VALUES(6000000000,'deleted','Deleted','+79000000001');DELETE FROM users;");old.close();
  migrateSqliteToPostgres({source,connectionString,schema:postgresTestSchema(source)});
  const app=createApp({database:source,uploads:join(dir,'uploads'),newsEnabled:false});t.after(()=>app.close());
- const result=app.db.prepare('INSERT INTO users(username,name,phone) VALUES(?,?,?)').run('new_user','New','+79000000002');assert.equal(result.lastInsertRowid,6000000001);
+ assert.equal(app.db.prepare("SELECT id FROM users WHERE account_type='bot'").get().id,6000000001);
+ const result=app.db.prepare('INSERT INTO users(username,name,phone) VALUES(?,?,?)').run('new_user','New','+79000000002');assert.equal(result.lastInsertRowid,6000000002);
 });
