@@ -12,6 +12,8 @@ const help=`Я главный бот Волны. Управляю только �
 /setdescription @username Описание — изменить описание
 /groups @username on|off — разрешить или запретить полное чтение групп
 /callbacks @username on|off — разрешить ответы на кнопки (новый токен)
+/webhook @username https://адрес — включить webhook
+/webhook @username status|off — состояние или отключение
 /cancel — отменить создание
 /help — помощь
 
@@ -19,7 +21,7 @@ const help=`Я главный бот Волны. Управляю только �
 
 // Runs inside the outbox transaction: command, state, credentials, reply and
 // processed marker commit together. No privileged bot credential is exposed.
-export function createBotFather({db,get,owned,info,issue,audit,wake,createBot,defaultScopes}){
+export function createBotFather({db,get,owned,info,issue,audit,wake,createBot,defaultScopes,webhook}){
  db.exec(`CREATE TABLE IF NOT EXISTS bot_father(singleton BIGINT PRIMARY KEY CHECK(singleton=1),bot_id TEXT UNIQUE NOT NULL REFERENCES bots(id));
  CREATE TABLE IF NOT EXISTS bot_father_sessions(user_id BIGINT PRIMARY KEY REFERENCES users(id),step TEXT NOT NULL,name TEXT NOT NULL DEFAULT '',updated BIGINT NOT NULL);`);
  let ref=db.prepare('SELECT bot_id FROM bot_father WHERE singleton=1').get();
@@ -40,11 +42,12 @@ export function createBotFather({db,get,owned,info,issue,audit,wake,createBot,de
   }catch(e){db.exec('ROLLBACK');throw e;}
  }
  db.prepare('UPDATE bots SET commands=? WHERE id=?').run("[{\"command\":\"newbot\",\"description\":\"Создать бота\"},{\"command\":\"mybots\",\"description\":\"Мои боты\"},{\"command\":\"token\",\"description\":\"Перевыпустить токен: @username\"},{\"command\":\"revoke\",\"description\":\"Отозвать токен: @username\"},{\"command\":\"pause\",\"description\":\"Отключить бота: @username\"},{\"command\":\"resume\",\"description\":\"Включить бота: @username\"},{\"command\":\"setname\",\"description\":\"Изменить название: @username название\"},{\"command\":\"setdescription\",\"description\":\"Описание: @username текст\"},{\"command\":\"groups\",\"description\":\"Полное чтение групп: @username on|off\"},{\"command\":\"callbacks\",\"description\":\"Ответы на кнопки: @username on|off\"},{\"command\":\"cancel\",\"description\":\"Отменить создание\"},{\"command\":\"help\",\"description\":\"Помощь\"}]",ref.bot_id);
+ const commands=JSON.parse(get(ref.bot_id).commands);commands.push({command:'webhook',description:'Webhook: @username URL, status или off'});db.prepare('UPDATE bots SET commands=? WHERE id=?').run(JSON.stringify(commands),ref.bot_id);
  const master=get(ref.bot_id);
  const setState=(uid,step,name='')=>db.prepare('INSERT INTO bot_father_sessions VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET step=excluded.step,name=excluded.name,updated=excluded.updated').run(uid,step,name,Date.now());
  const clear=uid=>db.prepare('DELETE FROM bot_father_sessions WHERE user_id=?').run(uid);
  const tokenText=result=>`Новый токен (предыдущий отозван):\n${result.token}\n\nХраните его в секрете. Он сохранён в истории этого чата.`;
- function command(uid,text){
+ function command(uid,text,chat){
   const [raw,arg,...rest]=text.trim().split(/\s+/),cmd=raw.toLowerCase(),value=rest.join(' ');
   if(cmd==='/cancel'){clear(uid);return 'Создание отменено. /help — команды.';}
   if(cmd==='/start'||cmd==='/help')return help;
@@ -62,12 +65,13 @@ export function createBotFather({db,get,owned,info,issue,audit,wake,createBot,de
    const result=createBot(uid,{username:text.trim().replace(/^@/,''),display_name:state.name});clear(uid);
    return `Бот @${result.bot.username} создан.\n${tokenText(result)}\n\nПодключите программу к Bot API. /help — управление.`;
   }
-  const actions=['/token','/revoke','/pause','/resume','/setname','/setdescription','/groups','/callbacks'];
+  const actions=['/token','/revoke','/pause','/resume','/setname','/setdescription','/groups','/callbacks','/webhook'];
   if(!actions.includes(cmd))return 'Неизвестная команда. /help — помощь.';
   const username=canonicalUsername((arg||'').replace(/^@/,''));
   const row=db.prepare('SELECT b.id FROM bots b JOIN users u ON u.id=b.account_id WHERE u.username_normalized=? AND b.owner_id=?').get(username,uid);
   if(!row) return 'Ваш бот не найден. Укажите @username из /mybots.';
   const bot=owned(row.id,uid);if(bot.status==='deleted')return 'Бот удалён.';
+  if(cmd==='/webhook')return webhook(bot,value,chat);
   if(cmd==='/token'||cmd==='/groups'||cmd==='/callbacks'){
    const previous=JSON.parse(db.prepare('SELECT scopes FROM bot_tokens WHERE bot_id=? ORDER BY created DESC LIMIT 1').get(bot.id)?.scopes||JSON.stringify(defaultScopes));
    if(cmd!=='/token'&&!['on','off'].includes(value))return 'Использование: '+cmd+' @username on|off. Изменение разрешений перевыпускает токен.';
@@ -99,7 +103,7 @@ export function createBotFather({db,get,owned,info,issue,audit,wake,createBot,de
   // An edited command must never execute a different action later.
   if(current.text!==text)return null;
   db.exec('SAVEPOINT father_command');
-  try{const reply=command(user.id,text);db.exec('RELEASE SAVEPOINT father_command');return reply;}
+  try{const reply=command(user.id,text,event.chat_id);db.exec('RELEASE SAVEPOINT father_command');return reply;}
   catch(e){db.exec('ROLLBACK TO SAVEPOINT father_command');db.exec('RELEASE SAVEPOINT father_command');if(e.status)return e.message;throw e;}
  }};
 }

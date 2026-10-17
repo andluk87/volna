@@ -23,6 +23,8 @@ services:
     environment:
       DATABASE_URL: postgresql://volna:${POSTGRES_PASSWORD}@postgres:5432/volna
       UPLOAD_PATH: /data/uploads
+      WEBHOOK_KEY_PATH: /data/bot-webhook.key
+      WEBHOOK_EGRESS_SOCKET: /run/volna-webhook/egress.sock
       EMOJI_PACK_MAX_ITEMS: ${EMOJI_PACK_MAX_ITEMS:-200}
       EMOJI_REACTIONS_PER_USER: ${EMOJI_REACTIONS_PER_USER:-20}
       EMOJI_REACTION_TYPES: ${EMOJI_REACTION_TYPES:-100}
@@ -49,12 +51,15 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:5173,https://localhost,app://volna}
     volumes:
       - chat-data:/data
+      - webhook-ipc:/run/volna-webhook
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - default
       - wg-proxy
     depends_on:
+      webhook-egress:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       transcription:
@@ -68,6 +73,29 @@ services:
       retries: 5
     security_opt:
       - no-new-privileges:true
+  webhook-egress:
+    build:
+      context: .
+      dockerfile: docker/webhook-egress.Dockerfile
+    networks: [webhook-egress]
+    volumes:
+      - webhook-ipc:/run/volna-webhook
+    read_only: true
+    tmpfs: ['/tmp:size=16m,noexec,nosuid']
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, SETUID, SETGID, SETPCAP, CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('node:net').connect('/run/volna-webhook/egress.sock');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   transcription:
     build:
       context: .
@@ -186,7 +214,9 @@ volumes:
   chat-data:
   whisper-models:
   postgres-data:
+  webhook-ipc:
 networks:
+  webhook-egress: {}
   default: {}
   wg-proxy:
     external: true

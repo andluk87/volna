@@ -1,3 +1,9 @@
+## 0.12.61
+
+- Webhook: отдельный egress-сервис, HMAC-подпись, durable retries и диагностика.
+- Главный бот: `/webhook @username URL|status|off`; polling и webhook взаимоисключающие.
+- Секреты зашифрованы в PostgreSQL; ключ включён в полные backups.
+
 # История версий Волны
 
 ## 0.12.58

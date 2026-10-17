@@ -24,7 +24,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => Object.assign(new Error(message), { status });
-export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, smsOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', newsEnabled = database!==':memory:'&&process.env.VOLNA_NEWS_CHANNEL!=='0', uploads = process.env.UPLOAD_PATH || (process.env.DATABASE_URL||/^postgres(?:ql)?:/.test(database) ? './data/uploads' : join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads')), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
+export function createApp({ pushSender, webhookOptions={}, phoneAuthOptions={}, adminOptions={}, smsOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', newsEnabled = database!==':memory:'&&process.env.VOLNA_NEWS_CHANNEL!=='0', uploads = process.env.UPLOAD_PATH || (process.env.DATABASE_URL||/^postgres(?:ql)?:/.test(database) ? './data/uploads' : join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads')), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
   if (database !== ':memory:'&&!/^postgres(?:ql)?:/.test(database)) mkdirSync(dirname(database), { recursive: true });
   const db = openDatabase(database);
   const legacy = db.hasTable('users');
@@ -113,7 +113,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
     disconnect:(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();}});
   contactService=contacts({db,body,json,publish,userById});
   const adminService=createAdminServer({db,smsOptions,uploads,json,body,publish,broadcast,hydrate:handleMessaging.hydrate,userById,disconnectUser:uid=>{for(const stream of streams.get(uid)||[])stream.end();},cleanupFiles:handleMessaging.cleanupUnused,callService,...adminOptions});
-  botService=botPlatform({db,body,json,userById,member,publish,broadcast,authorizeOwner:auth,messaging:handleMessaging});
+  botService=botPlatform({db,body,json,userById,member,publish,broadcast,authorizeOwner:auth,messaging:handleMessaging,webhookOptions:{keyPath:process.env.WEBHOOK_KEY_PATH||join(dirname(uploads),'bot-webhook.key'),...webhookOptions}});
   if(newsEnabled)newsService=createNewsChannel({db,uploads});
   const cleanup = setInterval(() => {
     const now = Date.now(); for (const [key, entry] of limits) if (entry.until < now) limits.delete(key);
@@ -230,7 +230,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
     } catch(e) { if (!e.status) console.error(e); if (!res.headersSent&&req.botRequestId)json(res,e.status||500,{error:{code:e.code||'REQUEST_FAILED',message:e.status?e.message:'Ошибка сервера',request_id:req.botRequestId,retryable:!e.status||e.status>=500||e.status===429}});else if (!res.headersSent) json(res, e.status || 500, { error: e.status ? e.message : 'Ошибка сервера', ...(e.status&&e.code?{code:e.code}:{}),...(e.status&&e.retry_at?{retry_at:e.retry_at,server_time:Date.now()}:{}),...(e.status&&e.suggestions?{suggestions:e.suggestions}:{}) }); else res.end(); }
   });
   server.requestTimeout = 120000; server.headersTimeout = 15000;
-  return { server, adminServer:adminService.server, db, push:pushService, close: async () => { botService.close();await adminService.close();callService.close();contactService.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close(); } };
+  return { server, adminServer:adminService.server, db, push:pushService, close: async () => { await botService.close();await adminService.close();callService.close();contactService.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close(); } };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const app = createApp(); app.server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => console.log('Volna API listening on :'+(process.env.PORT || 3000)));

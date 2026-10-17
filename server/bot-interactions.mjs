@@ -53,7 +53,7 @@ export function botInteractions({db,get,access,member,publish,wake,tx,messaging,
    const callback=randomUUID(),expires=Date.now()+120000;
    db.prepare('INSERT INTO bot_callback_requests(id,action_id,actor_id,interaction_id,grant_version,expires) VALUES(?,?,?,?,?,?)').run(callback,action.id,actor,data.interaction_id,chat.version,expires);
    if(bot.id===master.id){
-    const text=master.command(actor,action.payload),sent=messaging.insert(chat.id,bot.account_id,{text,client_id:randomUUID()});
+    const text=master.command(actor,action.payload,chat.id),sent=messaging.insert(chat.id,bot.account_id,{text,client_id:randomUUID()});
     setMarkup(sent.row,bot,markup(master.markup));
     db.prepare('UPDATE bot_callback_requests SET answer=? WHERE id=?').run(JSON.stringify({text:'',show_alert:false}),callback);
     return {response:status(db.prepare('SELECT * FROM bot_callback_requests WHERE id=?').get(callback)),message:sent.row};

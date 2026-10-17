@@ -1,3 +1,6 @@
+import {secretPage} from './bot-webhook-secret-page.mjs';
+import {botWebhooks} from './bot-webhooks.mjs';
+import {join} from 'node:path';
 import {botInteractions} from './bot-interactions.mjs';
 import {randomBytes,randomUUID,createHash} from 'node:crypto';
 import {createBotFather} from './bot-father.mjs';
@@ -11,7 +14,7 @@ const defaultScopes=['messages:send','messages:edit_own','messages:delete_own','
 const allScopes=new Set([...defaultScopes,'groups:read_all']);
 const scopes=value=>{if(!Array.isArray(value)||!value.length||value.length>allScopes.size||new Set(value).size!==value.length||value.some(s=>!allScopes.has(s)))throw fail(400,'INVALID_SCOPES','Некорректные разрешения');return value;};
 const only=(data,keys)=>{if(Object.keys(data).some(key=>!keys.includes(key)))throw fail(400,'UNKNOWN_FIELD','Неизвестное поле запроса');};
-export function botPlatform({db,body,json,userById,member,publish,broadcast,messaging,authorizeOwner}){
+export function botPlatform({db,body,json,userById,member,publish,broadcast,messaging,authorizeOwner,webhookOptions={}}){
  initBotSchema(db);
  const buckets=new Map();
  const rate=(key,max)=>{const now=Date.now(),old=buckets.get(key),item=old&&old.until>now?old:{count:0,until:now+60000};if(buckets.size>=20000&&!buckets.has(key))throw fail(429,'RATE_LIMITED','Слишком много запросов');buckets.set(key,item);if(++item.count>max)throw fail(429,'RATE_LIMITED','Слишком много запросов');};
@@ -69,8 +72,13 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
   const command=String(data.text).match(/^\/([a-z0-9_]{1,32})(?:@([a-z0-9_]{4,32}))?(?:\s|$)/i);
   return new RegExp('(^|[^a-z0-9_])@'+escaped+'(?![a-z0-9_])','i').test(data.text)||!!(command&&(!command[2]||command[2].toLowerCase()===bot.username.toLowerCase()))||!!(data.reply_to_message_id&&db.prepare('SELECT 1 FROM messages WHERE id=? AND chat_id=? AND sender_id=?').get(number(data.reply_to_message_id),chat.id,bot.account_id));
  }
- const father=createBotFather({db,get,owned,info,issue,audit,wake,createBot:(uid,data)=>createBot(uid,data,fn=>fn()),defaultScopes});
+ let webhooks;
+ const father=createBotFather({db,get,owned,info,issue,audit,wake,createBot:(uid,data)=>createBot(uid,data,fn=>fn()),defaultScopes,webhook:(bot,value,chat)=>webhooks.ownerCommand(bot,value,chat)});
  const interactions=botInteractions({db,get,access,member,publish,wake,tx,messaging,master:father});
+ webhooks=botWebhooks({db,tx,get,access,wake,audit,masterId:father.id,paused:()=>!!readAdminSettings(db).maintenance,deliverable:interactions.deliverable,
+  keyPath:process.env.WEBHOOK_KEY_PATH||(process.env.UPLOAD_PATH?join(process.env.UPLOAD_PATH,'../bot-webhook.key'):undefined),
+  masterReply(chat,text){const row=messaging.insert(chat,father.accountId,{text,client_id:randomUUID()}).row;interactions.setMarkup(row,get(father.id),interactions.markup(father.markup));return ()=>messaging.publish(row);},
+  ...webhookOptions});
  function drain(){
   if(closed||draining)return;draining=true;const notify=new Set(),replies=[];
   try{tx(()=>{
@@ -97,9 +105,9 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
  }
  const tick=()=>{try{drain();}catch{console.error('[bots] outbox processing failed; events retained');}};
  const timer=setInterval(tick,1000);timer.unref();
- const retention=setInterval(()=>{try{interactions.cleanup();for(const [key,item] of buckets)if(item.until<Date.now())buckets.delete(key);db.prepare('DELETE FROM bot_father_sessions WHERE updated<?').run(Date.now()-3600000);db.prepare('DELETE FROM bot_updates WHERE expires<?').run(Date.now());db.prepare('DELETE FROM bot_idempotency WHERE created<?').run(Date.now()-86400000);db.prepare('DELETE FROM bot_message_outbox WHERE processed<?').run(Date.now()-86400000);}catch{console.error('[bots] retention failed');}},60000);retention.unref();
+ const retention=setInterval(()=>{try{webhooks.cleanup();interactions.cleanup();for(const [key,item] of buckets)if(item.until<Date.now())buckets.delete(key);db.prepare('DELETE FROM bot_father_sessions WHERE updated<?').run(Date.now()-3600000);db.prepare('DELETE FROM bot_updates WHERE expires<?').run(Date.now());db.prepare('DELETE FROM bot_idempotency WHERE created<?').run(Date.now()-86400000);db.prepare('DELETE FROM bot_message_outbox WHERE processed<?').run(Date.now()-86400000);}catch{console.error('[bots] retention failed');}},60000);retention.unref();
  async function poll(req,res,url){
-  let bot=authenticate(req,'messages:read_events');rate('poll:'+bot.id,120);
+  let bot=authenticate(req,'messages:read_events');if(webhooks.enabled(bot.id))throw fail(409,'DELIVERY_MODE_CONFLICT','Включён webhook');rate('poll:'+bot.id,120);
   const offset=Number(url.searchParams.get('offset')||1),count=Number(url.searchParams.get('limit')||100),timeout=Number(url.searchParams.get('timeout')??30);
   if(!Number.isSafeInteger(offset)||offset<1||offset>bot.last_update_id+1||!Number.isInteger(count)||count<1||count>100||!Number.isInteger(timeout)||timeout<0||timeout>30)throw fail(400,'INVALID_POLL','Некорректные параметры получения событий');
   const lease=randomUUID(),until=Date.now()+35000;
@@ -109,7 +117,7 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
    db.prepare('UPDATE bot_updates SET acked=1 WHERE bot_id=? AND update_id<?').run(bot.id,offset);
    const deadline=Date.now()+timeout*1000;
    for(;;){
-    bot=authenticate(req,'messages:read_events');drain();
+    bot=authenticate(req,'messages:read_events');if(webhooks.enabled(bot.id)||db.prepare('SELECT poll_lease FROM bots WHERE id=?').get(bot.id).poll_lease!==lease)throw fail(409,'DELIVERY_MODE_CONFLICT','Транспорт изменён');drain();
     const pending=db.prepare('SELECT * FROM bot_updates WHERE bot_id=? AND update_id>=? AND acked=0 AND expires>? ORDER BY update_id LIMIT 1000').all(bot.id,offset,Date.now()),updates=[];
     for(const row of pending){let chat;try{chat=access(bot,row.chat_id);}catch(e){if(e.status){db.prepare('UPDATE bot_updates SET acked=1 WHERE bot_id=? AND update_id=?').run(bot.id,row.update_id);continue;}throw e;}
      const value=JSON.parse(row.payload);if(value.event_type==='callback.created'&&!interactions.deliverable(value)||chat.version!==row.grant_version||!(row.restricted_allowed||chat.kind==='direct'||chat.visibility==='full_read'&&bot.scopes.includes('groups:read_all'))){db.prepare('UPDATE bot_updates SET acked=1 WHERE bot_id=? AND update_id=?').run(bot.id,row.update_id);continue;}
@@ -123,9 +131,16 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
  }
  async function dataHandle(req,res,url){
   const path=url.pathname.replace(/^\/api(?=\/bot\/)/,''),method=req.method;
+  if(path==='/bot/v1/delivery/secret'&&method==='GET')return secretPage(res);
+  if(path==='/bot/v1/delivery/secret/claim'&&method==='POST'){const data=await body(req);only(data,['ticket']);res.setHeader('Cache-Control','no-store');return json(res,200,webhooks.claim(data.ticket));}
   const routes={GET:{'/bot/v1/me':null,'/bot/v1/commands':'commands:manage'},PUT:{'/bot/v1/commands':'commands:manage'}};
   if(path==='/bot/v1/updates'&&method==='GET')return poll(req,res,url);
   let bot=authenticate(req,routes[method]?.[path]);rate('api:'+bot.id,600);
+  if(path==='/bot/v1/delivery/status'&&method==='GET')return json(res,200,webhooks.status(bot.id));
+  if(path==='/bot/v1/delivery/webhook'){
+   if(method==='PUT'){const data=await body(req);bot=authenticate(req,'messages:read_events');const validated=await webhooks.configure(bot,data);bot=authenticate(req,'messages:read_events');const result=tx(()=>webhooks.save(bot,validated,false));return json(res,200,{mode:'webhook',webhook_secret:result.secret});}
+   if(method==='DELETE'){bot=authenticate(req,'messages:read_events');tx(()=>webhooks.off(bot));res.writeHead(204);return res.end();}
+  }
   if(path==='/bot/v1/me'&&method==='GET')return json(res,200,info(bot));
   if(path==='/bot/v1/commands'){
    if(method==='GET')return json(res,200,{commands:JSON.parse(bot.commands)});
@@ -240,7 +255,7 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
   broadcast(chat,{type:'community',chat_id:chat});json(res,200,{ok:true});return true;
  }
  return {
-  privateChat,drain:tick,buttons:interactions.buttons,
+  privateChat,drain:tick,webhooks,buttons:interactions.buttons,
   checkHumanSend(chat,uid){const bot=db.prepare("SELECT b.id FROM bots b JOIN members m ON m.user_id=b.account_id WHERE m.chat_id=? AND b.account_id<>? AND (SELECT kind FROM chats WHERE id=?)='direct'").get(chat,uid,chat);if(bot){const row=db.prepare('SELECT active FROM bot_chat_grants WHERE bot_id=? AND chat_id=?').get(bot.id,chat);if(!row?.active)throw fail(403,'BOT_BLOCKED','Сначала разблокируйте бота');available(get(bot.id));}},
   async handle(req,res,url,uid){
    const botPath=/^\/(?:api\/)?bot\/v1(?:\/|$)/.test(url.pathname),devPath=/^\/(?:api\/)?developer\/v1(?:\/|$)/.test(url.pathname);
@@ -249,6 +264,6 @@ export function botPlatform({db,body,json,userById,member,publish,broadcast,mess
    catch(e){if(!e.status)console.error('[bots] request failed',e.code||'internal');if(!res.headersSent&&!res.destroyed){if(e.status===429)res.setHeader('Retry-After','60');res.setHeader('X-Request-ID',req.botRequestId||'');json(res,e.status||500,{error:{code:e.code||(e.status?'REQUEST_FAILED':'INTERNAL_ERROR'),message:e.status?e.message:'Ошибка сервера',request_id:req.botRequestId,retryable:!e.status||e.status>=500||e.status===429}});}}
    return true;
   },
-  close(){closed=true;clearInterval(timer);clearInterval(retention);for(const done of waiting.values())done();waiting.clear();}
+  close(){closed=true;clearInterval(timer);clearInterval(retention);for(const done of waiting.values())done();waiting.clear();return webhooks.close();}
  };
 }
