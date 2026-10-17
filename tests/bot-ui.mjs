@@ -62,7 +62,7 @@ try{
 
  const mainChat=await api('/bots/manager',{});await api('/chats/'+mainChat.id+'/messages',{text:'/webhook @browser_test_bot https://example.com/events',client_id:randomUUID()});
  let ticket;
- for(let i=0;i<100;i++){const messages=await api('/chats/'+mainChat.id+'/messages');ticket=messages.map(m=>m.text.match(/secret#([A-Za-z0-9_-]{43})/)?.[1]).find(Boolean);if(ticket)break;await new Promise(r=>setTimeout(r,50));}
+ for(let i=0;i<100;i++){const messages=await api('/chats/'+mainChat.id+'/messages');ticket=messages.map(m=>m.text.match(/secret#([a-f0-9]{64})/)?.[1]).find(Boolean);if(ticket)break;await new Promise(r=>setTimeout(r,50));}
  assert.ok(ticket);const secretView=await context.newPage();secretView.on('pageerror',e=>errors.push(e.message));
  const link='http://127.0.0.1:5201/bot/v1/delivery/secret#'+ticket;
  await secretView.goto(link);assert.equal(new URL(secretView.url()).hash,'');assert.equal(await secretView.locator('#result').isVisible(),false);

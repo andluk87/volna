@@ -57,7 +57,7 @@ export function botWebhooks({db,tx,get,access,wake,audit,deliverable,masterReply
  }
  if(!db.columns('bot_webhooks').some(c=>c.name==='reply_chat'))db.exec('ALTER TABLE bot_webhooks ADD COLUMN reply_chat BIGINT');
  function claim(ticket){
-  if(typeof ticket!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(ticket))throw problem(400,'INVALID_SECRET_LINK');
+  if(typeof ticket!=='string'||!/^[a-f0-9]{64}$/.test(ticket))throw problem(400,'INVALID_SECRET_LINK');
   return tx(()=>{
    const ticketHash=createHash('sha256').update(ticket).digest('hex'),record=db.prepare('SELECT * FROM bot_webhook_claims WHERE ticket_hash=? FOR UPDATE').get(ticketHash),c=record&&config(record.bot_id),bot=c&&get(c.bot_id);
    if(!record||record.used||record.expires<=now()||!c?.enabled||c.generation!==record.generation||!bot||bot.status!=='active'||bot.admin_blocked||bot.owner_blocked||!db.prepare('SELECT 1 FROM members WHERE chat_id=? AND user_id=?').get(c.reply_chat,bot.owner_id)||!db.prepare('SELECT 1 FROM bot_chat_grants WHERE bot_id=? AND chat_id=? AND active=1').get(masterId,c.reply_chat))throw problem(410,'SECRET_LINK_EXPIRED_OR_USED');
@@ -82,7 +82,7 @@ export function botWebhooks({db,tx,get,access,wake,audit,deliverable,masterReply
    const freshBot=get(c.bot_id);if(!freshBot||freshBot.status!=='active'||freshBot.admin_blocked||freshBot.owner_blocked)return;
    let reply;
    tx(()=>{
-    if(valid){db.prepare('UPDATE bot_webhooks SET enabled=1,pending=0,last_error=NULL WHERE bot_id=? AND generation=?').run(c.bot_id,c.generation);db.prepare('UPDATE bots SET poll_lease=NULL,poll_until=0 WHERE id=?').run(c.bot_id);audit(bot.id,bot.owner_id,'webhook.enable');const ticket=randomBytes(32).toString('base64url');db.prepare('INSERT INTO bot_webhook_claims(ticket_hash,bot_id,generation,expires) VALUES(?,?,?,?)').run(createHash('sha256').update(ticket).digest('hex'),bot.id,c.generation,now()+300000);
+    if(valid){db.prepare('UPDATE bot_webhooks SET enabled=1,pending=0,last_error=NULL WHERE bot_id=? AND generation=?').run(c.bot_id,c.generation);db.prepare('UPDATE bots SET poll_lease=NULL,poll_until=0 WHERE id=?').run(c.bot_id);audit(bot.id,bot.owner_id,'webhook.enable');const ticket=randomBytes(32).toString('hex');db.prepare('INSERT INTO bot_webhook_claims(ticket_hash,bot_id,generation,expires) VALUES(?,?,?,?)').run(createHash('sha256').update(ticket).digest('hex'),bot.id,c.generation,now()+300000);
     const origin=(process.env.PUBLIC_BASE_URL||(process.env.CHAT_DOMAIN?'https://'+process.env.CHAT_DOMAIN:'')).replace(/\/$/,'');
     reply=masterReply(c.reply_chat,`Webhook @${bot.username} включён. Polling отключён.\nПолучите секрет подписи по одноразовой ссылке (5 минут):\n${origin}/bot/v1/delivery/secret#${ticket}\n\nСам секрет в истории чата не сохраняется. Откройте ссылку и нажмите «Показать секрет». Сохраните его в конфигурации программы бота. Повторная команда /webhook создаст новый секрет.`);}
     else{db.prepare("UPDATE bot_webhooks SET pending=0,enabled=0,last_error='ADDRESS_VALIDATION_FAILED',secret='' WHERE bot_id=? AND generation=?").run(c.bot_id,c.generation);reply=masterReply(c.reply_chat,'Адрес webhook не прошёл проверку. Проверьте публичный HTTPS, DNS и доступность сервиса доставки. Polling доступен.');}

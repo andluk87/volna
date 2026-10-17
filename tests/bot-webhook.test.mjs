@@ -57,7 +57,7 @@ test('main bot owns webhook configuration, validates asynchronously and displays
  await send(`/webhook @${b.bot.username} https://example.com/events`);
  await eventually(async()=> (await f.status()).data.mode==='webhook');
  const history=(await f.call(`/api/chats/${manager.id}/messages`,f.owner.token)).data,answer=history.find(m=>m.text.includes('одноразовой ссылке'));
- assert.ok(answer);const ticket=answer.text.match(/secret#([A-Za-z0-9_-]{43})/)[1];
+ assert.ok(answer);const ticket=answer.text.match(/secret#([a-f0-9]{64})/)[1];
  const page=await f.call('/bot/v1/delivery/secret');assert.equal(page.status,200);assert.equal(page.headers.get('cache-control'),'no-store');assert.match(page.headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.match(page.data,/Показать секрет/);
  const claimed=await f.call('/bot/v1/delivery/secret/claim',undefined,{ticket});assert.equal(claimed.status,200);assert.equal(claimed.headers.get('cache-control'),'no-store');const secret=claimed.data.webhook_secret;assert.match(secret,/^[A-Za-z0-9_-]{43}$/);
  assert.ok(!JSON.stringify((await f.status()).data).includes(secret));assert.ok(!JSON.stringify(history).includes(secret));assert.ok(!JSON.stringify(f.db().prepare('SELECT * FROM bot_webhook_claims').all()).includes(ticket));
@@ -105,7 +105,7 @@ test('paused bots and subscriptions without matching events do not starve active
 test('one-time webhook secret links expire, are invalidated by reconfiguration, and concurrent claims reveal only once',async t=>{
  const f=await fixture(t),b=f.bot,manager=(await f.call('/api/bots/manager',f.owner.token,{})).data;
  async function link(){await f.call(`/api/chats/${manager.id}/messages`,f.owner.token,{text:`/webhook @${b.bot.username} https://example.com/`+randomUUID(),client_id:randomUUID()});
-  return eventually(async()=>{const h=(await f.call(`/api/chats/${manager.id}/messages`,f.owner.token)).data;const tickets=h.map(m=>m.text.match(/secret#([A-Za-z0-9_-]{43})/)?.[1]).filter(Boolean);return tickets.find(t=>!seen.has(t));});}
+  return eventually(async()=>{const h=(await f.call(`/api/chats/${manager.id}/messages`,f.owner.token)).data;const tickets=h.map(m=>m.text.match(/secret#([a-f0-9]{64})/)?.[1]).filter(Boolean);return tickets.find(t=>!seen.has(t));});}
  const seen=new Set(),first=await link();seen.add(first);f.advance(300001);assert.equal((await f.call('/bot/v1/delivery/secret/claim',null,{ticket:first})).status,410);
  const second=await link();seen.add(second);await f.call('/bot/v1/delivery/webhook',b.token,{url:'https://example.com/new'},'PUT');assert.equal((await f.call('/bot/v1/delivery/secret/claim',null,{ticket:second})).status,410);
  const third=await link();const claims=await Promise.all([f.call('/bot/v1/delivery/secret/claim',null,{ticket:third}),f.call('/bot/v1/delivery/secret/claim',null,{ticket:third})]);assert.deepEqual(claims.map(c=>c.status).sort(),[200,410]);
