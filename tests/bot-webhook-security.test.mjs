@@ -36,3 +36,21 @@ test('webhook secrets use authenticated encryption and signature covers exact ra
  const bytes=Buffer.from(a,'base64');bytes[30]^=1;assert.throws(()=>box.open(bytes.toString('base64')));
  const raw='{"text":"Привет","n":1}',timestamp='1792200000';assert.equal(signature(secret,timestamp,raw),'sha256='+createHmac('sha256',secret).update(timestamp+'.'+raw).digest('hex'));assert.notEqual(signature(secret,timestamp,raw),signature(secret,timestamp,raw+' '));
 });
+
+test('real HTTPS webhook carries signed UTF8 bytes, retries non-2xx and bounds response bodies',async t=>{
+ const {mkdtempSync,readFileSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os'),{join}=await import('node:path'),{execFileSync}=await import('node:child_process'),https=await import('node:https');
+ const dir=mkdtempSync(join(tmpdir(),'webhook-tls-')),key=join(dir,'key.pem'),cert=join(dir,'cert.pem');
+ execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','1','-subj','/CN=webhook.example.com','-addext','subjectAltName=DNS:webhook.example.com'],{stdio:'ignore'});
+ let status=200,large=false;const received=[];
+ const server=https.createServer({key:readFileSync(key),cert:readFileSync(cert)},async(req,res)=>{const chunks=[];for await(const c of req)chunks.push(c);const raw=Buffer.concat(chunks).toString('utf8');received.push({raw,headers:req.headers});res.writeHead(status);res.end(large?'x'.repeat(9000):'ok');});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));rmSync(dir,{recursive:true,force:true});});
+ const secret='receiver-specific signing secret',input={op:'deliver',url:'https://webhook.example.com/events',body:'{"text":"Привет 👋"}',event_id:'evt_actual_tls',timestamp:'1792200000'};input.signature=signature(secret,input.timestamp,input.body);
+ // Route the public test address to a local TLS fixture with its own trusted CA.
+ // Production uses the pinned public lookup; its exact options are checked above.
+ const options={resolver:async()=>[{address:'8.8.8.8',family:4}],request:(url,opts,cb)=>https.request(url,{...opts,port:server.address().port,ca:readFileSync(cert),lookup:(_host,o,done)=>o?.all?done(null,[{address:'127.0.0.1',family:4}]):done(null,'127.0.0.1',4)},cb)};
+ assert.deepEqual(await egressOperation(input,options),{ok:true,status:200});assert.equal(received[0].raw,input.body);assert.equal(received[0].headers['x-bot-signature'],signature(secret,received[0].headers['x-bot-timestamp'],received[0].raw));assert.equal(received[0].headers.authorization,undefined);
+ status=500;assert.deepEqual(await egressOperation(input,options),{ok:false,status:500});assert.equal(received[1].headers['x-bot-event-id'],received[0].headers['x-bot-event-id']);
+ large=true;await assert.rejects(egressOperation(input,options),/RESPONSE_TOO_LARGE/);
+ const untrusted={...options,request:(url,opts,cb)=>https.request(url,{...opts,port:server.address().port,lookup:(_h,o,done)=>o?.all?done(null,[{address:'127.0.0.1',family:4}]):done(null,'127.0.0.1',4)},cb)};
+ await assert.rejects(egressOperation(input,untrusted),/self-signed|certificate/i);
+});
