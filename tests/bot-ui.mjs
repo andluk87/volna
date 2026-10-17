@@ -68,6 +68,6 @@ try{
  await secretView.goto(link);assert.equal(new URL(secretView.url()).hash,'');assert.equal(await secretView.locator('#result').isVisible(),false);
  await secretView.getByRole('button',{name:'Показать секрет',exact:true}).click();await secretView.locator('#result').waitFor({state:'visible'});const signingSecret=await secretView.locator('#result').innerText();assert.match(signingSecret,/^[A-Za-z0-9_-]{43}$/);
  assert.ok(!app.db.prepare('SELECT text FROM messages').all().some(m=>m.text.includes(signingSecret)));
- await secretView.goto(link);await secretView.getByRole('button',{name:'Показать секрет',exact:true}).click();await secretView.getByText('Ссылка истекла, уже использована или недоступна.',{exact:false}).waitFor();await secretView.close();
+ await secretView.goto('about:blank');await secretView.goto(link);await secretView.getByRole('button',{name:'Показать секрет',exact:true}).click();await secretView.getByText('Ссылка истекла, уже использована или недоступна.',{exact:false}).waitFor();await secretView.close();
  assert.deepEqual(errors,[]);console.log('PASS: main-bot management, command menus, inline callback/alert, group grants, mobile layout and one-time webhook secret page.');await context.close();
 }finally{await browser.close();await vite.close();await app.close();rmSync(uploads,{recursive:true,force:true});rmSync(join(directory,'index.html'),{force:true});rmSync(join(directory,'entry.jsx'),{force:true});}
