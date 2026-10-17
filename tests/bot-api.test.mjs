@@ -271,7 +271,7 @@ test('inline buttons keep callback payload server-side, bind actor and bot, dedu
 test('keyboard validation, idempotency and markup-only revision changes invalidate old callbacks',async t=>{
  const f=await fixture(t),b=await f.bot(),chat=(await f.call('/api/bots/'+b.bot.id+'/start',f.other.token,{})).data.id;
  const payload={chat_id:String(chat),type:'text',text:'Keyboard'},good={inline_keyboard:[[{text:'🙂'.repeat(64),callback_data:'ю'.repeat(64)}]]};
- for(const reply_markup of [{inline_keyboard:[[{text:'x',url:'https://example.com'}]]},{inline_keyboard:Array.from({length:9},()=>[{text:'x',callback_data:'x'}])},{inline_keyboard:[[]]},{inline_keyboard:[[{text:'x'.repeat(65),callback_data:'x'}]]},{inline_keyboard:[[{text:'x',callback_data:'ю'.repeat(65)}]]},{inline_keyboard:[[{text:'x',callback_data:'\ud800'}]]}]){
+ for(const reply_markup of [{inline_keyboard:[[{text:'x',url:'https://example.com'}]]},{inline_keyboard:Array.from({length:9},()=>[{text:'x',callback_data:'x'}])},{inline_keyboard:[[]]},{inline_keyboard:[[{text:'x'.repeat(65),callback_data:'x'}]]},{inline_keyboard:[[{text:'x',callback_data:'ю'.repeat(65)}]]},{inline_keyboard:[[{text:'x',callback_data:'\ud800'}]]},{inline_keyboard:[[{text:'\ud800',callback_data:'\udc00'}]]}]){
   assert.equal((await f.call('/bot/v1/messages',b.token,{...payload,reply_markup},'POST',{'Idempotency-Key':randomUUID()})).status,400);
  }
  const key=randomUUID(),sent=await f.call('/bot/v1/messages',b.token,{...payload,reply_markup:good},'POST',{'Idempotency-Key':key});assert.equal(sent.status,201);

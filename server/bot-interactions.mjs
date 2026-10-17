@@ -2,7 +2,8 @@ import {randomUUID} from 'node:crypto';
 const fail=(status,code,message)=>Object.assign(Error(message),{status,code});
 const only=(data,keys)=>{if(!data||typeof data!=='object'||Array.isArray(data)||Object.keys(data).some(k=>!keys.includes(k)))throw fail(400,'INVALID_REQUEST','Некорректный запрос');};
 const id=value=>{const n=Number(value);if(typeof value==='string'&&!/^[1-9]\d*$/.test(value)||!Number.isSafeInteger(n)||n<1||!['string','number'].includes(typeof value))throw fail(400,'INVALID_ID','Некорректный идентификатор');return n;};
-const uuid=value=>typeof value==='string'&&/^[a-f0-9-]{36}$/.test(value);
+const uuid=value=>typeof value==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value);
+const invalidUnicode=value=>/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value);
 export function botInteractions({db,get,access,member,publish,wake,tx,messaging,master}){
  db.exec("CREATE TABLE IF NOT EXISTS bot_callback_actions(id TEXT PRIMARY KEY,bot_id TEXT NOT NULL REFERENCES bots(id),message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,row_index BIGINT NOT NULL,column_index BIGINT NOT NULL,label TEXT NOT NULL,payload TEXT NOT NULL,active BIGINT NOT NULL DEFAULT 1); CREATE INDEX IF NOT EXISTS bot_actions_message ON bot_callback_actions(message_id,active); CREATE TABLE IF NOT EXISTS bot_callback_requests(id TEXT PRIMARY KEY,action_id TEXT NOT NULL REFERENCES bot_callback_actions(id) ON DELETE CASCADE,actor_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,interaction_id TEXT NOT NULL,grant_version BIGINT NOT NULL,expires BIGINT NOT NULL,answer TEXT,UNIQUE(actor_id,interaction_id)); CREATE INDEX IF NOT EXISTS bot_callbacks_expiry ON bot_callback_requests(expires);");
  function markup(value){
@@ -11,7 +12,7 @@ export function botInteractions({db,get,access,member,publish,wake,tx,messaging,
   if(!Array.isArray(rows)||rows.length>8||rows.some(row=>!Array.isArray(row)||!row.length||row.length>8))throw fail(400,'INVALID_MARKUP','Клавиатура: до 8 строк по 8 кнопок');
   return rows.map(row=>row.map(button=>{
    only(button,['text','callback_data']);
-   if(typeof button.text!=='string'||!button.text.trim()||Array.from(button.text).length>64||typeof button.callback_data!=='string'||Buffer.byteLength(button.callback_data,'utf8')<1||Buffer.byteLength(button.callback_data,'utf8')>128||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(button.text+button.callback_data))throw fail(400,'INVALID_MARKUP','Название: 1–64 символа, callback_data: 1–128 байт UTF-8');
+   if(typeof button.text!=='string'||!button.text.trim()||Array.from(button.text).length>64||typeof button.callback_data!=='string'||Buffer.byteLength(button.callback_data,'utf8')<1||Buffer.byteLength(button.callback_data,'utf8')>128||invalidUnicode(button.text)||invalidUnicode(button.callback_data))throw fail(400,'INVALID_MARKUP','Название: 1–64 символа, callback_data: 1–128 байт UTF-8');
    return {text:button.text,callback_data:button.callback_data};
   }));
  }
