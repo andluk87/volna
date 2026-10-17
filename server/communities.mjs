@@ -43,7 +43,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
  return async(req,res,url,uid)=>{
   const path=url.pathname,method=req.method;
   if(path==='/api/chats'&&method==='GET'){
-   const rows=db.prepare(`SELECT * FROM (SELECT c.id,c.kind,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,c.topics_enabled,c.general_name,me.role,me.last_read,
+   const rows=db.prepare(`SELECT * FROM (SELECT c.id,c.kind,peer.account_type AS peer_account_type,(SELECT id FROM bots WHERE account_id=peer.id) AS peer_bot_id,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,c.topics_enabled,c.general_name,me.role,me.last_read,
     COALESCE((SELECT MAX(last_read) FROM members WHERE chat_id=c.id AND user_id<>?),me.last_read) AS peer_read,
     COALESCE((SELECT MAX(MAX(last_read,last_delivered)) FROM members WHERE chat_id=c.id AND user_id<>me.user_id),me.last_read) AS peer_delivered,
     CASE WHEN c.kind IN ('group','channel') THEN c.id ELSE COALESCE(peer.id,?) END AS peer_id,
@@ -51,7 +51,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
     CASE WHEN c.kind='direct' THEN peer.username ELSE c.kind END AS username,
     CASE WHEN c.pair='official-volna-news' THEN '/icons/icon-192.png' WHEN c.kind='direct' AND peer.avatar_hidden=0 THEN CASE WHEN peer.avatar_id IS NOT NULL THEN '/api/files/'||peer.avatar_id ELSE NULL END END AS avatar_url,
     CASE WHEN c.kind='saved' THEN 1 ELSE 0 END AS saved,
-    CASE WHEN (c.topic_closed=1 AND me.role NOT IN ('owner','admin')) OR c.admin_locked=1 OR COALESCE((SELECT admin_locked FROM chats WHERE id=c.parent_id),0)=1 THEN 0 WHEN (c.kind='channel' OR c.kind='group' AND c.posting_policy='admins') AND me.role NOT IN ('owner','admin') THEN 0 ELSE 1 END AS can_send,
+    CASE WHEN c.kind='direct' AND peer.account_type='bot' AND NOT EXISTS(SELECT 1 FROM bots b JOIN bot_chat_grants g ON g.bot_id=b.id WHERE b.account_id=peer.id AND b.status='active' AND g.chat_id=c.id AND g.active=1) THEN 0 WHEN (c.topic_closed=1 AND me.role NOT IN ('owner','admin')) OR c.admin_locked=1 OR COALESCE((SELECT admin_locked FROM chats WHERE id=c.parent_id),0)=1 THEN 0 WHEN (c.kind='channel' OR c.kind='group' AND c.posting_policy='admins') AND me.role NOT IN ('owner','admin') THEN 0 ELSE 1 END AS can_send,
     (SELECT COUNT(*) FROM members WHERE chat_id=c.id) AS member_count,
     (SELECT CASE WHEN deleted_at IS NOT NULL THEN 'Сообщение удалено' WHEN text='' THEN 'Вложение' ELSE text END FROM messages WHERE chat_id=c.id AND id>COALESCE(vis.hidden_before,0) ORDER BY id DESC LIMIT 1) AS last_text,
     (SELECT created_at FROM messages WHERE chat_id=c.id AND id>COALESCE(vis.hidden_before,0) ORDER BY id DESC LIMIT 1) AS last_at,

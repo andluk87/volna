@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 const error=(status,message)=>Object.assign(new Error(message),{status});
 const emojis=['👍','❤️','😂','🔥','🎉','😢','👏','😍','🤔','😮','🙏','💯','👎','🥰','🤣','😎','😭','🤝','💪','👋','✨','💙','😡','🤗'];
-export function messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions=()=>null}) {
+export function messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions=()=>null,authorizeSend=()=>{}}) {
   mkdirSync(uploads,{recursive:true});
   db.exec('CREATE TABLE IF NOT EXISTS chat_visibility(user_id INTEGER NOT NULL REFERENCES users(id),chat_id INTEGER NOT NULL REFERENCES chats(id),hidden_before INTEGER NOT NULL DEFAULT 0,deleted INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(user_id,chat_id))');
   const cutoff=(chat,uid)=>db.prepare('SELECT hidden_before FROM chat_visibility WHERE user_id=? AND chat_id=?').get(uid,chat)?.hidden_before||0;
@@ -39,7 +39,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(row.deleted_at)return {...row,text:'',attachment_id:null,expression_id:null,emoji_entities:[],reply_to:null,forwarded_name:null,attachment:null,reply:null,reactions:[],pinned:false,poll:null,checklist:null,interactive:null};
     const reply=row.reply_to?get(row.reply_to):null;
     const sender=userById(row.sender_id);
-    return {...row,...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_name:sender?.name||'Пользователь',sender_username:sender?.username||'',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
+    return {...row,...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_is_bot:!!sender?.is_bot,sender_name:sender?.name||'Пользователь',sender_username:sender?.username||'',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
       reply:reply?{id:reply.id,sender_id:reply.sender_id,name:userById(reply.sender_id)?.name,text:reply.deleted_at?'Сообщение удалено':reply.text||'Вложение',deleted:!!reply.deleted_at}:null,
       reactions:db.prepare('SELECT r.emoji,r.user_id,u.name FROM reactions r JOIN users u ON u.id=r.user_id WHERE r.message_id=? ORDER BY r.emoji,r.reaction_order').all(row.id).map(reaction=>({...reaction,avatar_url:userById(reaction.user_id)?.avatar_url||null})),
       pinned:!!db.prepare('SELECT 1 FROM pins WHERE message_id=?').get(row.id)};
@@ -48,7 +48,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   const authorized=(id,uid)=>{const row=get(id);if(!row)throw error(404,'Сообщение не найдено');member(row.chat_id,uid);if(row.id<=cutoff(row.chat_id,uid))throw error(404,'Сообщение не найдено');return row;};
   const clientId=value=>{if(typeof value!=='string'||!/^[a-zA-Z0-9-]{16,64}$/.test(value))throw error(400,'Некорректный идентификатор сообщения');return value;};
   function insert(chat,uid,data){
-    canPublish(chat,uid);
+    canPublish(chat,uid);authorizeSend(chat,uid);
     const interactive=interactivePayload(data);if(interactive&&(data.attachment_id||data.expression_id))throw error(400,'Опрос или список отправляется отдельно от вложения');
     const cid=clientId(data.client_id),rawText=String(data.text||interactive?.poll?.question||interactive?.checklist?.title||''),text=rawText.trim(),reply=data.reply_to||null,source=data.forward_source||null;
     if(data.expression_id&&(typeof data.expression_id!=='string'||!/^[a-f0-9]{32}$/.test(data.expression_id)))throw error(400,'Некорректный элемент набора');
@@ -83,7 +83,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     const unused=db.prepare('SELECT id FROM attachments WHERE created_at<? AND NOT EXISTS (SELECT 1 FROM messages WHERE attachment_id=attachments.id) AND NOT EXISTS (SELECT 1 FROM users WHERE avatar_id=attachments.id)').all(Date.now()-86400000);
     for(const file of unused){
       if(expressionService.fileUsed(file.id))continue;
-      // Let SQLite reject any additional references before touching the file.
+      // Let PostgreSQL reject any additional references before touching the file.
       db.exec('BEGIN');
       try{db.prepare('DELETE FROM attachments WHERE id=?').run(file.id);}
       catch(e){
@@ -312,6 +312,22 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       const updated=get(row.id);changed(updated,reactionEvent?{reaction:reactionEvent}:{});json(res,200,hydrate(updated));return true;
     }
     return false;
+  };
+  // Internal service contract: callers own the transaction and publish after COMMIT.
+  handle.insert=insert;
+  handle.publish=(row,type='message')=>broadcast(row.chat_id,{type,message:hydrate(row)});
+  handle.editOwn=(id,uid,data)=>{
+    const row=authorized(id,uid);canPublish(row.chat_id,uid);
+    if(row.sender_id!==uid)throw error(403,'Можно изменять только свои сообщения');
+    if(row.deleted_at)throw error(410,'Сообщение удалено');
+    if(row.revision!==data.revision)throw Object.assign(error(409,'Сообщение уже изменилось'),{code:'REVISION_CONFLICT'});
+    const text=data.text.trim();if(!text||text.length>4000)throw error(400,'Текст: 1–4000 символов');
+    db.prepare('UPDATE messages SET text=?,edited_at=? WHERE id=?').run(text,new Date().toISOString(),id);expressions()?.recordEntities(id,[]);return get(id);
+  };
+  handle.deleteOwn=(id,uid)=>{
+    const row=authorized(id,uid);if(row.sender_id!==uid)throw error(403,'Можно удалять только свои сообщения');if(row.deleted_at)return row;
+    db.prepare("UPDATE messages SET text='',transcript=NULL,deleted_at=? WHERE id=?").run(new Date().toISOString(),id);expressions()?.recordEntities(id,[]);
+    db.prepare('DELETE FROM reactions WHERE message_id=?').run(id);db.prepare('DELETE FROM pins WHERE message_id=?').run(id);return get(id);
   };
   handle.cleanupUnused=cleanupUnused;handle.hydrate=hydrate;
   return handle;
