@@ -3,10 +3,10 @@
 set -eu
 cd "$(dirname "$0")/.."
 docker compose exec -T server node --input-type=module <<'JS'
-import {DatabaseSync} from 'node:sqlite';
+import {openDatabase} from './server/database.mjs';
 import {createSmsRouter} from './server/sms-providers.mjs';
 console.log({key_configured:!!process.env.NOTIFICORE_API_KEY?.trim(),sender_configured:!!process.env.NOTIFICORE_ORIGINATOR?.trim(),trust_proxy:process.env.AUTH_TRUST_PROXY==='1'});
-const db=new DatabaseSync(process.env.DB_PATH||'/data/volna.db',{readOnly:true});
+const db=openDatabase();
 try {
  const now=Date.now();console.log(createSmsRouter({db}).status());
  console.table(db.prepare('SELECT status,COUNT(*) AS count FROM sms_challenges WHERE created>? GROUP BY status').all(now-86400000));

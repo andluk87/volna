@@ -44,6 +44,6 @@ test('push: private defaults, ownership, durable queue/key, preview, read suppre
   assert.equal((await req(`/calls/${call.id}/ringing-receipt`,'',{receipt:receipt.ring_receipt})).status,404);assert.equal(app.db.prepare("SELECT COUNT(*) n FROM push_jobs WHERE kind='call'").get().n,0);
   status=410;await send('Удалённая подписка');await due();assert.equal(app.db.prepare('SELECT COUNT(*) n FROM push_subscriptions').get().n,0);status=201;
   await req('/push/subscribe',b.token,{subscription:sub});await send('Не отправлять после выхода');await req('/logout',b.token,{});assert.equal(app.db.prepare('SELECT COUNT(*) n FROM push_subscriptions').get().n,0);assert.equal(app.db.prepare('SELECT COUNT(*) n FROM push_jobs').get().n,0);
-  assert.equal(app.db.prepare('PRAGMA user_version').get().user_version,7);
+  assert.equal(app.db.schemaVersion,7);
  }finally{await app.close();rmSync(dir,{recursive:true,force:true});}
 });

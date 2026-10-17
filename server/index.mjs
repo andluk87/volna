@@ -16,21 +16,21 @@ import { topics,topicNotification } from './topics.mjs';
 import { usernames } from './usernames.mjs';
 import { phoneAuth } from './phone-auth.mjs';
 import { createTranscriber } from './transcription.mjs';
-import { DatabaseSync } from 'node:sqlite';
+import { openDatabase } from './database.mjs';
 import { randomInt, createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => Object.assign(new Error(message), { status });
-export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, smsOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', newsEnabled = database!==':memory:'&&process.env.VOLNA_NEWS_CHANNEL!=='0', uploads = process.env.UPLOAD_PATH || join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads'), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
-  if (database !== ':memory:') mkdirSync(dirname(database), { recursive: true });
-  const db = new DatabaseSync(database);
-  const legacy = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
-  if (legacy && !db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='phone')) {
+export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, smsOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', newsEnabled = database!==':memory:'&&process.env.VOLNA_NEWS_CHANNEL!=='0', uploads = process.env.UPLOAD_PATH || (process.env.DATABASE_URL||/^postgres(?:ql)?:/.test(database) ? './data/uploads' : join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads')), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
+  if (database !== ':memory:'&&!/^postgres(?:ql)?:/.test(database)) mkdirSync(dirname(database), { recursive: true });
+  const db = openDatabase(database);
+  const legacy = db.hasTable('users');
+  if (legacy && !db.columns('users').some(c=>c.name==='phone')) {
     db.close(); throw Error('Legacy authentication database: run scripts/migrate-phone-auth.sh before starting 0.12.0. Backup is mandatory.');
   }
-  db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
+  db.exec(`
     CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, name TEXT NOT NULL, phone TEXT UNIQUE NOT NULL);
     CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), expires INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS chats(id INTEGER PRIMARY KEY, pair TEXT UNIQUE NOT NULL);
@@ -40,9 +40,9 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
     CREATE INDEX IF NOT EXISTS members_user ON members(user_id,chat_id);
     CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires);`);
   // New IDs cannot accidentally reuse legacy Android cache/account IDs.
-  if (!db.prepare("SELECT 1 FROM sqlite_sequence WHERE name='users'").get()) db.prepare("INSERT INTO sqlite_sequence(name,seq) VALUES('users',?)").run(randomInt(1000000000,2000000000));
-  if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='last_seen'))db.exec('ALTER TABLE users ADD COLUMN last_seen INTEGER');
-  const profileColumns=new Set(db.prepare('PRAGMA table_info(users)').all().map(c=>c.name));
+  if (!db.prepare('SELECT 1 FROM users LIMIT 1').get()&&!db.prepare("SELECT last_value FROM pg_sequences WHERE schemaname=current_schema() AND sequencename=(SELECT relname FROM pg_class WHERE oid=pg_get_serial_sequence('users','id')::regclass)").get()?.last_value) db.prepare("SELECT setval(pg_get_serial_sequence('users','id'), ?, false)").get(randomInt(1000000000,2000000000));
+  if(!db.columns('users').some(c=>c.name==='last_seen'))db.exec('ALTER TABLE users ADD COLUMN last_seen INTEGER');
+  const profileColumns=new Set(db.columns('users').map(c=>c.name));
   for(const [name,type] of Object.entries({first_name:"TEXT NOT NULL DEFAULT ''",last_name:"TEXT NOT NULL DEFAULT ''",profile_setup_required:'INTEGER NOT NULL DEFAULT 0'}))if(!profileColumns.has(name))db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   initAdminSchema(db);
   const streams = new Map(), limits = new Map();
@@ -127,7 +127,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
       if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
       const url = new URL(req.url, 'http://local'); const path = url.pathname; const method = req.method;
-      if (path === '/api/health' && method === 'GET') return json(res, 200, { ok: true });
+      if (path === '/api/health' && method === 'GET') {db.prepare('SELECT 1').get();return json(res, 200, { ok: true });}
       if (['/api/register','/api/login','/api/password'].includes(path) || path.startsWith('/api/auth/telegram/')) throw fail(404,'Этот способ входа удалён');
       if (path.startsWith('/api/auth/') || path.startsWith('/api/v1/auth/otp/')) { if(await phoneService.handle(req,res,url))return; }
       if (url.pathname.startsWith("/api/public/users/")) { limit("public:"+req.socket.remoteAddress,120); if(await usernameService.publicHandle(req,res,url))return; }

@@ -11,9 +11,9 @@ export function contacts({db,body,json,publish,userById}) {
  CREATE TABLE IF NOT EXISTS contact_queries(owner INTEGER NOT NULL,fingerprint TEXT NOT NULL,created INTEGER NOT NULL,PRIMARY KEY(owner,fingerprint));
  CREATE TABLE IF NOT EXISTS contact_operations(owner INTEGER NOT NULL,key TEXT NOT NULL,fingerprint TEXT NOT NULL,result TEXT NOT NULL,created INTEGER NOT NULL,PRIMARY KEY(owner,key));
  CREATE TABLE IF NOT EXISTS contact_secret(id INTEGER PRIMARY KEY CHECK(id=1),secret TEXT NOT NULL);`);
- if(!db.prepare('PRAGMA table_info(contact_settings)').all().some(c=>c.name==='presence'))db.exec("ALTER TABLE contact_settings ADD COLUMN presence TEXT NOT NULL DEFAULT 'everyone'");
- if(!db.prepare('PRAGMA table_info(contact_sources)').all().some(c=>c.name==='data'))db.exec("ALTER TABLE contact_sources ADD COLUMN data TEXT NOT NULL DEFAULT '{}'");
- const columns=new Set(db.prepare('PRAGMA table_info(users)').all().map(x=>x.name));
+ if(!db.columns('contact_settings').some(c=>c.name==='presence'))db.exec("ALTER TABLE contact_settings ADD COLUMN presence TEXT NOT NULL DEFAULT 'everyone'");
+ if(!db.columns('contact_sources').some(c=>c.name==='data'))db.exec("ALTER TABLE contact_sources ADD COLUMN data TEXT NOT NULL DEFAULT '{}'");
+ const columns=new Set(db.columns('users').map(x=>x.name));
  if(!columns.has('phone_verified_at'))db.exec('ALTER TABLE users ADD COLUMN phone_verified_at INTEGER NOT NULL DEFAULT 0');
  db.exec("UPDATE users SET phone_verified_at=MAX(COALESCE((SELECT MAX(created) FROM sms_challenges WHERE phone=users.phone AND status='verified'),0),COALESCE((SELECT MAX(created) FROM refresh_sessions WHERE user_id=users.id AND platform='android'),0)) WHERE phone_verified_at=0");
  db.prepare('INSERT OR IGNORE INTO contact_secret VALUES(1,?)').run(randomBytes(32).toString('hex'));

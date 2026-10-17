@@ -9,12 +9,11 @@ compose() {
  else docker compose -f compose.yaml "$@"; fi
 }
 compose exec -T server node --input-type=module - "$1" <<'NODE'
-import {DatabaseSync} from 'node:sqlite';
+import {openDatabase} from './server/database.mjs';
 import {ADMIN_PHONE,readAdminSettings,validateAdminSettings} from './server/admin-config.mjs';
 import {createSmsRouter} from './server/sms-providers.mjs';
-const provider=process.argv[2],db=new DatabaseSync(process.env.DB_PATH||'/data/volna.db');
+const provider=process.argv[2],db=openDatabase();
 try{
- db.exec('PRAGMA busy_timeout=5000');
  const router=createSmsRouter({db});router.validatePhone(process.env.ADMIN_PHONE||ADMIN_PHONE,provider);
  if(!router.status().providers[provider]?.configured)throw Error('Provider is not configured. Set its credentials in .env and recreate the server container.');
  db.exec('BEGIN IMMEDIATE');

@@ -5,10 +5,10 @@ const MAX_MEMBERS=300;
 export function communities({db,member,broadcast,publish,json,body,userById,online=()=>false}){
  db.exec('BEGIN IMMEDIATE');
  try{
-  const chatColumns=new Set(db.prepare('PRAGMA table_info(chats)').all().map(c=>c.name));
+  const chatColumns=new Set(db.columns('chats').map(c=>c.name));
   for(const [name,type] of Object.entries({kind:"TEXT NOT NULL DEFAULT 'direct'",title:"TEXT NOT NULL DEFAULT ''",description:"TEXT NOT NULL DEFAULT ''",created_by:'INTEGER',posting_policy:"TEXT NOT NULL DEFAULT 'all'",parent_id:"INTEGER REFERENCES chats(id)",topic_icon:"TEXT NOT NULL DEFAULT ''",topic_closed:"INTEGER NOT NULL DEFAULT 0",topic_deleted:"INTEGER NOT NULL DEFAULT 0",topic_create_policy:"TEXT NOT NULL DEFAULT 'admins'",topics_enabled:"INTEGER NOT NULL DEFAULT 0",general_name:"TEXT NOT NULL DEFAULT 'Общие вопросы'",general_hidden:"INTEGER NOT NULL DEFAULT 0",topic_pinned:"INTEGER NOT NULL DEFAULT 0",topic_pin_order:"INTEGER NOT NULL DEFAULT 0"}))if(!chatColumns.has(name))db.exec(`ALTER TABLE chats ADD COLUMN ${name} ${type}`);
   if(!chatColumns.has('topics_enabled'))db.exec("UPDATE chats SET topics_enabled=1 WHERE kind='group' AND parent_id IS NULL AND EXISTS(SELECT 1 FROM chats t WHERE t.parent_id=chats.id AND t.topic_deleted=0)");
-  const memberColumns=new Set(db.prepare('PRAGMA table_info(members)').all().map(c=>c.name));
+  const memberColumns=new Set(db.columns('members').map(c=>c.name));
   if(!memberColumns.has('last_delivered'))db.exec('ALTER TABLE members ADD COLUMN last_delivered INTEGER NOT NULL DEFAULT 0');
   if(!memberColumns.has('role'))db.exec("ALTER TABLE members ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");
   db.exec(`UPDATE chats SET kind='saved' WHERE pair LIKE 'saved:%';
@@ -17,11 +17,11 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
    CREATE TABLE IF NOT EXISTS community_bans(chat_id INTEGER NOT NULL REFERENCES chats(id),user_id INTEGER NOT NULL REFERENCES users(id),PRIMARY KEY(chat_id,user_id));
    CREATE TABLE IF NOT EXISTS chat_preferences(user_id INTEGER NOT NULL REFERENCES users(id),chat_id INTEGER NOT NULL REFERENCES chats(id),archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1)),muted INTEGER NOT NULL DEFAULT 0 CHECK(muted IN (0,1)),pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0,1)),PRIMARY KEY(user_id,chat_id));
    `);
-  const preferenceColumns=new Set(db.prepare('PRAGMA table_info(chat_preferences)').all().map(c=>c.name));
+  const preferenceColumns=new Set(db.columns('chat_preferences').map(c=>c.name));
   if(!preferenceColumns.has('pinned'))db.exec('ALTER TABLE chat_preferences ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0,1))');
   if(!preferenceColumns.has('manual_unread'))db.exec('ALTER TABLE chat_preferences ADD COLUMN manual_unread INTEGER NOT NULL DEFAULT 0');
   if(!preferenceColumns.has('notification_mode'))db.exec("ALTER TABLE chat_preferences ADD COLUMN notification_mode TEXT NOT NULL DEFAULT 'all'");
-  if(db.prepare('PRAGMA user_version').get().user_version<3)db.exec('PRAGMA user_version=3');
+  if(db.schemaVersion<3)db.schemaVersion=3;
   db.exec('COMMIT');
  }catch(e){db.exec('ROLLBACK');throw e;}
  const current=(chat,uid)=>{
@@ -43,7 +43,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
  return async(req,res,url,uid)=>{
   const path=url.pathname,method=req.method;
   if(path==='/api/chats'&&method==='GET'){
-   const rows=db.prepare(`SELECT c.id,c.kind,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,c.topics_enabled,c.general_name,me.role,me.last_read,
+   const rows=db.prepare(`SELECT * FROM (SELECT c.id,c.kind,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,c.topics_enabled,c.general_name,me.role,me.last_read,
     COALESCE((SELECT MAX(last_read) FROM members WHERE chat_id=c.id AND user_id<>?),me.last_read) AS peer_read,
     COALESCE((SELECT MAX(MAX(last_read,last_delivered)) FROM members WHERE chat_id=c.id AND user_id<>me.user_id),me.last_read) AS peer_delivered,
     CASE WHEN c.kind IN ('group','channel') THEN c.id ELSE COALESCE(peer.id,?) END AS peer_id,
@@ -64,7 +64,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
     LEFT JOIN chat_preferences pref ON pref.chat_id=c.id AND pref.user_id=me.user_id
     LEFT JOIN users peer ON c.kind='direct' AND peer.id=(SELECT user_id FROM members WHERE chat_id=c.id AND user_id<>? LIMIT 1)
     WHERE c.topic_deleted=0 AND c.admin_deleted=0 AND (c.parent_id IS NOT NULL OR COALESCE(vis.deleted,0)=0 OR EXISTS(SELECT 1 FROM messages WHERE chat_id=c.id AND id>vis.hidden_before))
-    ORDER BY saved DESC,pinned DESC,COALESCE(last_at,'') DESC,c.id DESC`).all(uid,uid,uid,uid,uid);
+    ) AS chat_list ORDER BY saved DESC,pinned DESC,COALESCE(last_at,'') DESC,id DESC`).all(uid,uid,uid,uid,uid);
    const topicUnread=new Map(),latestTopic=new Map();for(const row of rows)if(row.parent_id){topicUnread.set(row.parent_id,(topicUnread.get(row.parent_id)||0)+row.unread);if(row.last_at&&row.last_at>(latestTopic.get(row.parent_id)?.last_at||''))latestTopic.set(row.parent_id,row);}
    const contactIds=new Set(db.prepare("SELECT linked FROM account_contacts WHERE owner=? AND deleted=0 AND linked IS NOT NULL").all(uid).map(c=>c.linked));
    const result=rows.map(row=>{const topic=latestTopic.get(row.id);return {...row,is_contact:contactIds.has(row.peer_id),...(topic&&topic.last_at>(row.last_at||'')?{last_at:topic.last_at,last_id:topic.last_id,last_sender_id:topic.last_sender_id,last_text:topic.topic_name+': '+(topic.last_text||'Вложение'),peer_read:topic.peer_read,peer_delivered:topic.peer_delivered}:{}),unread:row.unread+(topicUnread.get(row.id)||0),peer_online:row.kind==='direct'&&online(row.peer_id),peer_last_seen:row.kind==='direct'?userById(row.peer_id)?.last_seen??null:null};});
@@ -74,7 +74,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
   if(historyMatch&&method==='POST'){
    await body(req);const chat=Number(historyMatch[1]);member(chat,uid);
    const latest=db.prepare('SELECT COALESCE(MAX(id),0) id FROM messages WHERE chat_id=?').get(chat).id;
-   db.prepare('INSERT INTO chat_visibility(user_id,chat_id,hidden_before,deleted) VALUES(?,?,?,?) ON CONFLICT(user_id,chat_id) DO UPDATE SET hidden_before=MAX(hidden_before,excluded.hidden_before),deleted=excluded.deleted').run(uid,chat,latest,historyMatch[2]==='delete-chat'?1:0);
+   db.prepare('INSERT INTO chat_visibility(user_id,chat_id,hidden_before,deleted) VALUES(?,?,?,?) ON CONFLICT(user_id,chat_id) DO UPDATE SET hidden_before=MAX(chat_visibility.hidden_before,excluded.hidden_before),deleted=excluded.deleted').run(uid,chat,latest,historyMatch[2]==='delete-chat'?1:0);
    db.prepare('UPDATE members SET last_read=MAX(last_read,?) WHERE chat_id=? AND user_id=?').run(latest,chat,uid);
    db.prepare('UPDATE chat_preferences SET manual_unread=0 WHERE user_id=? AND chat_id=?').run(uid,chat);
    db.prepare('INSERT OR IGNORE INTO call_history_hidden(user_id,call_id) SELECT ?,id FROM call_history WHERE chat_id=?').run(uid,chat);

@@ -1,10 +1,28 @@
 name: volna
 services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: volna
+      POSTGRES_USER: volna
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before starting PostgreSQL}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U volna -d volna"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
   server:
     build:
       context: .
       dockerfile: docker/server.Dockerfile
     environment:
+      DATABASE_URL: postgresql://volna:${POSTGRES_PASSWORD}@postgres:5432/volna
+      UPLOAD_PATH: /data/uploads
       EMOJI_PACK_MAX_ITEMS: ${EMOJI_PACK_MAX_ITEMS:-200}
       EMOJI_REACTIONS_PER_USER: ${EMOJI_REACTIONS_PER_USER:-20}
       EMOJI_REACTION_TYPES: ${EMOJI_REACTION_TYPES:-100}
@@ -37,6 +55,8 @@ services:
       - default
       - wg-proxy
     depends_on:
+      postgres:
+        condition: service_healthy
       transcription:
         condition: service_healthy
     restart: unless-stopped
@@ -122,6 +142,11 @@ services:
       - --denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
   tests:
     profiles: [test]
+    environment:
+      VOLNA_TEST_DATABASE_URL: postgresql://volna:${POSTGRES_PASSWORD}@postgres:5432/volna
+    depends_on:
+      postgres:
+        condition: service_healthy
     build:
       context: .
       dockerfile: docker/test.Dockerfile
@@ -160,6 +185,7 @@ services:
 volumes:
   chat-data:
   whisper-models:
+  postgres-data:
 networks:
   default: {}
   wg-proxy:

@@ -64,10 +64,11 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
   if(makingBackup)throw fail(409,'Резервная копия уже создаётся');makingBackup=true;
   const id=randomBytes(16).toString('hex'),stage=join(backupDir,'.'+id),filename=`Volna-${version}-${id}.tar.gz`,target=join(backupDir,filename);
   try{mkdirSync(stage,{recursive:true,mode:0o700});mkdirSync(join(stage,'uploads'),{mode:0o700});
-   // Uploads are immutable files. Hard links keep this snapshot intact during later deletion.
-   for(const entry of readdirSync(uploads,{withFileTypes:true}))if(entry.isFile()&&/^[a-f0-9]{48}$/.test(entry.name))linkSync(join(uploads,entry.name),join(stage,'uploads',entry.name));
-   db.prepare('VACUUM INTO ?').run(join(stage,'volna.db'));
-   await run('tar',['-czf',target+'.part','-C',stage,'volna.db','uploads'],{timeout:600000,maxBuffer:1024*1024});
+   // Pin exactly the immutable files referenced by the exported PostgreSQL snapshot.
+   await db.backup(join(stage,'volna.dump'),{onSnapshot:files=>{
+    for(const id of files){if(!/^[a-f0-9]{48}$/.test(id))throw Error('Invalid attachment ID');linkSync(join(uploads,id),join(stage,'uploads',id));}
+   }});
+   await run('tar',['-czf',target+'.part','-C',stage,'volna.dump','uploads'],{timeout:600000,maxBuffer:1024*1024});
    chmodSync(target+'.part',0o600);await rename(target+'.part',target);const size=statSync(target).size,created=clock();
    db.prepare('INSERT INTO admin_backups VALUES(?,?,?,?)').run(id,filename,created,size);audit('backup.create',id,reason,{size});return {id,filename,created,size};
   }catch(e){await rm(target+'.part',{force:true}).catch(()=>{});throw fail(503,'Не удалось создать полную резервную копию. Проверьте место на диске и доступ к файлам.');}
@@ -81,7 +82,7 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
    if(path.startsWith('/admin/api/')&&req.headers['sec-fetch-site']&&!['same-origin','none'].includes(req.headers['sec-fetch-site']))throw fail(403,'Межсайтовые запросы запрещены');
    if(req.headers.origin&&req.headers.origin!==origin)throw fail(403,'Источник запроса не разрешён');
    if(method==='OPTIONS')throw fail(403,'Межсайтовые запросы запрещены');
-   if(path==='/admin/api/health'&&method==='GET')return json(res,200,{ok:true});
+   if(path==='/admin/api/health'&&method==='GET'){db.prepare('SELECT 1').get();return json(res,200,{ok:true});}
    if(!path.startsWith('/admin/api/')){
     const assets={'/':['index.html','text/html; charset=utf-8'],'/admin.js':['admin.js','text/javascript; charset=utf-8'],'/admin.css':['admin.css','text/css; charset=utf-8']},asset=assets[path];
     if(!asset||!['GET','HEAD'].includes(method))throw fail(404,'Страница не найдена');const bytes=readFileSync(join(staticRoot,asset[0]));res.writeHead(200,{'Content-Type':asset[1]});return res.end(method==='HEAD'?undefined:bytes);
@@ -157,11 +158,11 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
     if(method==='GET'&&!op)return json(res,200,{...row,members:db.prepare('SELECT u.id,u.username,u.name,m.role FROM members m JOIN users u ON u.id=m.user_id WHERE m.chat_id=? ORDER BY m.role,u.name LIMIT 500').all(id),topics:db.prepare('SELECT id,title,topic_closed,admin_deleted FROM chats WHERE parent_id=?').all(id),invite:db.prepare('SELECT expires,uses,max_uses FROM community_invites WHERE chat_id=?').get(id)||null});
     if(method==='POST'){const d=await body(req),reason=text(d.reason);
      if(op==='lock'){db.prepare('UPDATE chats SET admin_locked=? WHERE id=? OR parent_id=?').run(+boolean(d.locked),id,id);audit(d.locked?'chat.lock':'chat.unlock',id,reason);}
-     else if(op==='delete'||op==='restore'){requireConfirm(d,id);const ids=db.prepare('SELECT id FROM chats WHERE id=? OR parent_id=?').all(id).map(c=>c.id);transaction(()=>{db.prepare('UPDATE chats SET admin_deleted=? WHERE id=? OR parent_id=?').run(op==='delete'?1:0,id,id);if(op==='delete')for(const cid of ids)db.prepare('DELETE FROM community_invites WHERE chat_id=?').run(cid);audit('chat.'+op,id,reason);});for(const cid of ids){if(op==='delete')broadcast(cid,{type:'removed',chat_id:cid});else notifyChat(cid);}for(const call of callService.list())if(ids.includes(call.chat_id))callService.terminate(call.id);return json(res,200,{ok:true});}
+     else if(op==='delete'||op==='restore'){requireConfirm(d,id);const ids=db.prepare('SELECT id FROM chats WHERE id=? OR parent_id=?').all(id,id).map(c=>c.id);transaction(()=>{db.prepare('UPDATE chats SET admin_deleted=? WHERE id=? OR parent_id=?').run(op==='delete'?1:0,id,id);if(op==='delete')for(const cid of ids)db.prepare('DELETE FROM community_invites WHERE chat_id=?').run(cid);audit('chat.'+op,id,reason);});for(const cid of ids){if(op==='delete')broadcast(cid,{type:'removed',chat_id:cid});else notifyChat(cid);}for(const call of callService.list())if(ids.includes(call.chat_id))callService.terminate(call.id);return json(res,200,{ok:true});}
      else if(op==='invites'){db.prepare('DELETE FROM community_invites WHERE chat_id=?').run(id);audit('chat.invites.revoke',id,reason);}
      else if(op==='members'){
       if(!['group','channel'].includes(row.kind)||row.parent_id)throw fail(400,'Участниками управляют в основной группе или канале');const uid=numeric(d.user_id);if(!db.prepare('SELECT 1 FROM users WHERE id=? AND (?=1 OR admin_blocked=0)').get(uid,+(d.operation==='remove')))throw fail(404,'Активный пользователь не найден');
-      const current=db.prepare('SELECT role FROM members WHERE chat_id=? AND user_id=?').get(id,uid);if(d.operation==='add'&&!current&&db.prepare('SELECT COUNT(*) n FROM members WHERE chat_id=?').get(id).n>=300)throw fail(409,'В сообществе допускается до 300 участников');const children=db.prepare('SELECT id FROM chats WHERE id=? OR parent_id=?').all(id).map(c=>c.id);
+      const current=db.prepare('SELECT role FROM members WHERE chat_id=? AND user_id=?').get(id,uid);if(d.operation==='add'&&!current&&db.prepare('SELECT COUNT(*) n FROM members WHERE chat_id=?').get(id).n>=300)throw fail(409,'В сообществе допускается до 300 участников');const children=db.prepare('SELECT id FROM chats WHERE id=? OR parent_id=?').all(id,id).map(c=>c.id);
       if(d.operation==='remove'){if(current?.role==='owner')throw fail(409,'Сначала передайте владение сообществом');transaction(()=>{for(const cid of children){db.prepare('DELETE FROM members WHERE chat_id=? AND user_id=?').run(cid,uid);db.prepare('DELETE FROM chat_preferences WHERE chat_id=? AND user_id=?').run(cid,uid);}audit('chat.member.remove',id,reason,{user_id:uid});});publish([uid],{type:'removed',chat_id:id});}
       else if(d.operation==='add'||d.operation==='role'){
        const role=d.role||'member';if(!['owner','admin','member'].includes(role))throw fail(400,'Некорректная роль');if(d.operation==='role'&&!current)throw fail(404,'Участник не найден');if(current?.role==='owner'&&role!=='owner')throw fail(409,'Для смены владельца выберите нового участника с ролью Владелец');
@@ -169,7 +170,7 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
       }else throw fail(400,'Некорректная операция');
      }
      else if(!op){if(!['group','channel'].includes(row.kind))throw fail(400,'Название можно изменить у группы или канала');const title=text(d.title,120),description=typeof d.description==='string'?d.description.trim():'';if(description.length>1000)throw fail(400,'Описание — до 1000 символов');if(!['all','admins'].includes(d.posting_policy))throw fail(400,'Некорректные права публикации');db.prepare('UPDATE chats SET title=?,description=?,posting_policy=?,topic_closed=? WHERE id=?').run(title,description,row.kind==='channel'?'admins':d.posting_policy,+boolean(d.topic_closed),id);audit('chat.edit',id,reason);}
-     else throw fail(404,'Не найдено');for(const c of db.prepare('SELECT id FROM chats WHERE id=? OR parent_id=?').all(id))notifyChat(c.id);return json(res,200,{ok:true});}
+     else throw fail(404,'Не найдено');for(const c of db.prepare('SELECT id FROM chats WHERE id=? OR parent_id=?').all(id,id))notifyChat(c.id);return json(res,200,{ok:true});}
    }
    if(path==='/admin/api/messages'&&method==='GET'){
     const chat=Number(url.searchParams.get('chat')||0),user=Number(url.searchParams.get('user')||0);if(!Number.isSafeInteger(chat)||chat<0||!Number.isSafeInteger(user)||user<0)throw fail(400,'Некорректный фильтр');

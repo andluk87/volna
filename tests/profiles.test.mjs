@@ -22,7 +22,7 @@ test('profiles: authorization, limits, realtime notification, immutable identity
   assert.equal(changed.status,200);assert.equal(changed.data.name,'Алиса Новая');assert.equal(changed.data.username,'alice');assert.equal(changed.data.id,a.user.id);assert.equal('hash' in changed.data,false);assert.equal('salt' in changed.data,false);
   const next=await Promise.race([reader.read(),new Promise((_,reject)=>{setTimeout(()=>reject(Error('missing profile event')),2000).unref();})]);assert.match(new TextDecoder().decode(next.value),/"type":"profile"/);controller.abort();
   assert.equal((await call('/me',b.token)).data.name,'Борис');assert.equal((await call('/chats',b.token)).data[0].name,'Алиса Новая');assert.equal((await call('/users/'+a.user.id,b.token)).data.bio,changed.data.bio);
-  await app.close();await start();assert.equal(app.db.prepare('PRAGMA user_version').get().user_version,7);assert.equal((await call('/me',a.token)).data.bio,changed.data.bio);
+  await app.close();await start();assert.equal(app.db.schemaVersion,7);assert.equal((await call('/me',a.token)).data.bio,changed.data.bio);
   assert.equal((await call('/profile',a.token,{name:'Алиса',bio:''})).data.bio,'');
  }finally{controller.abort();await app.close();rmSync(dir,{recursive:true,force:true});}
 });

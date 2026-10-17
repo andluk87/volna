@@ -14,7 +14,7 @@ test('update rebuilds and verifies the selected Volna version; aborts before res
   for(const f of ['compose.yaml','compose.https.yaml'])writeFileSync(join(root,f),'services: {}\n');
   copyFileSync(new URL('../compose.build-host.yaml',import.meta.url),join(root,'compose.build-host.yaml'));
   writeFileSync(join(root,'package.json'),'{\n  "version": "0.11.14"\n}\n');
-  writeFileSync(join(root,'.env'),'CHAT_DOMAIN=volna.lknet.ru\n');
+  writeFileSync(join(root,'.env'),'CHAT_DOMAIN=volna.lknet.ru\nPOSTGRES_PASSWORD='+ 'a'.repeat(64)+'\n');
   writeFileSync(join(root,'scripts/backup.sh'),'#!/bin/sh\necho BACKUP >> "$TRACE"\nexit "${FAIL_BACKUP:-0}"\n');
   writeFileSync(join(root,'bin/docker'),`#!/usr/bin/env python3
 import json,os,sys

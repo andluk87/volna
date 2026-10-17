@@ -30,6 +30,10 @@ compose() {
   docker compose -f compose.yaml "$@"
 }
 # Validate without printing secrets. Failed builds leave running containers intact.
+if ! grep -Eq '^POSTGRES_PASSWORD=[a-fA-F0-9]{64}$' .env; then
+  echo 'PostgreSQL migration is required: sh scripts/migrate-postgres.sh. See POSTGRESQL.md.' >&2
+  exit 1
+fi
 compose config --quiet
 calls=$(compose config --format json | python3 scripts/calls-config.py)
 if [ "$calls" -eq 0 ]; then

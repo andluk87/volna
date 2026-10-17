@@ -16,3 +16,5 @@ backups
 **/.desktop-public
 client/electron/config.json
 client/electron-builder.windows.json
+
+work

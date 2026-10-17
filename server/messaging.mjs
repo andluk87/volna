@@ -14,7 +14,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   // Additive migration: safe for the original 0.1 database and repeated starts.
   db.exec('BEGIN IMMEDIATE');
   try {
-    const columns=new Set(db.prepare('PRAGMA table_info(messages)').all().map(x=>x.name));
+    const columns=new Set(db.columns('messages').map(x=>x.name));
     for(const [name,type] of Object.entries({interactive:'TEXT',expression_id:'TEXT',album_id:'TEXT',attachment_id:'TEXT',reply_to:'INTEGER',edited_at:'TEXT',deleted_at:'TEXT',forwarded_name:'TEXT',forward_source:'INTEGER',transcript:'TEXT'}))
       if(!columns.has(name))db.exec(`ALTER TABLE messages ADD COLUMN ${name} ${type}`);
     db.exec(`CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,mime TEXT NOT NULL,size INTEGER NOT NULL,created_at INTEGER NOT NULL);
@@ -24,8 +24,8 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       CREATE INDEX IF NOT EXISTS messages_attachment ON messages(attachment_id);
       COMMIT;`);
   }catch(e){db.exec('ROLLBACK');throw e;}
-  if(db.prepare('PRAGMA user_version').get().user_version<6)db.exec('PRAGMA user_version=6');
-  db.function('casefold',{deterministic:true},value=>String(value||'').toLocaleLowerCase('ru-RU'));
+  if(!db.columns('reactions').some(c=>c.name==='reaction_order'))db.exec('ALTER TABLE reactions ADD COLUMN reaction_order BIGINT GENERATED ALWAYS AS IDENTITY');
+  if(db.schemaVersion<6)db.schemaVersion=6;
   const permission=(chat,uid)=>{
     member(chat,uid);
     return db.prepare('SELECT c.kind,c.posting_policy,c.topic_closed,c.admin_locked,COALESCE((SELECT admin_locked FROM chats WHERE id=c.parent_id),0) AS parent_locked,m.role FROM chats c JOIN members m ON m.chat_id=c.id WHERE c.id=? AND m.user_id=?').get(chat,uid);
@@ -41,7 +41,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     const sender=userById(row.sender_id);
     return {...row,...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_name:sender?.name||'Пользователь',sender_username:sender?.username||'',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
       reply:reply?{id:reply.id,sender_id:reply.sender_id,name:userById(reply.sender_id)?.name,text:reply.deleted_at?'Сообщение удалено':reply.text||'Вложение',deleted:!!reply.deleted_at}:null,
-      reactions:db.prepare('SELECT r.emoji,r.user_id,u.name FROM reactions r JOIN users u ON u.id=r.user_id WHERE r.message_id=? ORDER BY r.emoji,r.rowid').all(row.id).map(reaction=>({...reaction,avatar_url:userById(reaction.user_id)?.avatar_url||null})),
+      reactions:db.prepare('SELECT r.emoji,r.user_id,u.name FROM reactions r JOIN users u ON u.id=r.user_id WHERE r.message_id=? ORDER BY r.emoji,r.reaction_order').all(row.id).map(reaction=>({...reaction,avatar_url:userById(reaction.user_id)?.avatar_url||null})),
       pinned:!!db.prepare('SELECT 1 FROM pins WHERE message_id=?').get(row.id)};
   };
   const changed=(row,extra={})=>broadcast(row.chat_id,{type:'message-update',message:hydrate(row),...extra});
@@ -84,16 +84,16 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     for(const file of unused){
       if(expressionService.fileUsed(file.id))continue;
       // Let SQLite reject any additional references before touching the file.
-      db.exec('SAVEPOINT attachment_cleanup');
+      db.exec('BEGIN');
       try{db.prepare('DELETE FROM attachments WHERE id=?').run(file.id);}
       catch(e){
-        db.exec('ROLLBACK TO attachment_cleanup; RELEASE attachment_cleanup');
-        if(e.code==='ERR_SQLITE_ERROR'&&e.errcode===787)continue;
+        db.exec('ROLLBACK');
+        if(e.code==='23503')continue;
         throw e;
       }
       try{unlinkSync(join(uploads,file.id));}
-      catch(e){if(e.code!=='ENOENT'){db.exec('ROLLBACK TO attachment_cleanup; RELEASE attachment_cleanup');continue;}}
-      db.exec('RELEASE attachment_cleanup');
+      catch(e){if(e.code!=='ENOENT'){db.exec('ROLLBACK');continue;}}
+      db.exec('COMMIT');
     }
   };
   let uploadCount=0;
@@ -297,7 +297,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
         }
       }else if(action==='react'){
         if(!isEmoji(data.emoji)||typeof data.active!=='boolean')throw error(400,'Некорректная реакция');
-        if(data.active&&!db.prepare('SELECT 1 FROM reactions WHERE message_id=? AND user_id=? AND emoji=?').get(row.id,uid,data.emoji)){const userMax=Math.max(20,Math.min(100,Number(process.env.EMOJI_REACTIONS_PER_USER)||20)),messageMax=Math.max(userMax,Math.min(100,Number(process.env.EMOJI_REACTION_TYPES)||100));if(db.prepare('SELECT count(*) n FROM reactions WHERE message_id=? AND user_id=?').get(row.id,uid).n>=userMax)throw error(400,'Достигнут лимит реакций пользователя');if(!db.prepare('SELECT 1 FROM reactions WHERE message_id=? AND emoji=?').get(row.id,data.emoji)&&db.prepare('SELECT count(DISTINCT emoji) n FROM reactions WHERE message_id=?').get(row.id).n>=messageMax)throw error(400,'Достигнут лимит типов реакций');}const result=data.active?db.prepare('INSERT OR IGNORE INTO reactions VALUES(?,?,?)').run(row.id,uid,data.emoji):db.prepare('DELETE FROM reactions WHERE message_id=? AND user_id=? AND emoji=?').run(row.id,uid,data.emoji);
+        if(data.active&&!db.prepare('SELECT 1 FROM reactions WHERE message_id=? AND user_id=? AND emoji=?').get(row.id,uid,data.emoji)){const userMax=Math.max(20,Math.min(100,Number(process.env.EMOJI_REACTIONS_PER_USER)||20)),messageMax=Math.max(userMax,Math.min(100,Number(process.env.EMOJI_REACTION_TYPES)||100));if(db.prepare('SELECT count(*) n FROM reactions WHERE message_id=? AND user_id=?').get(row.id,uid).n>=userMax)throw error(400,'Достигнут лимит реакций пользователя');if(!db.prepare('SELECT 1 FROM reactions WHERE message_id=? AND emoji=?').get(row.id,data.emoji)&&db.prepare('SELECT count(DISTINCT emoji) n FROM reactions WHERE message_id=?').get(row.id).n>=messageMax)throw error(400,'Достигнут лимит типов реакций');}const result=data.active?db.prepare('INSERT OR IGNORE INTO reactions(message_id,user_id,emoji) VALUES(?,?,?)').run(row.id,uid,data.emoji):db.prepare('DELETE FROM reactions WHERE message_id=? AND user_id=? AND emoji=?').run(row.id,uid,data.emoji);
         if(result.changes)reactionEvent={user_id:uid,emoji:data.emoji,active:data.active};
       }else if(action==='pin'){
         const permissions=permission(row.chat_id,uid);if(['group','channel'].includes(permissions.kind)&&!['admin','owner'].includes(permissions.role))throw error(403,'Закреплять могут только администраторы');
