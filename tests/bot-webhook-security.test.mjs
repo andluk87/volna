@@ -6,7 +6,7 @@ import {signature,secretBox} from '../server/bot-webhooks.mjs';
 import {createHmac} from 'node:crypto';
 
 test('webhook SSRF: canonical IPs, reserved ranges, mixed DNS and every new resolution',async()=>{
- for(const ip of ['0.0.0.0','10.1.1.1','100.64.0.1','127.0.0.1','169.254.169.254','172.16.1.1','192.168.1.1','192.0.0.1','192.88.99.1','198.18.1.1','198.51.100.1','203.0.113.1','224.0.0.1','255.255.255.255','::1','::ffff:8.8.8.8','64:ff9b::808:808','fc00::1','fe80::1','2001:db8::1','2001::1','2002:808:808::1','3fff::1'])assert.equal(publicAddress(ip),false,ip);
+ for(const ip of ['0.0.0.0','10.1.1.1','100.64.0.1','127.0.0.1','169.254.169.254','172.16.1.1','192.168.1.1','192.0.0.1','192.88.99.1','198.18.1.1','198.51.100.1','203.0.113.1','224.0.0.1','255.255.255.255','::1','::ffff:8.8.8.8','64:ff9b::808:808','fc00::1','fe80::1','2001:db8::1','2001::1','2002:808:808::1','3ffe::1','3fff::1'])assert.equal(publicAddress(ip),false,ip);
  for(const ip of ['8.8.8.8','1.1.1.1','2606:4700:4700::1111','2001:4860:4860::8888'])assert.equal(publicAddress(ip),true,ip);
  for(const url of ['http://example.com','https://localhost','https://host.local/','https://user:pass@example.com/','https://example.com:8443/','https://example.com/#x','https://127.1','https://2130706433','https://0x7f000001','https://[::ffff:127.0.0.1]','https://example.com./','https://example.com\\@localhost/'])assert.throws(()=>webhookUrl(url),undefined,url);
  await assert.rejects(resolveWebhook('https://example.com',async()=>[{address:'8.8.8.8',family:4},{address:'10.0.0.1',family:4}]));

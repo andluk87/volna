@@ -13,7 +13,7 @@ done
 iptables -A OUTPUT -p tcp --dport 443 -j ACCEPT
 ip6tables -P OUTPUT DROP
 ip6tables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-for range in 2001::/23 2001:db8::/32 2002::/16 3fff::/20; do
+for range in 2001::/23 2001:db8::/32 2002::/16 3ffe::/16 3fff::/20; do
  ip6tables -A OUTPUT -d "$range" -j REJECT
 done
 ip6tables -A OUTPUT -d 2000::/3 -p tcp --dport 443 -j ACCEPT

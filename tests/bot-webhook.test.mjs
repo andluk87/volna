@@ -83,3 +83,16 @@ test('webhook callback subscription, expired events and late old-generation resp
  assert.equal(f.db().prepare('SELECT acked FROM bot_updates WHERE bot_id=? AND event_id=?').get(b.bot.id,pending[0].event_id).acked,0);
  assert.equal((await f.call('/bot/v1/updates?timeout=0',b.token)).data.updates[0].event_id,pending[0].event_id);
 });
+
+test('paused bots and subscriptions without matching events do not starve active webhook delivery',async t=>{
+ const f=await fixture(t),target=f.bot;f.setReply({ok:true,status:200});
+ for(let i=0;i<5;i++){
+  const b=(await f.call('/developer/v1/bots',f.owner.token,{username:'blocked_webhook_'+i,display_name:'Paused'})).data;
+  await f.call('/bot/v1/delivery/webhook',b.token,{url:'https://example.com',event_types:['callback.created']},'PUT');
+  const chat=(await f.call('/api/bots/'+b.bot.id+'/start',f.other.token,{})).data.id;
+  await f.call(`/api/chats/${chat}/messages`,f.other.token,{text:'not in subscription',client_id:randomUUID()});
+  if(i<4)await f.call('/developer/v1/bots/'+b.bot.id,f.owner.token,{status:'suspended'},'PATCH');
+ }
+ await f.call('/bot/v1/delivery/webhook',target.token,{url:'https://example.com'},'PUT');await f.send('must deliver');
+ await eventually(()=>f.requests.length===1);assert.equal(JSON.parse(f.requests[0].body).bot_id,target.bot.id);
+});

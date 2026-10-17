@@ -106,7 +106,7 @@ export function botWebhooks({db,tx,get,access,wake,audit,deliverable,masterReply
  function tick(){
   if(closed||!send||paused())return;
   // One API process; one concurrent delivery per bot, max four globally. Retry state survives restart.
-  for(const c of db.prepare('SELECT * FROM bot_webhooks w WHERE (pending=1 OR enabled=1 AND EXISTS(SELECT 1 FROM bot_updates u WHERE u.bot_id=w.bot_id AND u.acked=0 AND u.expires>?)) AND next_attempt<=? ORDER BY next_attempt,updated LIMIT 100').all(now(),now())){
+  for(const c of db.prepare(`SELECT w.* FROM bot_webhooks w JOIN bots b ON b.id=w.bot_id JOIN users account ON account.id=b.account_id JOIN users owner ON owner.id=b.owner_id WHERE b.status='active' AND account.admin_blocked=0 AND owner.admin_blocked=0 AND (w.pending=1 OR w.enabled=1 AND EXISTS(SELECT 1 FROM bot_tokens t WHERE t.bot_id=w.bot_id AND t.revoked IS NULL AND t.scopes::jsonb @> '["messages:read_events"]'::jsonb) AND EXISTS(SELECT 1 FROM bot_updates u WHERE u.bot_id=w.bot_id AND u.acked=0 AND u.expires>? AND u.event_type IN (SELECT jsonb_array_elements_text(w.event_types::jsonb)))) AND w.next_attempt<=? ORDER BY w.next_attempt,w.updated LIMIT 100`).all(now(),now())){
    if(busy.size>=4)break;if(busy.has(c.bot_id))continue;busy.add(c.bot_id);
    const task=deliverBot(c).catch(()=>console.error('[bots] webhook worker failed; queue retained')).finally(()=>{busy.delete(c.bot_id);inflight.delete(task);});inflight.add(task);
   }
