@@ -9,10 +9,12 @@
 Выполните из прежнего каталога сервера, где находятся `compose.yaml`, действующий `.env` и каталог `artifacts` с прежним ключом подписи Android:
 
 ```sh
-( set -eu; test -f compose.yaml && test -f .env; volna_update_dir=$(mktemp -d); trap 'rm -rf "$volna_update_dir"' EXIT; git clone --depth 1 --branch v0.12.59 https://github.com/andluk87/volna.git "$volna_update_dir/source"; git -C "$volna_update_dir/source" archive --output="$volna_update_dir/source.tar" HEAD; sh "$volna_update_dir/source/scripts/backup.sh"; tar -xf "$volna_update_dir/source.tar" -C .; sh scripts/build-android.sh )
+( set -eu; test -f compose.yaml && test -f .env; volna_update_dir=$(mktemp -d); trap 'rm -rf "$volna_update_dir"' EXIT; git clone --depth 1 --branch v0.12.59 https://github.com/andluk87/volna.git "$volna_update_dir/source"; git -C "$volna_update_dir/source" archive --output="$volna_update_dir/source.tar" HEAD; sh "$volna_update_dir/source/scripts/backup.sh"; if [ -d android-native/app/src ]; then mkdir -p backups; volna_source_backup=$(mktemp -d "$PWD/backups/android-source-0.12.59-XXXXXXXX"); mv android-native/app/src "$volna_source_backup/src"; fi; tar -xf "$volna_update_dir/source.tar" -C .; sh scripts/build-android.sh )
 ```
 
-Команда получает зафиксированную версию из GitHub, делает резервную копию штатным скриптом, обновляет исходники, собирает и публикует APK, затем обновляет сервер/Web. `.env` и существующий каталог `artifacts` сохраняются. Проект на сервере может быть установлен из архива: наличие локального `.git` не требуется.
+Команда получает зафиксированную версию из GitHub, делает резервную копию штатным скриптом, обновляет исходники, собирает и публикует APK, затем обновляет сервер/Web. `.env` и существующий каталог `artifacts` сохраняются. Перед распаковкой прежняя папка `android-native/app/src` переносится в `backups/android-source-0.12.59-XXXXXXXX/src`. Это исключает компиляцию лишних Kotlin-файлов от другой версии, например `NativeBotControls.kt`, которого нет в этом выпуске. Локальные изменения исходников остаются в этой резервной копии; ключ подписи, данные и кэши сборки не переносятся.
+
+Проект на сервере может быть установлен из архива: наличие локального `.git` не требуется.
 
 После успеха установите обновление из приложения или скачайте `/download/volna-android.apk` на вашем сервере. Версия APK — **0.12.59 (12059)**. APK в GitHub не загружен; он собирается на сервере с вашим существующим ключом подписи.
 
