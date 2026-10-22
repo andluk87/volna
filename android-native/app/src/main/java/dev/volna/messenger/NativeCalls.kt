@@ -672,7 +672,7 @@ object NativeCalls {
         runCatching { CallAlerts.show(app, call, accountId(), NativeAccounts.list(app).firstOrNull{it.user.id==accountId()}?.user?.name.orEmpty()) }
         NativeCallVibration.start(app)
         val uri = NativeNotificationSounds.callUri(app)
-        ringtone = if (NativeNotificationSounds.callSoundAllowed(app) && uri != null) runCatching { RingtoneManager.getRingtone(app, uri) }.getOrNull()?.also {
+        ringtone = NativePriorityCalls.play(app, accountId(), call) ?: if (NativeNotificationSounds.callSoundAllowed(app) && uri != null) runCatching { RingtoneManager.getRingtone(app, uri) }.getOrNull()?.also {
             if (Build.VERSION.SDK_INT >= 28) it.isLooping = true
             runCatching { it.play() }
         } else null

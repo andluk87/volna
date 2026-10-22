@@ -39,6 +39,7 @@ class MessagingService : Service() {
         fun stop() { stopped = true; call?.cancel(); worker?.interrupt(); callsWorker?.interrupt(); receiptsWorker?.interrupt() }
     }
     private val streams = ConcurrentHashMap<Long, AccountStream>()
+    private val priorityRingtones = ConcurrentHashMap<Long, android.media.Ringtone>()
     private val main = Handler(Looper.getMainLooper())
     private val reconcile = object : Runnable {
         override fun run() { if (!stopped) { syncAccounts(); main.postDelayed(this, 6_000) } }
@@ -59,6 +60,7 @@ class MessagingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             NativeCalls.configure(this, ""); stopped = true
+            priorityRingtones.keys.toList().forEach { clearBackgroundCall(it) }
             streams.values.forEach { it.stop() }; streams.clear()
             main.removeCallbacks(reconcile); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
             return START_NOT_STICKY
@@ -175,7 +177,7 @@ class MessagingService : Service() {
         }
     }
 
-    private fun clearBackgroundCall(account: Long) { getSystemService(NotificationManager::class.java).cancel("volna-call-account-$account", NativeCalls.CALL_NOTIFICATION); NativeBackgroundCalls.remove(account) }
+    private fun clearBackgroundCall(account: Long) { priorityRingtones.remove(account)?.let { runCatching { it.stop() } }; getSystemService(NotificationManager::class.java).cancel("volna-call-account-$account", NativeCalls.CALL_NOTIFICATION); NativeBackgroundCalls.remove(account) }
     private fun watchCalls(stream: AccountStream) {
         var alerted: String? = null
         val device = prefs.getString("call_device",null)?.takeIf { it.matches(Regex("[a-f0-9]{32}")) } ?: "0".repeat(32)
@@ -188,8 +190,15 @@ class MessagingService : Service() {
                     if(call == null || !call.incoming || call.status != "ringing") { clearBackgroundCall(stream.userId);alerted=null }
                     else if(call.id != alerted) {
                         val account=NativeAccounts.list(this).firstOrNull { it.user.id == stream.userId } ?: break
+                        clearBackgroundCall(stream.userId)
                         CallAlerts.show(this,call,stream.userId,account.user.name,background=true)
                         NativeBackgroundCalls.put(stream.userId,account.user.name,call)
+                        main.post {
+                            if (current(stream) && !NativeCalls.configuredFor(stream.token) &&
+                                NativeBackgroundCalls.calls.value[stream.userId]?.call?.id == call.id) {
+                                NativePriorityCalls.play(this, stream.userId, call)?.let { priorityRingtones[stream.userId] = it }
+                            }
+                        }
                         if(getSystemService(NotificationManager::class.java).areNotificationsEnabled())api.callAction(stream.token,device,call.id,"ringing")
                         alerted=call.id
                     }
@@ -309,6 +318,7 @@ class MessagingService : Service() {
     override fun onDestroy() {
         NativeIdleUpdater.stop()
         stopped = true
+        priorityRingtones.keys.toList().forEach { clearBackgroundCall(it) }
         main.removeCallbacks(reconcile)
         streams.values.forEach { it.stop() }; streams.clear()
         client.dispatcher.cancelAll()
@@ -329,6 +339,12 @@ class MessagingService : Service() {
         internal const val CHANNEL_ID = "volna_messages"
         private const val STATUS_CHANNEL = "volna_connection"
         private const val FOREGROUND_ID = 11022
+
+        internal fun restore(context: Context) {
+            if (NativeAccounts.list(context).isEmpty()) return
+            // No token extras: onStartCommand restores the selected account from storage.
+            context.startForegroundService(Intent(context, MessagingService::class.java))
+        }
 
         fun start(context: Context, token: String, userId: Long) {
             val intent = Intent(context, MessagingService::class.java)

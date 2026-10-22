@@ -75,6 +75,7 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
                 }
             }
             if (own) NativePhoneChange(loaded, token, api) { profile = it; onSaved(it) }
+            if (!own) NativePriorityCallSetting(currentUser?.id ?: 0, userId)
             if (!own) NativePrivateContactName(currentUser?.id ?: 0, userId, token, api) { retry++ }
             Row(Modifier.fillMaxWidth().background(Panel), horizontalArrangement = Arrangement.SpaceEvenly) {
                 TextButton(onClick = { tab = "info" }) { NativeText("Информация", color = if (tab == "info") Accent else Muted) }

@@ -19,7 +19,7 @@ internal object NativeNotificationSounds {
         val value = NativeNotificationPolicy.prefs(context, account).getString(key, null)
         return if (value == null) RingtoneManager.getDefaultUri(type) else value.takeIf { it.isNotBlank() }?.let(Uri::parse)
     }
-    fun callUri(context: Context) = uri(context, account(context), "call_sound_uri", RingtoneManager.TYPE_RINGTONE)
+    fun callUri(context: Context, account: Long = account(context)) = uri(context, account, "call_sound_uri", RingtoneManager.TYPE_RINGTONE)
     fun callAlertsAllowed(context: Context): Boolean {
         val manager = context.getSystemService(NotificationManager::class.java)
         return manager.areNotificationsEnabled() && manager.currentInterruptionFilter == NotificationManager.INTERRUPTION_FILTER_ALL &&

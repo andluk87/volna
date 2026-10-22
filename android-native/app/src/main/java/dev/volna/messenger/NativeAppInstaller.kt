@@ -45,6 +45,12 @@ class VolnaUpdateReceiver:BroadcastReceiver(){
    }
    if(status!=PackageInstaller.STATUS_SUCCESS){val text=if(status==PackageInstaller.STATUS_FAILURE_ABORTED)"Установка отменена. Обновление остаётся скачанным." else "Android не установил обновление. Откройте VLN и повторите.";prefs.edit().clear().putString("error",text).apply();notify(context,text);return}
   }else if(intent.action!=Intent.ACTION_MY_PACKAGE_REPLACED)return
+  // Package replacement kills the old process. Restore delivery even when Android
+  // refuses a background Activity launch, or the update came from another installer.
+  if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED ||
+      intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE) == PackageInstaller.STATUS_SUCCESS) {
+   runCatching { MessagingService.restore(context) }
+  }
   val legacy=intent.action==Intent.ACTION_MY_PACKAGE_REPLACED&&File(context.filesDir,"updates/volna-${BuildConfig.VERSION_CODE}.apk").isFile&&prefs.getInt("handled_version",0)!=BuildConfig.VERSION_CODE
   if(!legacy&&!nativeUpdateRelaunch(prefs.getInt("before",0),BuildConfig.VERSION_CODE,prefs.getLong("requested",0),System.currentTimeMillis()))return
   prefs.edit().clear().putInt("handled_version",BuildConfig.VERSION_CODE).commit()
