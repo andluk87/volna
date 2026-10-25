@@ -6,10 +6,11 @@ data class NativeNavigationStyle(
     val height: Int = 40, val radius: Int = 24, val sideInset: Int = 10,
     val textSize: Int = 14, val iconSize: Int = 23,
     val labels: Boolean = true, val icons: Boolean = true, val badges: Boolean = true,
+    val vertical: Boolean = false,
     val surface: Long = 0, val selected: Long = 0, val text: Long = 0, val selectedText: Long = 0
 ) {
     fun json(): String = JSONObject().put("height", height).put("radius", radius).put("sideInset", sideInset)
-        .put("textSize", textSize).put("iconSize", iconSize).put("labels", labels).put("icons", icons).put("badges", badges)
+        .put("vertical", vertical).put("textSize", textSize).put("iconSize", iconSize).put("labels", labels).put("icons", icons).put("badges", badges)
         .put("surface", surface).put("selected", selected).put("text", text).put("selectedText", selectedText).toString()
     companion object {
         val HeightRange = 24..160
@@ -17,16 +18,16 @@ data class NativeNavigationStyle(
         val SideInsetRange = 0..80
         val TextSizeRange = 8..32
         val IconSizeRange = 12..64
-        val Folders = NativeNavigationStyle()
+        val Folders = NativeNavigationStyle(height = 72, sideInset = 4, iconSize = 46, labels = false, vertical = true)
         val Bottom = NativeNavigationStyle(height = 52, radius = 32, sideInset = 28, textSize = 10)
         fun parse(raw: String?, defaults: NativeNavigationStyle): NativeNavigationStyle = runCatching {
             val o = JSONObject(raw ?: return defaults)
             fun color(key: String) = o.optLong(key).takeIf { it == 0L || it in 0xFF000000L..0xFFFFFFFFL } ?: 0L
-            val labels = o.optBoolean("labels", true)
+            val labels = o.optBoolean("labels", defaults.labels)
             defaults.copy(height = o.optInt("height", defaults.height).coerceIn(HeightRange), radius = o.optInt("radius", defaults.radius).coerceIn(RadiusRange),
                 sideInset = o.optInt("sideInset", defaults.sideInset).coerceIn(SideInsetRange), textSize = o.optInt("textSize", defaults.textSize).coerceIn(TextSizeRange),
-                iconSize = o.optInt("iconSize", defaults.iconSize).coerceIn(IconSizeRange), labels = labels, icons = !labels || o.optBoolean("icons", true),
-                badges = o.optBoolean("badges", true), surface = color("surface"), selected = color("selected"), text = color("text"), selectedText = color("selectedText"))
+                iconSize = o.optInt("iconSize", defaults.iconSize).let { if (defaults.vertical && !o.has("vertical") && it == 23) defaults.iconSize else it }.coerceIn(IconSizeRange), labels = labels, icons = !labels || o.optBoolean("icons", true),
+                vertical = o.optBoolean("vertical", defaults.vertical), badges = o.optBoolean("badges", true), surface = color("surface"), selected = color("selected"), text = color("text"), selectedText = color("selectedText"))
         }.getOrDefault(defaults)
     }
 }

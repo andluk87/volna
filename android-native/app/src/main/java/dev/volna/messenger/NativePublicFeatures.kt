@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package dev.volna.messenger
 
 import android.content.Intent
@@ -48,7 +49,7 @@ internal fun NativeUsernameEditor(user: VolnaUser, token: String, api: NativeApi
 }
 
 @Composable
-internal fun NativeTopicsDialog(group: VolnaChat, token: String, api: NativeApi, onDismiss: () -> Unit, onChanged: () -> Unit, onSelect: (Long, Long?) -> Unit) {
+internal fun NativeTopicsDialog(group: VolnaChat, token: String, api: NativeApi, onDismiss: () -> Unit, onChanged: () -> Unit, navigation: @Composable () -> Unit = {}, onSelect: (Long, Long?) -> Unit) {
     val scope=rememberCoroutineScope(); val context=LocalContext.current
     var info by remember(group.id){mutableStateOf<JSONObject?>(null)}
     var error by remember{mutableStateOf("")};var busy by remember{mutableStateOf(false)}
@@ -71,11 +72,13 @@ internal fun NativeTopicsDialog(group: VolnaChat, token: String, api: NativeApi,
             catch(cancelled:CancellationException){throw cancelled}catch(problem:Exception){error=problem.message.orEmpty()}finally{busy=false}}
     }
     fun edit(topic: JSONObject?){editing=topic?:JSONObject();name=topic?.optString("name").orEmpty();description=topic?.optString("description").orEmpty();icon=topic?.optString("icon").orEmpty();creation=UUID.randomUUID().toString()}
-    NativeFullScreen("Темы · ${group.name}",onDismiss){
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+    NativeFullScreen(group.name,onDismiss){
+        Row(Modifier.fillMaxSize()) {
+        navigation()
+        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(0.dp)) {
             Row { TextButton(onClick={feed=false}){NativeText(if(!feed)"• Темы" else "Темы")};TextButton(onClick={feed=true}){NativeText(if(feed)"• Все сообщения" else "Все сообщения")} }
             if(error.isNotBlank())NativeText(error,color=MaterialTheme.colorScheme.error)
-            if(busy)LinearProgressIndicator(Modifier.fillMaxWidth())
+            if(busy || info==null&&error.isBlank())LinearProgressIndicator(Modifier.fillMaxWidth())
             info?.let{value ->
                 val admin=value.optString("role",group.role) in listOf("owner","admin")
                 if(admin) {
@@ -89,28 +92,25 @@ internal fun NativeTopicsDialog(group: VolnaChat, token: String, api: NativeApi,
                 }
                 if(feed) NativeForumFeed(group,token,api,revision,onSelect)
                 else {
-                    val rows=value.optJSONArray("topics")
-                    val all=(listOfNotNull(value.optJSONObject("general"))+(if(rows==null)emptyList() else (0 until rows.length()).map{rows.getJSONObject(it)})).sortedWith(compareByDescending<JSONObject>{it.optBoolean("pinned")}.thenBy{if(it.optBoolean("pinned"))it.optInt("pin_order") else Int.MAX_VALUE})
-                    for(topic in all.filter{!it.optBoolean("hidden")||admin}) {
+                    val all=nativeTopicRows(value, admin)
+                    for(topic in all) {
                         val id=topic.getLong("id");var actions by remember(id){mutableStateOf(false)}
-                        Card(Modifier.fillMaxWidth()) {Column(Modifier.padding(8.dp),verticalArrangement=Arrangement.spacedBy(2.dp)) {
-                            TextButton(onClick={onSelect(id,null)},modifier=Modifier.fillMaxWidth()) {NativeText("${topic.optString("icon").ifBlank{"#"}} ${topic.getString("name")}${if(topic.optBoolean("pinned"))" 📌" else ""}${if(topic.optBoolean("closed"))" 🔒" else ""}",Modifier.weight(1f));val count=topic.optInt("unread_count");if(count>0)Badge{NativeText(count.toString())}}
-                            NativeText(topic.optString("last_text").ifBlank{topic.optString("description")},color=Muted,fontSize=12.sp,maxLines=1)
-                            if(topic.optBoolean("hidden"))NativeText("Скрыта из списка",color=Muted,fontSize=12.sp)
-                            TextButton(onClick={actions=!actions}){NativeText("Действия",fontSize=12.sp)}
-                            if(actions) {
+                        NativeTopicRow(topic, busy, { onSelect(id,null) }, { actions=true })
+                        if(actions) ModalBottomSheet(onDismissRequest={actions=false},containerColor=Panel) {
+                            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                                NativeText(topic.optString("name"),fontSize=20.sp)
                                 var options by remember(id){mutableStateOf(false)}
                                 Box {TextButton(enabled=!busy,onClick={options=true}){NativeText(when(topic.optString("notification_mode")){"inherit"->"Уведомления: как в группе";"mentions"->"Упоминания и ответы";"none"->"Без уведомлений";else->"Все сообщения"})};DropdownMenu(options,{options=false}){for((key,label) in listOf("inherit" to "Как в группе","all" to "Все сообщения","mentions" to "Упоминания и ответы","none" to "Без уведомлений").filter{!topic.optBoolean("general")||it.first!="inherit"})DropdownMenuItem(text={NativeText(label)},onClick={options=false;act("/$id/notifications",JSONObject().put("mode",key))})}}
                                 TextButton(onClick={val url=BuildConfig.API_BASE_URL.trimEnd('/')+topic.getString("link");context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,url),"Ссылка на тему"))}){NativeText("Поделиться ссылкой")}
                                 if(topic.optBoolean("can_manage")) {
-                                    Row {TextButton(enabled=!busy,onClick={edit(topic)}){NativeText("Изменить")};TextButton(enabled=!busy,onClick={act("/$id",JSONObject().put("closed",!topic.optBoolean("closed")),"PATCH")}){NativeText(if(topic.optBoolean("closed"))"Открыть" else "Закрыть")}}
+                                    Row {TextButton(enabled=!busy,onClick={edit(topic);actions=false}){NativeText("Изменить")};TextButton(enabled=!busy,onClick={act("/$id",JSONObject().put("closed",!topic.optBoolean("closed")),"PATCH")}){NativeText(if(topic.optBoolean("closed"))"Открыть" else "Закрыть")}}
                                     if(admin)TextButton(enabled=!busy,onClick={act("/$id",JSONObject().put("pinned",!topic.optBoolean("pinned")),"PATCH")}){NativeText(if(topic.optBoolean("pinned"))"Открепить" else "Закрепить")}
                                     if(admin&&topic.optBoolean("pinned"))Row {for(delta in listOf(-1,1))TextButton(enabled=!busy,onClick={val pinned=all.filter{it.optBoolean("pinned")}.toMutableList();val i=pinned.indexOfFirst{it.optLong("id")==id};val j=i+delta;if(j in pinned.indices){val other=pinned[j];pinned[j]=pinned[i];pinned[i]=other;act("/reorder",JSONObject().put("ids",org.json.JSONArray(pinned.map{it.getLong("id")})))}}){NativeText(if(delta<0)"Выше" else "Ниже")}}
                                     if(topic.optBoolean("general"))TextButton(enabled=!busy,onClick={act("/$id",JSONObject().put("hidden",!topic.optBoolean("hidden")),"PATCH")}){NativeText(if(topic.optBoolean("hidden"))"Показать общую тему" else "Скрыть общую тему")}
-                                    else TextButton(enabled=!busy,onClick={deleting=topic}){NativeText("Удалить",color=MaterialTheme.colorScheme.error)}
+                                    else TextButton(enabled=!busy,onClick={deleting=topic;actions=false}){NativeText("Удалить",color=MaterialTheme.colorScheme.error)}
                                 }
                             }
-                        }}
+                        }
                     }
                     if(value.optJSONObject("general")?.optBoolean("hidden")==true&&!admin)TextButton(onClick={onSelect(group.id,null)}){NativeText("Открыть общую историю")}
                     if(value.optBoolean("can_create")&&editing==null)Button(onClick={edit(null)},enabled=!busy){NativeText("Создать тему")}
@@ -125,6 +125,7 @@ internal fun NativeTopicsDialog(group: VolnaChat, token: String, api: NativeApi,
                 Row{Button(enabled=!busy&&name.isNotBlank(),onClick={val data=JSONObject().put("name",name);if(!topic.optBoolean("general"))data.put("description",description).put("icon",icon);if(!topic.has("id"))data.put("client_id",creation);act(if(topic.has("id"))"/${topic.getLong("id")}" else "",data,if(topic.has("id"))"PATCH" else "POST"){editing=null}}){NativeText("Сохранить")};TextButton(enabled=!busy,onClick={editing=null}){NativeText("Отмена")}}
             }
         }
+    }
     }
     deleting?.let{topic ->AlertDialog(onDismissRequest={if(!busy)deleting=null},title={NativeText("Удалить тему?")},text={NativeText("«${topic.getString("name") }» и её история будут удалены у всех участников.")},confirmButton={TextButton(enabled=!busy,onClick={act("/${topic.getLong("id")}",method="DELETE"){deleting=null}}){NativeText("Удалить")}},dismissButton={TextButton(enabled=!busy,onClick={deleting=null}){NativeText("Отмена")}})}
 }

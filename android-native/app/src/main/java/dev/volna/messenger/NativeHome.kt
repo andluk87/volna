@@ -53,11 +53,12 @@ internal fun ChatListScreen(
     onUpdate: () -> Unit, onScanQr: () -> Unit, onOpenProfile: (Long) -> Unit, onLogout: () -> Unit,
     onAppearance: () -> Unit, onCommunityEntry: (String) -> Unit, onSavedMessages: () -> Unit,
     api: NativeApi, cache: NativeCache, onCall: (VolnaChat) -> Unit, onVideo: (VolnaChat) -> Unit, onSearchMessage: (VolnaMessage) -> Unit,
-    onSwitchAccount: (NativeAccount?) -> Unit, onRetry: () -> Unit, onAppearanceChange: (NativeAppearance) -> Unit
+    onSwitchAccount: (NativeAccount?) -> Unit, onRetry: () -> Unit, onAppearanceChange: (NativeAppearance) -> Unit,
+    selectedFolder: String = "all", onFolderSelect: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var tab by rememberSaveable(user?.id) { mutableStateOf("chats") }
-    var filter by rememberSaveable(user?.id) { mutableStateOf("all") }
+    val filter = selectedFolder
     var menu by remember { mutableStateOf(false) }
     var drawerOpen by rememberSaveable { mutableStateOf(false) }
     BackHandler(drawerOpen) { drawerOpen = false }
@@ -104,7 +105,7 @@ internal fun ChatListScreen(
         catch (e: Exception) { folderError = e.message ?: "Не удалось сохранить папки"; if (e is NativeApiException && e.status == 409) runCatching { applyFolderCloud(withContext(Dispatchers.IO) { api.folders(token) }) }; false }
         finally { folderBusy = false }
     }
-    LaunchedEffect(folders, chats) { if (filter.startsWith("folder:") && nativeNavigationFolders(folders, chats).none { "folder:${it.id}" == filter }) filter = "all" }
+    LaunchedEffect(folders, chats) { if (filter.startsWith("folder:") && nativeNavigationFolders(folders, chats).none { "folder:${it.id}" == filter }) onFolderSelect("all") }
     val appearance = LocalNativeAppearance.current
     val motion = LocalMotionEnabled.current
     val pageState = rememberSaveableStateHolder()
@@ -129,16 +130,19 @@ internal fun ChatListScreen(
                 "profile" -> NativeSettingsScreen(user, token, appearance, headerHeight, onOpenProfile, onAppearance, onScanQr, onSavedMessages, { settings = it }, { accountsOpen = true }, onAppearanceChange, { tab = "contacts" })
                 else -> Column(Modifier.fillMaxSize()) {
                     NativeSearchField(query, onQuery, "Поиск чатов", compact = true)
-                    if (query.isBlank()) NativeFolderTabs(folders, chats, filter) { filter = it }
+                    if (query.isBlank() && !appearance.foldersStyle.vertical) NativeFolderTabs(folders, chats, filter) { onFolderSelect(it) }
                     if (query.trim().length >= 2) NativeGlobalSearch(query, token, api, chats, people, onSelect, onStartChat, onSearchMessage)
-                    else Box(Modifier.weight(1f)) {
+                    else Row(Modifier.weight(1f)) {
+                        if (appearance.foldersStyle.vertical) NativeFolderRail(folders, chats, filter, { onFolderSelect(it) },
+                            modifier = Modifier.fillMaxHeight(), bottomInset = navigationHeight + 12.dp)
+                        Box(Modifier.weight(1f)) {
                         val tabs = nativeNavigationFolders(folders, chats)
                         val folder = tabs.firstOrNull { it.rule != "all" && "folder:${it.id}" == filter }
                         val visible = chats.filter { if (folder != null) nativeFolderMatches(folder, it) else nativeChatFilter(it, filter) && (filter != "all" || tabs.isEmpty() || nativeUnassignedChat(it, tabs)) }.let { rows -> if (folder == null) rows else rows.sortedBy { folder.pinned.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE } }
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
                             val archivedCount = chats.count { it.archived }
                             if ((filter == "all" || folder?.rule == "all") && archivedCount > 0) item(key = "archive") {
-                                Row(Modifier.fillMaxWidth().clickable { filter = "archived" }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Row(Modifier.fillMaxWidth().clickable { onFolderSelect("archived") }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Box(Modifier.size(54.dp).clip(CircleShape).background(Panel), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Archive, "Архив", tint = TextMain, modifier = Modifier.size(28.dp)) }
                                     Column(Modifier.padding(start = 12.dp)) { NativeText("Архив чатов", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); NativeText("Чатов: $archivedCount", color = Muted, fontSize = 14.sp) }
                                 }
@@ -147,6 +151,7 @@ internal fun ChatListScreen(
                             items(visible, key = { it.id }) { chat -> NativeChatRow(chat, user?.id, token, drafts.get(chat.id), { onSelect(chat) }, { key, value -> onChatPreference(chat, key, value) }) }
                         }
                         FloatingActionButton(onClick = { tab = "contacts" }, modifier = Modifier.align(Alignment.BottomEnd).padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = navigationHeight + 16.dp), containerColor = Accent, contentColor = AccentText) { Icon(Icons.Outlined.Edit, "Новый чат") }
+                    }
                     }
                 }
             }
@@ -168,7 +173,7 @@ internal fun ChatListScreen(
                     DropdownMenuItem(text = { NativeText("Создать канал") }, leadingIcon = { Icon(Icons.Outlined.Campaign, null) }, onClick = { menu = false; onCommunityEntry("create-channel") })
                     DropdownMenuItem(text = { NativeText("Войти по приглашению") }, onClick = { menu = false; onCommunityEntry("join") })
                     DropdownMenuItem(text = { NativeText("Избранное") }, leadingIcon = { Icon(Icons.Outlined.BookmarkBorder, null) }, onClick = { menu = false; onSavedMessages() })
-                    DropdownMenuItem(text = { NativeText("Архив") }, onClick = { menu = false; filter = "archived"; tab = "chats" })
+                    DropdownMenuItem(text = { NativeText("Архив") }, onClick = { menu = false; onFolderSelect("archived"); tab = "chats" })
                     DropdownMenuItem(text = { NativeText("Аккаунты") }, onClick = { menu = false; accountsOpen = true })
                 }
             }
@@ -206,7 +211,7 @@ internal fun ChatListScreen(
                                 "channel" -> onCommunityEntry("create-channel")
                                 "join" -> onCommunityEntry("join")
                                 "saved" -> onSavedMessages()
-                                "archived" -> { filter = "archived"; tab = "chats" }
+                                "archived" -> { onFolderSelect("archived"); tab = "chats" }
                                 "accounts" -> accountsOpen = true
                                 else -> tab = key
                             }
