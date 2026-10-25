@@ -22,7 +22,7 @@ internal object NativeCredentials {
         context = app.applicationContext
         val state = context.getSharedPreferences("volna-native", 0)
         if (state.getInt("auth_generation", 0) != 2) {
-            state.edit().remove("token").remove("user_id").putInt("auth_generation", 2).apply()
+            state.edit().remove("token").remove("user_id").putInt("auth_generation", 2).commit()
             context.getSharedPreferences("volna-accounts", 0).edit().clear().apply()
             context.getSharedPreferences("volna-service", 0).edit().clear().apply()
             context.deleteDatabase("volna-cache.db")
@@ -61,5 +61,5 @@ internal object NativeCredentials {
     @Synchronized internal fun accountId(token:String):Long = account(token)?:0L
     private fun account(token: String): Long? = aliases[token] ?: prefs().all.keys.mapNotNull { it.toLongOrNull() }.firstOrNull { read(it)?.optString("access") == token }
     @Synchronized fun remove(id: Long) { prefs().edit().remove(id.toString()).commit(); aliases.entries.removeAll { it.value == id } }
-    val refreshLock = Any()
+    val refreshGate = NativeRefreshGate()
 }

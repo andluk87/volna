@@ -507,7 +507,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             me?.let { prefs.edit().putLong("user_id", it.id).apply(); NativeAccounts.remember(context, it, token); withContext(Dispatchers.IO) { cache.saveMe(it) }; MessagingService.start(context, token, it.id) }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) {
             error = problem.message ?: "Не удалось подключиться к VLN"
-            if (problem is NativeApiException && problem.status == 401 || error.contains("Войдите", true) || error.contains("401")) {
+            if (problem is NativeApiException && problem.status == 401) {
                 me?.id?.let { NativeAccounts.remove(context, it) }
                 prefs.edit().remove("token").apply()
                 token = ""

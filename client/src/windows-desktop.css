@@ -49,12 +49,12 @@
 /* Folder rail and desktop dialogs share the application's live theme. */
 @media(min-width:761px){
  :root[data-desktop=true]{--sidebar-width:392px}
- [data-desktop=true] .sidebar.desktop-folder-sidebar{position:relative;display:grid;grid-template-columns:72px minmax(0,1fr);grid-template-rows:48px auto minmax(0,1fr)}
+ [data-desktop=true] .sidebar.desktop-folder-sidebar{position:relative;display:grid;grid-template-columns:72px minmax(0,1fr);grid-template-rows:48px auto minmax(0,1fr) auto}
  [data-desktop=true] .desktop-folder-sidebar>.sidebar-head{grid-column:2;grid-row:1;padding-left:10px}
  [data-desktop=true] .desktop-folder-sidebar>.sidebar-head .main-menu{position:absolute;left:0;top:8px;width:72px;display:flex;justify-content:center;z-index:110}
  [data-desktop=true] .desktop-folder-sidebar>.chat-list{grid-column:2;grid-row:3;min-height:0}
  [data-desktop=true] .desktop-folder-sidebar>.search-tabs{grid-column:2;grid-row:2}
- [data-desktop=true] .desktop-folder-rail{grid-column:1;grid-row:2/4;display:flex;flex-direction:column;overflow:auto;background:color-mix(in srgb,var(--bg) 70%,var(--panel));padding:4px 0;scrollbar-width:none}
+ [data-desktop=true] .desktop-folder-rail{grid-column:1;grid-row:2/5;display:flex;flex-direction:column;overflow:auto;background:color-mix(in srgb,var(--bg) 70%,var(--panel));padding:4px 0;scrollbar-width:none}
  [data-desktop=true] .desktop-folder-rail>button{position:relative;min-height:64px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:0;border-radius:0;background:transparent;color:var(--muted);padding:6px 3px;font-size:11px;overflow-wrap:anywhere}
  [data-desktop=true] .desktop-folder-rail>button.selected{background:var(--input);color:var(--accent)}
  [data-desktop=true] .folder-rail-icon{position:relative;height:26px;font-size:23px;display:grid;place-items:center}

@@ -30,7 +30,7 @@ internal suspend fun installVolnaApk(context:Context,file:File,allowSilent:Boole
   val intent=Intent(context,VolnaInstallResultActivity::class.java).setAction("dev.volna.messenger.INSTALL_RESULT").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
   val flags=PendingIntent.FLAG_UPDATE_CURRENT or if(Build.VERSION.SDK_INT>=31)PendingIntent.FLAG_MUTABLE else 0
   val options=if(Build.VERSION.SDK_INT>=35)ActivityOptions.makeBasic().apply{setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)}.toBundle() else null
-  session.commit(PendingIntent.getActivity(context,id,intent,flags,options).intentSender)
+  NativeCredentials.refreshGate.install { session.commit(PendingIntent.getActivity(context,id,intent,flags,options).intentSender) }
  }}catch(problem:Exception){installer.abandonSession(id);context.getSharedPreferences("volna-update-install",0).edit().clear().apply();throw problem}
 }
 internal fun nativeUpdateRelaunch(before:Int,current:Int,requested:Long,now:Long)=before>0&&current>before&&requested>0&&now>=requested&&now-requested<30*60*1000
@@ -41,8 +41,9 @@ class VolnaUpdateReceiver:BroadcastReceiver(){
    val status=intent.getIntExtra(PackageInstaller.EXTRA_STATUS,PackageInstaller.STATUS_FAILURE)
    if(status==PackageInstaller.STATUS_PENDING_USER_ACTION){
     val confirm=if(Build.VERSION.SDK_INT>=33)intent.getParcelableExtra(Intent.EXTRA_INTENT,Intent::class.java) else @Suppress("DEPRECATION") intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-    if(prefs.getBoolean("silent",false)){prefs.edit().putString("error","Android требует подтверждения. Откройте VLN и нажмите «Обновить сейчас».").apply();notify(context,"Обновление скачано. Подтвердите установку в VLN") }else confirm?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)?.let{runCatching{context.startActivity(it)}};return
+    if(prefs.getBoolean("silent",false)){NativeCredentials.refreshGate.resume();prefs.edit().putString("error","Android требует подтверждения. Откройте VLN и нажмите «Обновить сейчас».").apply();notify(context,"Обновление скачано. Подтвердите установку в VLN") }else if(confirm==null)NativeCredentials.refreshGate.resume() else confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).let{runCatching{context.startActivity(it)}.onFailure{NativeCredentials.refreshGate.resume()}};return
    }
+   NativeCredentials.refreshGate.resume()
    if(status!=PackageInstaller.STATUS_SUCCESS){val text=if(status==PackageInstaller.STATUS_FAILURE_ABORTED)"Установка отменена. Обновление остаётся скачанным." else "Android не установил обновление. Откройте VLN и повторите.";prefs.edit().clear().putString("error",text).apply();notify(context,text);return}
   }else if(intent.action!=Intent.ACTION_MY_PACKAGE_REPLACED)return
   // Package replacement kills the old process. Restore delivery even when Android

@@ -8,7 +8,7 @@ const {ignoredSpelling}=require('./ignored-spelling.cjs');
 const path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
 const {trustedRenderer,externalURL,validateConfig,rendererFile}=require('./desktop-core.cjs');
 const {restoredBounds,readWindowState,trackWindowState,desktopShortcut}=require('./window-state.cjs');
-const {createUpdates}=require('./updates.cjs');const {pickScreen}=require('./screen-picker.cjs');
+const {createUpdates}=require('./updates.cjs');const {createSessionStore,createSessionRefresh}=require('./session-store.cjs');const {pickScreen}=require('./screen-picker.cjs');
 // Preserve the existing profile, permissions and session when the display name changes.
 app.setPath('userData',path.join(app.getPath('appData'),'Volna'));
 app.setName('VLN');
@@ -16,7 +16,7 @@ protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,se
 app.commandLine.appendSwitch('autoplay-policy','no-user-gesture-required');
 const appWindows=new Set(),editorFocus=new WeakMap(),transfers=new Set();
 let messageToasts;
-let win,tray,quitting=false,config,updates,activeCall=false,lastIncoming='',callNotification,spellingDictionary,selectedAccountId=null;
+let win,tray,quitting=false,config,updates,sessionRefresh,activeCall=false,lastIncoming='',callNotification,spellingDictionary,selectedAccountId=null;
 const show=()=>{if(!win||win.isDestroyed())createWindow();if(win.isMinimized())win.restore();win.show();win.focus();win.flashFrame(false);};
 function createWindow(chatId=null,accountId=null){
  const secondary=chatId!==null;
@@ -63,7 +63,7 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   Menu.setApplicationMenu(null);createWindow();tray=new Tray(path.join(root,'icons/icon-192.png'));tray.setToolTip('VLN');
   tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть VLN',click:show},{label:'Проверить обновления',click:()=>{show();updates.check(true);}},{type:'separator'},{label:'Выйти',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',show);
   const idleFile=path.join(app.getPath('userData'),'update-settings.json');let idleInstall=false;try{idleInstall=JSON.parse(fs.readFileSync(idleFile,'utf8')).idleInstall===true;}catch{}
-  const {autoUpdater}=require('electron-updater');updates=createUpdates({idleInstall,idleSeconds:()=>powerMonitor.getSystemIdleTime(),saveIdleInstall:value=>{const temp=idleFile+'.tmp';fs.writeFileSync(temp,JSON.stringify({idleInstall:value}),{mode:0o600});fs.renameSync(temp,idleFile);},updater:autoUpdater,version:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',publish:state=>{if(!win.isDestroyed())win.webContents.send('desktop:update-state',state);},inCall:()=>activeCall||transfers.size>0,install:()=>{quitting=true;autoUpdater.quitAndInstall(true,true);}});
+  const {autoUpdater}=require('electron-updater');updates=createUpdates({idleInstall,idleSeconds:()=>powerMonitor.getSystemIdleTime(),saveIdleInstall:value=>{const temp=idleFile+'.tmp';fs.writeFileSync(temp,JSON.stringify({idleInstall:value}),{mode:0o600});fs.renameSync(temp,idleFile);},updater:autoUpdater,version:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',publish:state=>{if(!win.isDestroyed())win.webContents.send('desktop:update-state',state);},inCall:()=>activeCall||transfers.size>0,isSessionBusy:()=>sessionRefresh?.pending()===true,install:()=>{quitting=true;autoUpdater.quitAndInstall(true,true);}});
   ipc('desktop:editor-focus',(value,event)=>{editorFocus.set(event.sender,value===true);});
   ipc('desktop:open-window',value=>{if(!Number.isSafeInteger(value?.chatId)||value.chatId<1||!Number.isSafeInteger(value.accountId)||value.accountId<1)throw Error('Invalid chat');createWindow(value.chatId,value.accountId);return true;});
   ipc('desktop:start-call',value=>{if(!Number.isSafeInteger(value?.chatId)||value.chatId<1||!Number.isSafeInteger(value.accountId)||value.accountId<1||typeof value.video!=='boolean')throw Error('Invalid call');show();win.webContents.send('desktop:start-call',value);return true;});
@@ -71,11 +71,16 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   ipc('desktop:transfer', (value,event)=>{if(value===true)transfers.add(event.sender);else transfers.delete(event.sender);return true;});ipc('desktop:idle-update',value=>updates.setIdleInstall(value));ipc('desktop:update-state',()=>updates.snapshot());ipc('desktop:check-update',()=>updates.check(true));ipc('desktop:update',()=>updates.update());ipc('desktop:defer-update',()=>updates.defer());
   const sessionFile=path.join(app.getPath('userData'),'phone-session.dat');
   const accountsFile=path.join(app.getPath('userData'),'accounts.dat');
-  const validAccounts=value=>value&&Array.isArray(value.accounts)&&value.accounts.length<=5&&new Set(value.accounts.map(a=>a?.user?.id)).size===value.accounts.length&&value.accounts.every(a=>Number.isSafeInteger(a?.user?.id)&&a.user.id>0&&/^[A-Za-z0-9_-]{43}$/.test(a.token)&&/^[A-Za-z0-9_-]{43}$/.test(a.refresh_token)&&Number.isSafeInteger(a.expires))&&(value.selected===null||value.accounts.some(a=>a.user.id===value.selected))&&JSON.stringify(value).length<=100000;
-  ipc('desktop:save-accounts',(value,event)=>{if(!validAccounts(value))throw Error('Invalid accounts');if(!safeStorage.isEncryptionAvailable())throw Error('Secure storage unavailable');if(event.sender!==win.webContents){try{const stored=JSON.parse(safeStorage.decryptString(fs.readFileSync(accountsFile)));value.selected=stored.selected;}catch{value.selected=null;}}else selectedAccountId=value.selected;try{const stored=JSON.parse(safeStorage.decryptString(fs.readFileSync(accountsFile)));value.accounts=value.accounts.map(a=>{const existing=stored.accounts.find(old=>old.user.id===a.user.id);return existing?.expires>a.expires?existing:a;});}catch{}const temp=accountsFile+'.tmp';fs.writeFileSync(temp,safeStorage.encryptString(JSON.stringify(value)),{mode:0o600});fs.renameSync(temp,accountsFile);fs.rmSync(sessionFile,{force:true});return true;});
-  ipc('desktop:load-accounts',()=>{try{if(!safeStorage.isEncryptionAvailable())return null;const value=JSON.parse(safeStorage.decryptString(fs.readFileSync(accountsFile)));return validAccounts(value)?value:null;}catch{return null;}});
+  const sessionStore=createSessionStore({file:accountsFile,legacyFile:sessionFile,secure:safeStorage});
+  sessionRefresh=createSessionRefresh({store:sessionStore,request:async(refresh,accountId)=>{
+   const response=await net.fetch(config.apiBase+'/api/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:refresh,account_id:accountId,select:false}),signal:AbortSignal.timeout(30000)});
+   return {status:response.status,...(response.ok?{session:await response.json()}:{})};
+  }});
+  ipc('desktop:save-accounts',(value,event)=>{const saved=sessionStore.save(value,{secondary:event.sender!==win.webContents});for(const id of value.removed||[])sessionRefresh.forget(id);if(event.sender===win.webContents)selectedAccountId=saved.selected;return true;});
+  ipc('desktop:load-accounts',()=>sessionStore.load());
+  ipc('desktop:refresh-session',value=>sessionRefresh.refresh(value));
   ipc('desktop:save-session',refresh=>{if(typeof refresh!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(refresh))throw Error('Invalid session');if(!safeStorage.isEncryptionAvailable())throw Error('Secure storage unavailable');const temp=sessionFile+'.tmp';fs.writeFileSync(temp,safeStorage.encryptString(refresh),{mode:0o600});fs.renameSync(temp,sessionFile);return true;});
-  ipc('desktop:load-session',()=>{try{if(!safeStorage.isEncryptionAvailable())return null;const refresh=safeStorage.decryptString(fs.readFileSync(sessionFile));return /^[A-Za-z0-9_-]{43}$/.test(refresh)?refresh:null;}catch{return null;}});
+  ipc('desktop:load-session',()=>sessionStore.loadLegacy());
   ipc('desktop:clear-session',()=>{fs.rmSync(sessionFile,{force:true});return true;});
   ipc('desktop:notification-settings',()=>shell.openExternal('ms-settings:notifications'));
   ipc('desktop:sound-settings',()=>shell.openExternal('ms-settings:sound'));

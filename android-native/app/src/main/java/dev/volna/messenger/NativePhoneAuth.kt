@@ -42,12 +42,20 @@ internal fun NativeQrScanner(token: String, api: NativeApi, initialQr: String = 
     var preview by remember { mutableStateOf<PreviewView?>(null) }
     var qr by remember { mutableStateOf(initialQr) }; var info by remember { mutableStateOf<JSONObject?>(null) }
     var error by remember { mutableStateOf("") }; var busy by remember { mutableStateOf(false) }
+    var scannedByCamera by remember { mutableStateOf(false) }
     val frozen = remember { AtomicBoolean(initialQr.isNotBlank()) }
-    LaunchedEffect(qr) {
+    LaunchedEffect(qr, scannedByCamera) {
         if (qr.isBlank()) return@LaunchedEffect
         if (!qr.matches(Regex("volna://login/[A-Za-z0-9_-]{43}"))) { error = "Это не QR-код входа VLN"; return@LaunchedEffect }
         busy = true; error = ""; info = null
-        try { info = withContext(Dispatchers.IO) { api.qrScan(token, qr) } }
+        try {
+            if (scannedByCamera) {
+                nativeAuthorizeScannedQr(qr,
+                    scan = { value -> withContext(Dispatchers.IO) { api.qrScan(token, value); Unit } },
+                    approve = { value -> withContext(Dispatchers.IO) { api.qrConfirm(token, value, true) } })
+                onDismiss()
+            } else info = withContext(Dispatchers.IO) { api.qrScan(token, qr) }
+        }
         catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "QR-код недоступен" }
         finally { busy = false }
     }
@@ -66,7 +74,7 @@ internal fun NativeQrScanner(token: String, api: NativeApi, initialQr: String = 
                         val image = proxy.image
                         if (image == null || frozen.get() || disposed.get()) proxy.close()
                         else scanner.process(InputImage.fromMediaImage(image, proxy.imageInfo.rotationDegrees))
-                            .addOnSuccessListener { values -> values.firstOrNull { it.rawValue?.startsWith("volna://login/") == true }?.rawValue?.let { value -> if (frozen.compareAndSet(false, true) && !disposed.get()) qr = value } }
+                            .addOnSuccessListener { values -> values.firstOrNull { it.rawValue?.startsWith("volna://login/") == true }?.rawValue?.let { value -> if (frozen.compareAndSet(false, true) && !disposed.get()) { scannedByCamera = true; qr = value } } }
                             .addOnCompleteListener { proxy.close() }
                     }
                     cameras.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, display, frames)
@@ -77,10 +85,10 @@ internal fun NativeQrScanner(token: String, api: NativeApi, initialQr: String = 
     }
     NativeFullScreen("Сканировать QR", onDismiss) {
         Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            NativeText("Отсканируйте QR в открытой Web или Windows-версии VLN. Подтвердите только вход на своём устройстве.", color = Muted)
+            NativeText("Отсканируйте QR в открытой Web или Windows-версии VLN. Вход выполнится автоматически.", color = Muted)
             if (!permitted) Button(onClick = { permission.launch(Manifest.permission.CAMERA) }) { NativeText("Разрешить камеру") }
             else AndroidView(factory = { PreviewView(it).also { view -> preview = view } }, modifier = Modifier.fillMaxWidth().weight(1f))
-            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); NativeText("Выполняем вход…", color = Muted) }
             if (error.isNotBlank()) NativeText(error, color = MaterialTheme.colorScheme.error)
             info?.let { details ->
                 NativeText("Разрешить вход в ${if(details.optString("platform") == "windows") "Windows" else "Web"}?", fontSize = 20.sp)
@@ -91,7 +99,7 @@ internal fun NativeQrScanner(token: String, api: NativeApi, initialQr: String = 
                     OutlinedButton(enabled = !busy, onClick = { scope.launch { try { withContext(Dispatchers.IO) { api.qrConfirm(token, qr, false) }; onDismiss() } catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось отклонить" } } }) { NativeText("Отклонить") }
                 }
             }
-            TextButton(enabled = !busy, onClick = { qr = ""; info = null; error = ""; frozen.set(false) }) { NativeText("Сканировать другой код") }
+            TextButton(enabled = !busy, onClick = { qr = ""; info = null; error = ""; scannedByCamera = false; frozen.set(false) }) { NativeText("Сканировать другой код") }
         }
     }
 }

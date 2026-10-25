@@ -78,7 +78,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
             val first = chain.proceed(request.build())
             if (first.code != 401 || supplied.isNullOrBlank() || NativeCredentials.refresh(supplied) == null) first
             else {
-                val updated = synchronized(NativeCredentials.refreshLock) {
+                val updated = try { NativeCredentials.refreshGate.refresh {
                     val current = NativeCredentials.resolve(supplied)
                     if (current != request.build().header("Authorization")?.removePrefix("Bearer ")) current
                     else {
@@ -89,6 +89,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
                         } catch (problem: NativeApiException) { if (problem.status == 401 || problem.status == 403) null else { first.close(); throw problem } } catch (problem: Exception) { first.close(); throw problem }
                     }
                 }
+                } catch (problem: Exception) { first.close(); throw problem }
                 if (updated == null) first else { first.close(); chain.proceed(original.newBuilder().header("User-Agent", "VolnaAndroid/${BuildConfig.VERSION_NAME}").header("Authorization", "Bearer $updated").build()) }
             }
         }

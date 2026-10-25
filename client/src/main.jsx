@@ -18,7 +18,7 @@ import {Avatar,Icon} from './ui';
 import Attachment from './Attachment';
 import {CreateCommunity,JoinCommunity,ManageCommunity} from './Communities';
 import './style.css';
-import {AppDownloads,DesktopUpdate} from './Desktop';
+import {AppDownloads} from './Desktop';
 import useAccountNotifications from './useAccountNotifications';
 import {JoinFolder} from './FolderShare';
 import {notifyDesktopMessage} from './desktop-notifications.mjs';
@@ -107,6 +107,7 @@ function App({demo=false}){
  useEffect(()=>onAccountsChange(setAccounts),[]);
  useEffect(()=>{const removed=e=>{if(e.detail===userRef.current)clearSession();};window.addEventListener('volna-account-removed',removed);return()=>window.removeEventListener('volna-account-removed',removed);},[]);
  const [token,setToken]=useState(''),[me,setMe]=useState(null),[restoring,setRestoring]=useState(true);
+ const [restoreError,setRestoreError]=useState(''),[restoreAttempt,setRestoreAttempt]=useState(0);
  const [cloudAppearanceSaveError,setCloudAppearanceSaveError]=useState(false);
  const appearanceSaveError=localAppearanceSaveError||cloudAppearanceSaveError;
  const displayedApp=useRef(false);
@@ -114,7 +115,7 @@ function App({demo=false}){
  useEffect(()=>demo?undefined:onSessionChange(result=>{if(userRef.current&&userRef.current!==result.user.id){closeActive();setChats([]);setMessages([]);setProfileId(null);setQuery('');setPeople([]);setPrivateNames(new Map());setForward(null);setDeleting(null);setPendingSend(null);setNotice('');setCommunityModal(null);setTopicsGroup(null);setInfoOpen(false);setNotificationSettings(false);setDataOpen(false);setAppearanceOpen(false);clearEmojiCache();}setToken(result.token);setMe(result.user);}),[demo]);
  const acceptAddedSession=useCallback(async result=>{await saveSession(result);setAddingAccount(false);},[]);
  const acceptSession=useCallback(async result=>{await saveSession(result);setToken(result.token);setMe(result.user);},[]);
- useEffect(()=>{if(demo){setRestoring(false);return;}let live=true;restoreSession().then(result=>{if(live&&result){setToken(result.token);setMe(result.user);}}).finally(()=>{if(live)setRestoring(false);});return()=>{live=false;};},[]);
+ useEffect(()=>{if(demo){setRestoring(false);return;}let live=true,timer;setRestoreError('');restoreSession().then(result=>{if(live){if(result){setToken(result.token);setMe(result.user);}setRestoring(false);}}).catch(()=>{if(live){setRestoreError('Не удалось восстановить подключение. Сохранённые аккаунты остаются на устройстве.');timer=setTimeout(()=>setRestoreAttempt(value=>value+1),3000);}});const online=()=>setRestoreAttempt(value=>value+1);window.addEventListener('online',online);return()=>{live=false;clearTimeout(timer);window.removeEventListener('online',online);};},[demo,restoreAttempt]);
  const accountUnread=useAccountNotifications(accounts,me?.id);
  const userRef=useRef(null);userRef.current=me?.id;
  const desktopNotifications=useDesktopNotificationSettings();
@@ -304,7 +305,7 @@ function App({demo=false}){
  {m.deleted_at?<div className="message-text">Сообщение удалено</div>:<>{m.forwarded_name&&<div className="forward-label">Переслано от {m.forwarded_name}</div>}{m.reply&&<button className="reply-quote" onClick={()=>jump({id:m.reply.id})}><strong>{m.reply.name}</strong><span>{m.reply.text}</span></button>}{m.attachment&&<Attachment key={m.attachment.id} file={m.attachment} token={token} messageId={m.id} transcript={m.transcript||''} expressionKind={m.expression?.kind} gallery={imageGallery}/>}{m.checklist&&<ChecklistMessage checklist={m.checklist} canCheck={canSend} onCheck={(item,done)=>action(m,'check',{item,done})}/>} {m.poll&&<PollMessage poll={m.poll} userId={me?.id} onVote={option=>action(m,'vote',{option})}/>}<MessageText text={m.poll||m.checklist?'':m.text} entities={m.emoji_entities||[]} token={token} meta={m.text&&!m.reactions?.length?<MessageMeta message={m} own={m.sender_id===me?.id} chat={chat} timeFormat={appearance.timeFormat}/>:null}/>{m.reactions?.length>0&&<div className="message-footer"><div className="reactions">{[...new Set(m.reactions.map(r=>r.emoji))].map(emoji=><button key={emoji} aria-label={'Реакция '+emoji} aria-pressed={m.reactions.some(r=>r.emoji===emoji&&r.user_id===me?.id)} className={m.reactions.some(r=>r.emoji===emoji&&r.user_id===me?.id)?'mine':''} onMouseDown={e=>e.preventDefault()} onContextMenu={e=>{e.preventDefault();setReactionPeople({id:m.id,emoji});}} onClick={()=>action(m,'react',{emoji,active:!m.reactions.some(r=>r.emoji===emoji&&r.user_id===me?.id)})}><span>{emoji}</span><span className="reaction-avatars">{m.reactions.filter(r=>r.emoji===emoji).slice(0,3).map(r=><Avatar key={r.user_id} id={r.user_id} name={r.name} src={r.avatar_url} token={token}/>)}</span>{m.reactions.filter(r=>r.emoji===emoji).length>3&&<small>+{m.reactions.filter(r=>r.emoji===emoji).length-3}</small>}</button>)}</div><MessageMeta message={m} own={m.sender_id===me?.id} chat={chat} timeFormat={appearance.timeFormat}/></div>}</>}
  {(!m.text||m.deleted_at)&&!m.reactions?.length&&<MessageMeta message={m} own={m.sender_id===me?.id} chat={chat} timeFormat={appearance.timeFormat}/>}</article>{selectedIds.size>0&&!m.deleted_at&&<button className="message-select" aria-label="Выбрать сообщение" aria-pressed={selectedIds.has(m.id)} onClick={()=>setSelectedIds(ids=>{const next=new Set(ids);if(next.has(m.id))next.delete(m.id);else next.add(m.id);return next;})}><Icon name="check"/></button>}</div></React.Fragment>)}</div>)),[timeline,me?.id,chat?.peer_read,chat?.peer_delivered,chat?.kind,chat?.name,active,token,appearance.avatars,appearance.timeFormat,isCommunity,moderator,canSend,selectedIds]);
  if(token&&!restoring&&cloudAppearanceReady)displayedApp.current=true;
- if(restoring||(!displayedApp.current&&!cloudAppearanceReady&&!cloudAppearanceSaveError))return <main className="auth"><p>Подключаемся к VLN…</p></main>;
+ if(restoring||(!displayedApp.current&&!cloudAppearanceReady&&!cloudAppearanceSaveError))return <main className="auth"><section><p>Подключаемся к VLN…</p>{restoreError&&<><p role="status">{restoreError}</p><button onClick={()=>setRestoreAttempt(value=>value+1)}>Повторить подключение</button></>}</section></main>;
  if(!token&&demo)return <DemoLogin onEnter={user=>{setToken(DEMO_TOKEN);setMe(user);}}/>;
  if(!token&&!window.volnaDesktop&&location.pathname==='/')return <SiteHome><PhoneQrLogin onSession={acceptSession}/></SiteHome>;
  if(!token)return <><PhoneQrLogin onSession={acceptSession}/>{accounts.length>0&&<section className="account-login-choices"><p>Другие аккаунты на этом устройстве</p>{accounts.map(s=><button key={s.user.id} onClick={()=>selectAccount(s.user.id).catch(e=>setError(e.message))}>{s.user.name}</button>)}</section>}</>;
@@ -355,4 +356,4 @@ function App({demo=false}){
  </main>;
 }
 function Entry(){if(import.meta.env.DEV&&new URLSearchParams(location.search).get('demo')==='1')return <App demo/>;const path=location.pathname.match(/^\/([a-zA-Z0-9_]{4,32})$/);return path&&path[1]!=='app'?<PublicProfile username={path[1]}/>:<App/>;}
-createRoot(document.getElementById('root')).render(<><Entry/><DesktopUpdate/></>);
+createRoot(document.getElementById('root')).render(<Entry/>);
