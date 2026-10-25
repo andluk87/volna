@@ -6,12 +6,16 @@
 
 Темы группы теперь компактные строки с последним сообщением, датой и непрочитанными. Закреплённые идут первыми в заданном порядке, остальные — по последней активности. Кнопка с тремя точками открывает действия темы. Создание, настройки, все сообщения, права и скрытая общая тема сохранены. Внутри переписки убраны верхние вкладки тем; «Назад» возвращает к списку тем. Из списка тем можно переключиться на другую папку левой панелью.
 
+## Исправление сборки
+
+Тег `v0.12.60-buildfix1` содержит исправление UI-тестов для выпуска 0.12.60. Тест горизонтальных вкладок теперь явно включает подписи, а новая проверка левой панели проверяет переключение папок и счётчик без подписей. В исходной сборке APK уже собирался, но публикацию останавливал старый тест, ожидавший подписи при новых настройках по умолчанию. Проверки не отключены. Версия приложения остаётся 0.12.60 (12060).
+
 ## Обновление одной командой
 
 Выполните в прежнем каталоге сервера с `compose.yaml`, действующим `.env` и каталогом `artifacts` с вашим ключом Android:
 
 ```sh
-( set -eu; test -f compose.yaml && test -f .env; volna_update_dir=$(mktemp -d); trap 'rm -rf "$volna_update_dir"' EXIT; git clone --depth 1 --branch v0.12.60 https://github.com/andluk87/volna.git "$volna_update_dir/source"; git -C "$volna_update_dir/source" archive --output="$volna_update_dir/source.tar" HEAD; sh "$volna_update_dir/source/scripts/backup.sh"; if [ -d android-native/app/src ]; then mkdir -p backups; volna_source_backup=$(mktemp -d "$PWD/backups/android-source-0.12.60-XXXXXXXX"); mv android-native/app/src "$volna_source_backup/src"; fi; tar -xf "$volna_update_dir/source.tar" -C .; sh scripts/build-android.sh )
+( set -eu; test -f compose.yaml && test -f .env; volna_update_dir=$(mktemp -d); trap 'rm -rf "$volna_update_dir"' EXIT; git clone --depth 1 --branch v0.12.60-buildfix1 https://github.com/andluk87/volna.git "$volna_update_dir/source"; git -C "$volna_update_dir/source" archive --output="$volna_update_dir/source.tar" HEAD; sh "$volna_update_dir/source/scripts/backup.sh"; if [ -d android-native/app/src ]; then mkdir -p backups; volna_source_backup=$(mktemp -d "$PWD/backups/android-source-0.12.60-XXXXXXXX"); mv android-native/app/src "$volna_source_backup/src"; fi; tar -xf "$volna_update_dir/source.tar" -C .; sh scripts/build-android.sh )
 ```
 
 Команда делает резервную копию, переносит прежнюю папку Android-исходников в `backups/android-source-0.12.60-XXXXXXXX/src`, распаковывает исходники фиксированного тега, собирает и публикует APK и обновляет сервер/Web. Ключ подписи, `.env` и данные сохраняются. Это предотвращает повторное попадание в сборку лишних Kotlin-файлов от другой версии.
@@ -20,6 +24,6 @@
 
 ## Проверка
 
-Компиляция Android (`:app:compileDebugKotlin`) прошла. Пять JVM-проверок логики выполнены напрямую JUnit на скомпилированных классах приложения с зависимостями из локального кеша: счётчики, правила папок, порядок и видимость тем, даты и миграция оформления. Полный Robolectric/UI-набор и проверка на реальном телефоне не выполнялись.
+Компиляция Android (`:app:compileDebugKotlin`) прошла. Пять JVM-проверок логики выполнены напрямую JUnit на скомпилированных классах приложения с зависимостями из локального кеша: счётчики, правила папок, порядок и видимость тем, даты и миграция оформления. Для `v0.12.60-buildfix1` восемь UI-проверок класса `NativeMessageBubbleLayoutTest` прошли, включая горизонтальные папки и новую левую панель. Полный набор тестов и проверка на реальном телефоне здесь не выполнялись.
 
 Проверить на телефоне: переключение папок и счётчики после получения/прочтения сообщений, большое число папок и прокрутку, смену аккаунта, горизонтальный режим, длинные названия и крупный системный шрифт. Для тем проверить переход в переписку и обратно, действия администратора, закрепления и режим «Все сообщения».

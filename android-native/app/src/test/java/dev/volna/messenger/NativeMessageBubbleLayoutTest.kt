@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -104,7 +105,8 @@ class NativeMessageBubbleLayoutTest {
 
     @Test fun folderBarMatchesRoundedSegmentLayout() {
         compose.runOnUiThread { activity.get().setContent {
-            NativeEmojiProvider { VolnaTheme(NativeAppearance(theme = "dark")) {
+            NativeEmojiProvider { VolnaTheme(NativeAppearance(theme = "dark",
+                foldersStyle = NativeNavigationStyle.Folders.copy(vertical = false, labels = true, height = 40))) {
                 val folders = listOf(NativeFolder("a", "РРЦПД", setOf(1)), NativeFolder("b", "ДЦР", setOf(2)), NativeFolder("c", "РТК", setOf(3)))
                 val chats = (1L..3L).map { VolnaChat(it, "Чат", "", "", "", 0, false, it) }
                 Column(Modifier.width(400.dp).background(Ink).padding(vertical = 8.dp)) {
@@ -117,6 +119,30 @@ class NativeMessageBubbleLayoutTest {
         compose.onNodeWithText("РРЦПД").assertIsDisplayed()
         compose.onNodeWithText("Все чаты").assertIsDisplayed()
         screenshot("folders")
+    }
+
+    @Test fun folderRailSelectsFoldersWithoutVisibleLabels() {
+        var selected = "all"
+        compose.runOnUiThread { activity.get().setContent {
+            var current by remember { androidx.compose.runtime.mutableStateOf("all") }
+            NativeEmojiProvider { VolnaTheme(NativeAppearance(theme = "dark")) {
+                val folders = listOf(NativeFolder("work", "Работа", setOf(1)), NativeFolder("personal", "Личное", setOf(2)))
+                val chats = listOf(VolnaChat(1, "Рабочий чат", "", "", "", 3, false, 1),
+                    VolnaChat(2, "Личный чат", "", "", "", 0, false, 2))
+                Box(Modifier.width(400.dp).height(400.dp)) {
+                    NativeFolderRail(folders, chats, current, { current = it; selected = it })
+                }
+            } }
+        } }
+        compose.onNodeWithContentDescription("Работа").assertIsDisplayed().performClick().assertIsSelected()
+        compose.runOnIdle { org.junit.Assert.assertEquals("folder:work", selected) }
+        compose.onNodeWithText("Работа").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Непрочитанных чатов: 1").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Личное").performClick().assertIsSelected()
+        compose.runOnIdle { org.junit.Assert.assertEquals("folder:personal", selected) }
+        compose.onNodeWithContentDescription("Все чаты").performClick().assertIsSelected()
+        compose.runOnIdle { org.junit.Assert.assertEquals("all", selected) }
+        screenshot("folder-rail")
     }
 
     @Test fun navigationControlsPersistAndResetOnlyTheirOwnSettings() {
