@@ -4,15 +4,25 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NativeNavigationSerializationTest {
-    @Test fun oldFolderPreferencesUseRailWithoutLosingCustomizations() {
-        val style = NativeNavigationStyle.parse("""{"height":64,"labels":true,"textSize":16,"iconSize":23,"selected":4281558681}""", NativeNavigationStyle.Folders)
-        assertTrue(style.vertical)
+    @Test fun railPreferencesReturnToHorizontalDefaultsWithoutLosingCustomColors() {
+        val style = NativeNavigationStyle.parse("""{"vertical":true,"labels":false,"height":72,"sideInset":4,"iconSize":46,"selected":4281558681,"textSize":16}""", NativeNavigationStyle.Folders)
         assertTrue(style.labels)
-        assertEquals(64, style.height)
+        assertEquals(40, style.height)
+        assertEquals(10, style.sideInset)
+        assertEquals(23, style.iconSize)
         assertEquals(16, style.textSize)
-        assertEquals(46, style.iconSize)
         assertEquals(4281558681L, style.selected)
-        assertEquals(style.copy(vertical = false), NativeNavigationStyle.parse(style.copy(vertical = false).json(), NativeNavigationStyle.Folders))
-        assertFalse(NativeNavigationStyle.parse("{}", NativeNavigationStyle.Bottom).vertical)
+        assertFalse(style.json().contains("vertical"))
+        assertEquals(style, NativeNavigationStyle.parse(style.json(), NativeNavigationStyle.Folders))
+    }
+    @Test fun originalHorizontalAndBottomPreferencesKeepTheirCustomGeometry() {
+        val old = """{"height":64,"sideInset":4,"iconSize":46,"labels":false}"""
+        val horizontal = NativeNavigationStyle.parse(old, NativeNavigationStyle.Folders)
+        assertEquals(64, horizontal.height)
+        assertEquals(4, horizontal.sideInset)
+        assertEquals(46, horizontal.iconSize)
+        assertFalse(horizontal.labels)
+        val bottom = NativeNavigationStyle.Bottom.copy(height = 72, sideInset = 4, iconSize = 46, labels = false)
+        assertEquals(bottom, NativeNavigationStyle.parse(bottom.json(), NativeNavigationStyle.Bottom))
     }
 }

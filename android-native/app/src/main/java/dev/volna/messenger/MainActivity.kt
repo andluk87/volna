@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -99,7 +98,6 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
@@ -189,7 +187,6 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     DisposableEffect(cache) { onDispose { cache.close() } }
     val prefs = remember { context.getSharedPreferences("volna-native", 0) }
     val appearanceAccount = prefs.getLong("user_id", 0)
-    var homeFolder by rememberSaveable(appearanceAccount) { mutableStateOf("all") }
     val appearancePrefs = remember(appearanceAccount) { context.getSharedPreferences("volna-appearance-$appearanceAccount", 0) }
     var appearance by remember(appearanceAccount) { mutableStateOf(NativeAppearance.load(if (appearancePrefs.all.isEmpty()) context.getSharedPreferences("volna-appearance", 0) else appearancePrefs)) }
     val themeStore = remember(appearanceAccount) { NativeThemeStore(context, appearanceAccount) }
@@ -617,7 +614,6 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                 me?.profileSetupRequired == true -> NativeInitialProfile(me!!, token, api) { updated -> me = updated; NativeAccounts.remember(context, updated, token); scope.launch(Dispatchers.IO) { cache.saveMe(updated) } }
                 selectedChat == null -> homeState.SaveableStateProvider("home-${me?.id ?: 0}") { ChatListScreen(
                     user = me, chats = chats.filter { it.parentId == 0L }, query = query, people = people, token = token,
-                    selectedFolder = homeFolder, onFolderSelect = { homeFolder = it },
                     error = error,
                     api = api, cache = cache,
                     onRetry = { retryGeneration++ },
@@ -729,17 +725,11 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                         else { pendingCall = chat; callPermission.launch(Manifest.permission.RECORD_AUDIO) }
                     },
                     onCommunity = { if(selectedChat?.parentId != 0L && selectedChat?.parentId != null) topicsGroup=chats.firstOrNull { it.id==selectedChat?.parentId } else manageCommunity = selectedChat },
-                    topicNavigation = {},
+                    topicNavigation = { selectedChat?.takeIf { it.kind == "group" }?.let { chat -> NativeTopicTabs(chat,token,api) { id -> selectedChat=chats.firstOrNull{it.id==id};messages.clear() } } },
                     onTopics = { topicsGroup=chats.firstOrNull { it.id==(selectedChat?.parentId?.takeIf { id -> id != 0L } ?: selectedChat?.id) } }, onGallery = { galleryChat = selectedChat },
                     onOpenAttachment = { attachmentPreview = it },
                     error = error,
-                    onBack = {
-                        val chat = selectedChat
-                        val groupId = chat?.parentId?.takeIf { it != 0L } ?: chat?.id
-                        val group = chats.firstOrNull { it.id == groupId }
-                        if (group != null && (chat?.parentId != 0L || group.topicsEnabled || chats.any { it.parentId == group.id })) topicsGroup = group
-                        selectedChat = null; messages.clear(); messageQuery = ""
-                    },
+                    onBack = { selectedChat = selectedChat?.parentId?.takeIf { it != 0L }?.let { parent -> chats.firstOrNull { it.id==parent } }; messages.clear(); messageQuery = "" },
                     api = api,
                     onAppearance = { appearanceChat = selectedChat?.id; appearanceOpen = true },
                     onSendExpression = { item, replyId, onSent ->
@@ -863,13 +853,8 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                 scope.launch { try { chats.clear(); chats.addAll(withContext(Dispatchers.IO) { api.chats(token) }); selectedChat = chats.firstOrNull { it.id == id }; messages.clear() }
                     catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось открыть чат" } }
             } }
-            topicsGroup?.let { group -> NativeTopicsDialog(group,token,api,{topicsGroup=null;selectedChat=null;messages.clear()},{
+            topicsGroup?.let { group -> NativeTopicsDialog(group,token,api,{topicsGroup=null},{
                 scope.launch { try { val current=selectedChat?.id;val rows=withContext(Dispatchers.IO){api.chats(token)};chats.clear();chats.addAll(rows);selectedChat=rows.firstOrNull{it.id==current} } catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(problem:Exception){error=problem.message.orEmpty()} }
-            }, navigation = {
-                if (appearance.foldersStyle.vertical) NativeFolderRail(NativeFolders.load(context, me?.id ?: 0),
-                    chats.filter { it.parentId == 0L }, homeFolder,
-                    { homeFolder = it; query = ""; topicsGroup = null; selectedChat = null; messages.clear() },
-                    androidx.compose.ui.Modifier.fillMaxHeight())
             }) { id, messageId -> topicsGroup=null;scope.launch {try {val rows=withContext(Dispatchers.IO){api.chats(token)};chats.clear();chats.addAll(rows);selectedChat=rows.firstOrNull{it.id==id};messages.clear();focusMessageId=messageId}catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(problem:Exception){error=problem.message.orEmpty()}} } }
             manageCommunity?.let { chat -> CommunityManageDialog(chat, me, token, api, { manageCommunity = null }, {
                 scope.launch { try { chats.clear(); chats.addAll(withContext(Dispatchers.IO) { api.chats(token) }); selectedChat = chats.firstOrNull { it.id == selectedChat?.id } }

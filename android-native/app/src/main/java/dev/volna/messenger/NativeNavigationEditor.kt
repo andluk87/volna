@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 internal fun NativeNavigationCustomization(value: NativeAppearance, onChange: (NativeAppearance) -> Unit) {
     var page by remember { mutableStateOf<String?>(null) }
     NativeSettingsCard { Column {
-        NativeSettingRow(Icons.Outlined.Folder, "Оформление папок", "Панель слева или вкладки, значки и счётчики") { page = "folders" }
+        NativeSettingRow(Icons.Outlined.Folder, "Оформление папок", "Размер, цвета, подписи и счётчики") { page = "folders" }
         NativeSettingRow(Icons.Outlined.Tune, "Нижняя навигация", "Размер, цвета, иконки и подписи") { page = "bottom" }
         NativeSettingRow(Icons.Outlined.RestartAlt, "Сбросить папки и навигацию", "Стандартное оформление VLN") { onChange(value.copy(foldersStyle = NativeNavigationStyle.Folders, navigationStyle = NativeNavigationStyle.Bottom)) }
     } }
@@ -48,25 +48,19 @@ internal fun NativeNavigationStyleEditor(value: NativeAppearance, folders: Boole
                     if (folders) {
                         val tabs = listOf(NativeFolder("one", "Работа", setOf(1)), NativeFolder("two", "Личное", setOf(2)))
                         val chats = listOf(VolnaChat(1, "Пример", "", "", "", 3, false, 1), VolnaChat(2, "Пример", "", "", "", 0, false, 2))
-                        if (style.vertical) Row(Modifier.fillMaxWidth().height(180.dp)) {
-                            NativeFolderRail(tabs, chats, "folder:one", {}, Modifier.fillMaxHeight())
-                            Column(Modifier.padding(12.dp)) { NativeText("Список чатов"); NativeText("Папки всегда под рукой", color = Muted, fontSize = 12.sp) }
-                        } else NativeFolderTabs(tabs, chats, "folder:one") {}
+                        NativeFolderTabs(tabs, chats, "folder:one") {}
                     } else NativeHomeNavigation("chats", null, "", 73, {}, {}, Modifier.padding(horizontal = style.sideInset.dp))
                 }
             }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             NativeText("Изменения применяются сразу и сохраняются для этого аккаунта. Автоматические цвета следуют выбранной теме.", color = Muted, fontSize = 12.sp)
-            if (folders) NativeSettingsCard { Column(Modifier.padding(14.dp)) {
-                NavigationSwitch("Папки слева", style.vertical) { change(style.copy(vertical = it)) }
-            } }
             NativeSettingsCard { Column(Modifier.padding(14.dp)) {
                 NativeText("Высота может увеличиваться, чтобы вместить текст, значки и счётчики.", color = Muted, fontSize = 12.sp)
                 NavigationSlider("Высота элементов", style.height, NativeNavigationStyle.HeightRange, "dp") { change(style.copy(height = it)) }
-                if (!folders || !style.vertical) NavigationSlider("Скругление", style.radius, NativeNavigationStyle.RadiusRange, "dp") { change(style.copy(radius = it)) }
-                if (!folders || !style.vertical) NavigationSlider("Отступ по краям", style.sideInset, NativeNavigationStyle.SideInsetRange, "dp") { change(style.copy(sideInset = it)) }
+                NavigationSlider("Скругление", style.radius, NativeNavigationStyle.RadiusRange, "dp") { change(style.copy(radius = it)) }
+                NavigationSlider("Отступ по краям", style.sideInset, NativeNavigationStyle.SideInsetRange, "dp") { change(style.copy(sideInset = it)) }
                 NavigationSlider(if (folders) "Размер текста и значков" else "Размер подписей", style.textSize, NativeNavigationStyle.TextSizeRange, "sp") { change(style.copy(textSize = it)) }
-                if (!folders || style.vertical) NavigationSlider("Размер иконок", style.iconSize, NativeNavigationStyle.IconSizeRange, "dp") { change(style.copy(iconSize = it)) }
+                if (!folders) NavigationSlider("Размер иконок", style.iconSize, NativeNavigationStyle.IconSizeRange, "dp") { change(style.copy(iconSize = it)) }
             } }
             NativeSettingsCard { Column(Modifier.padding(14.dp)) {
                 NavigationSwitch("Показывать подписи", style.labels) { change(style.copy(labels = it, icons = if (!it) true else style.icons)) }
