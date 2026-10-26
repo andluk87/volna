@@ -48,6 +48,8 @@ name = re.search(r'val\s+volnaVersionName\s*=\s*"([^"]+)"', gradle)
 if not code or not name:
     raise SystemExit('Cannot read Android versionCode/versionName from Gradle.')
 apk = Path(sys.argv[1])
+if apk.stat().st_size > 120 * 1024 * 1024:
+    raise SystemExit('APK exceeds the legacy in-app update limit (120 MiB). Publication stopped; keep native libraries compressed.')
 manifest = {
     'version_code': int(code.group(1).replace('_', '')),
     'version_name': name.group(1),

@@ -167,7 +167,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
     }
 
     fun downloadUpdate(update: VolnaUpdate, destination: File) = synchronized(NativeIdleUpdater.downloadLock) {
-        if (destination.isFile && destination.length() > 0) {
+        if (destination.isFile && destination.length() in 1..NativeMaxUpdateApkBytes) {
             val digest = MessageDigest.getInstance("SHA-256")
             destination.inputStream().use { input -> val buffer = ByteArray(64 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; digest.update(buffer, 0, count) } }
             if (digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) } == update.sha256) return@synchronized
@@ -183,24 +183,12 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
                 }
                 if (!response.isSuccessful) throw IllegalStateException("Не удалось скачать обновление (${response.code})")
                 val body = response.body ?: throw IllegalStateException("Сервер вернул пустой APK")
-                if (body.contentLength() > 120L * 1024 * 1024) throw IllegalStateException("Размер APK превышает допустимый")
                 destination.parentFile?.mkdirs()
-                val digest = MessageDigest.getInstance("SHA-256")
-                var total = 0L
                 body.byteStream().use { input -> FileOutputStream(destination).use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        total += read
-                        if (total > 120L * 1024 * 1024) throw IllegalStateException("Размер APK превышает допустимый")
-                        digest.update(buffer, 0, read)
-                        output.write(buffer, 0, read)
-                    }
+                    copyNativeUpdateApk(input, output, update.sha256, body.contentLength())
                     output.fd.sync()
                 } }
-                val actual = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
-                if (total == 0L || actual != update.sha256) throw IllegalStateException("Контрольная сумма обновления не совпала")
+
             }
         } catch (problem: Exception) {
             destination.delete()

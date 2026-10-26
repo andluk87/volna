@@ -21,7 +21,12 @@ import os,sys,zipfile
 with open(os.environ['TRACE'],'a') as trace:trace.write(' '.join(sys.argv[1:])+'\\n')
 if 'run' in sys.argv and 'android-builder' in sys.argv:
     open('artifacts/Volna-sms-app-hash.txt','w').write('AbCdEfGhIjK\\n')
-    with zipfile.ZipFile('artifacts/Volna-debug.apk','w') as archive:archive.writestr('AndroidManifest.xml','fixture, not a compiled APK')
+    path='artifacts/Volna-debug.apk'
+    if os.environ.get('APK_TOO_LARGE'):
+        with open(path,'wb') as file:file.truncate(120*1024*1024+1)
+        with zipfile.ZipFile(path,'a') as archive:archive.writestr('AndroidManifest.xml','fixture, not a compiled APK')
+    else:
+        with zipfile.ZipFile(path,'w') as archive:archive.writestr('AndroidManifest.xml','fixture, not a compiled APK')
 `,{mode:0o755});
     writeFileSync(join(root,'bin/ufw'),'#!/bin/sh\nexit 0\n',{mode:0o755});
     const trace=join(root,'trace');writeFileSync(trace,'');
@@ -29,9 +34,17 @@ if 'run' in sys.argv and 'android-builder' in sys.argv:
     const run=spawnSync('sh',['scripts/build-android.sh','--enable-calls'],{cwd:root,encoding:'utf8',env});assert.equal(run.status,0,run.stderr);
     const config=readFileSync(join(root,'.env'),'utf8');assert.match(config,/TURN_HOST=volna.example.com/);assert.ok(config.includes('TURN_SECRET='+secret));assert.ok(config.includes('TELEGRAM_CLIENT_SECRET='+telegram));assert.match(config,/ANDROID_BUILD_OFFLINE=auto/);assert.match(config,/ANDROID_SMS_APP_HASHES=AbCdEfGhIjK/);assert.equal((run.stdout+run.stderr).includes(secret),false);
     const log=readFileSync(trace,'utf8');assert.equal((log.match(/run --build --rm android-builder/g)||[]).length,1);assert.equal((log.match(/UPDATE/g)||[]).length,1);
+    const publishedBefore=readFileSync(join(root,'client/public/download/volna-android.apk'));
+    const feedBefore=readFileSync(join(root,'client/public/download/volna-android-version.json'),'utf8');
+    writeFileSync(trace,'');
+    const oversized=spawnSync('sh',['scripts/build-android.sh'],{cwd:root,encoding:'utf8',env:{...env,APK_TOO_LARGE:'1'}});
+    assert.notEqual(oversized.status,0);assert.match(oversized.stderr,/legacy.*120 MiB/);
+    assert.deepEqual(readFileSync(join(root,'client/public/download/volna-android.apk')),publishedBefore);
+    assert.equal(readFileSync(join(root,'client/public/download/volna-android-version.json'),'utf8'),feedBefore);
+    assert.equal(readFileSync(trace,'utf8').includes('UPDATE'),false);
     const manifest=JSON.parse(readFileSync(join(root,'client/public/download/volna-android-version.json'),'utf8'));
     const gradle=readFileSync(join(root,'android-native/app/build.gradle.kts'),'utf8');assert.equal(manifest.version_name,gradle.match(/volnaVersionName = "([^"]+)"/)[1]);assert.match(manifest.sha256,/^[a-f0-9]{64}$/);
-    assert.deepEqual(readFileSync(join(root,'client/public/download/volna-android.apk')),readFileSync(join(root,'artifacts/Volna-debug.apk')));
+    assert.deepEqual(readFileSync(join(root,'client/public/download/volna-android.apk')),publishedBefore);
     writeFileSync(trace,'');const invalid=spawnSync('sh',['scripts/build-android.sh','--unknown'],{cwd:root,encoding:'utf8',env});assert.notEqual(invalid.status,0);assert.equal(readFileSync(trace,'utf8'),'');
     const host=spawnSync('sh',['scripts/build-android.sh'],{cwd:root,encoding:'utf8',env:{...env,VOLNA_BUILD_NETWORK:'host'}});assert.equal(host.status,0,host.stderr);
     const hostLog=readFileSync(trace,'utf8');assert.match(hostLog,/compose -f compose.yaml -f compose.build-host.yaml --profile build run --build --rm android-builder/);assert.match(hostLog,/NETWORK=host/);assert.equal(readFileSync(join(root,'.env'),'utf8'),config);

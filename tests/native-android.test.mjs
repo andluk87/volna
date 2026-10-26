@@ -34,7 +34,8 @@ test('Android APK uses native Compose screens and the Volna API, not a WebView s
   assert.match(api,/fun updateMessage\(/);
   assert.match(activity,/QuickEmoji/);
   assert.match(activity,/NativeProfileDialog/);
-  assert.match(api,/Контрольная сумма обновления не совпала/);
+  assert.match(api,/copyNativeUpdateApk\(input,\s*output,\s*update\.sha256/);
+  assert.match(read('android-native/app/src/main/java/dev/volna/messenger/NativeUpdateDownload.kt'),/Контрольная сумма обновления не совпала/);
   assert.match(read('android-native/app/src/main/java/dev/volna/messenger/NativeRecorder.kt'),/MediaRecorder\.AudioEncoder\.AAC/);
   assert.match(activity,/WindowInsets\.systemBars\.union\(WindowInsets\.displayCutout\)/);
   assert.match(activity,/api\.markDelivered/);

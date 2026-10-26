@@ -11,8 +11,8 @@ val apiUrl = (project.findProperty("volnaApiUrl") as String?)
     ?: ""
 require(apiUrl.startsWith("https://")) { "Set ANDROID_API_URL to your Volna HTTPS base URL" }
 val safeApiUrl = apiUrl.trimEnd('/')
-val volnaVersionCode = 12_072
-val volnaVersionName = "0.12.72"
+val volnaVersionCode = 12_073
+val volnaVersionName = "0.12.73"
 val volnaWebRtcVersion = "150.7871.01"
 
 android {
@@ -40,7 +40,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    packaging {
+        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // Compress all native ABIs so installed clients with a 120 MiB updater can upgrade.
+        jniLibs.useLegacyPackaging = true
+    }
 }
 
 tasks.withType<Test>().configureEach {
