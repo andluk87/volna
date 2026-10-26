@@ -423,7 +423,7 @@ internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isM
         // Measure body and footer separately; no intrinsic sizing of the whole bubble.
         NativeBubbleContent(Modifier.testTag("message-bubble-${message.id}").widthIn(min = minWidth, max = maxWidth).clip(shape).background(if ((sticker || standaloneEmoji) && !message.deleted) androidx.compose.ui.graphics.SolidColor(Color.Transparent) else nativeMessageBrush(isMine))
             .combinedClickable(enabled = message.id > 0, onClick = { if (selectionMode) onSelectGroup() else detail = !detail }, onLongClick = { if (selectionMode) onSelectGroup() else { targetId = message.id; menu = true } })
-            .padding(horizontal = if (group.size > 1) 0.dp else if (appearance.density == "minimal") 7.dp else 10.dp, vertical = if (group.size > 1) 0.dp else appearance.padding.coerceAtMost(4).dp), body = {
+            .padding(horizontal = if (standaloneEmoji || group.size > 1) 0.dp else if (appearance.density == "minimal") 7.dp else 10.dp, vertical = if (group.size > 1) 0.dp else appearance.padding.coerceAtMost(4).dp), body = {
             if (showAuthor && !isMine && !joined && !message.deleted) NativeText(message.senderName, Modifier.clickable { onProfile(message.senderId) }, color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             if (message.forwardedName != null) NativeText("Переслано от ${message.forwardedName}", color = Muted, fontSize = 11.sp)
             message.reply?.let { reply -> Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Hover).clickable { onJump(reply.id) }.padding(6.dp)) { Box(Modifier.width(3.dp).height(30.dp).background(Accent)); Column(Modifier.padding(start = 8.dp)) { NativeText(reply.name, color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium); NativeText(reply.text, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } } }
@@ -447,7 +447,7 @@ internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isM
                     else -> Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { if (selectionMode) onSelect(message) else onOpenAttachment(message) }, verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Description, null, tint = Accent); Column(Modifier.padding(start = 8.dp)) { NativeText(message.attachmentName.orEmpty(), color = TextMain, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis); NativeText("%.1f МБ".format(message.attachmentSize / 1048576.0), color = Muted, fontSize = 11.sp) } }
                 }
                 if (message.text.isNotBlank()) {
-                    if (standaloneEmoji) NativeText(emojiText, fontSize = 88.sp, lineHeight = 96.sp)
+                    if (standaloneEmoji) NativeText(emojiText, fontSize = 96.sp, lineHeight = 104.sp)
                     else if (compactText) NativeMessagePair(content = {
                         NativeLinkedText(message.text, entities = message.emojiEntities, token = token, account = me ?: 0)
                     }, stamp = { NativeMessageStamp(message, isMine, peerDelivered, peerRead, !appearance.timeOnTap || detail) })

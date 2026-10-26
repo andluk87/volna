@@ -64,8 +64,12 @@ class NativeMessageBubbleLayoutTest {
     @Test fun standaloneEmojiIsLargeAndStampStaysVisible() {
         content("😁")
         val body = compose.onNodeWithText("😁", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        assertTrue("large emoji: $body", body.height >= 80.dp)
+        assertTrue("large emoji: $body", body.height >= 96.dp)
         compose.onNodeWithContentDescription("Доставлено").assertIsDisplayed()
+        val stamp = compose.onNodeWithContentDescription("Доставлено", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val bubble = compose.onNodeWithTag("message-bubble-10").getUnclippedBoundsInRoot()
+        assertTrue("stamp belongs below emoji: $body $stamp", stamp.top >= body.bottom)
+        assertTrue("no extra timestamp column: $bubble", bubble.width <= 104.dp)
         screenshot("standalone-emoji")
     }
     @Test fun mixedTextKeepsNormalSize() {
