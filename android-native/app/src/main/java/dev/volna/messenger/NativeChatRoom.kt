@@ -276,12 +276,7 @@ internal fun ChatRoomScreen(
             }
         }
         if (pinnedMessages.isNotEmpty() && !showPins && selection.isEmpty()) {
-            val pin = pinnedMessages.last()
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp).clip(RoundedCornerShape(14.dp)).background(Panel.copy(alpha = .64f)).clickable { jump(pin.id) }.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) { repeat(3) { Box(Modifier.width(3.dp).height(9.dp).clip(CircleShape).background(Accent)) } }
-                Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 7.dp)) { NativeText("Закреплённое сообщение", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); NativeText(pin.text.ifBlank { pin.attachmentName ?: "Вложение" }, color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                IconButton(onClick = { showPins = true; searchOpen = false; onSearch("") }) { Icon(Icons.Outlined.PushPin, "Все закреплённые сообщения", tint = Muted) }
-            }
+            NativePinnedMessage(pinnedMessages.last(), { jump(it) }) { showPins = true; searchOpen = false; onSearch("") }
         }
         topicNavigation()
         if (searchOpen) NativeSearchField(searchQuery, onSearch, "Найти в переписке")
