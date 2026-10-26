@@ -76,6 +76,7 @@ class NativeMessageBubbleLayoutTest {
         content("Привет 😁")
         val body = compose.onNodeWithText("Привет 😁", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue("inline emoji must stay small: $body", body.height < 40.dp)
+        screenshot("mixed-inline-emoji")
     }
     @Test fun longTextUsesAvailableWidthAndDeliveredTickIsVisible() {
         val text = "Длинное сообщение во время голосового звонка должно занимать нормальную ширину, а галочки должны быть видны."

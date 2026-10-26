@@ -1,10 +1,11 @@
 import React from 'react';
+import {isEmoji} from '../../shared/emoji-text.mjs';
 const segmenter=new Intl.Segmenter('und',{granularity:'grapheme'});
 const components=new Set(['🏻','🏼','🏽','🏾','🏿','🦰','🦱','🦳','🦲','♀','♀️','♂','♂️','⚕','⚕️']);
 function parts(text){
  const result=[];let plain='';
  for(const {segment} of segmenter.segment(text)){
-  const className=/^[0-9#*]\ufe0f?\u20e3$/.test(segment)?'telegram-emoji-full':components.has(segment)?'telegram-text-component':'';
+  const className=/^[0-9#*]\ufe0f?\u20e3$/.test(segment)?'telegram-inline-emoji telegram-emoji-full':components.has(segment)?'telegram-text-component':isEmoji(segment)?'telegram-inline-emoji':'';
   if(className){if(plain){result.push({text:plain});plain='';}result.push({text:segment,className});}else plain+=segment;
  }
  if(plain)result.push({text:plain});return result;

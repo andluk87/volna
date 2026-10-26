@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.em
 import org.json.JSONObject
 import java.util.Locale
 
@@ -69,7 +70,11 @@ internal fun NativeEmojiProvider(content: @Composable () -> Unit) {
 
 internal fun emojiAnnotated(text: AnnotatedString, catalog: NativeEmojiCatalog?, font: FontFamily?): AnnotatedString {
     if (catalog == null || font == null) return text
-    return AnnotatedString.Builder(text).apply { catalog.spans(text.text).forEach { (range, _) -> addStyle(SpanStyle(fontFamily = font), range.first, range.last + 1) } }.toAnnotatedString()
+    val spans = catalog.spans(text.text)
+    val covered = BooleanArray(text.length)
+    spans.forEach { (range, _) -> range.forEach { covered[it] = true } }
+    val mixed = text.text.indices.any { !covered[it] && !text.text[it].isWhitespace() }
+    return AnnotatedString.Builder(text).apply { spans.forEach { (range, _) -> addStyle(SpanStyle(fontFamily = font, fontSize = if (mixed) 1.25.em else TextUnit.Unspecified), range.first, range.last + 1) } }.toAnnotatedString()
 }
 
 @Composable
