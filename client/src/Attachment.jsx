@@ -24,6 +24,6 @@ export default function Attachment({file,token,gallery=[],messageId=null,transcr
  {!photo&&!audio&&!expression&&<div className="file-label"><span><Icon name="clip"/> {file.name}<small>{(file.size/1024).toFixed(1)} КБ</small></span>{download||<button disabled={loading} onClick={()=>setAttempt(v=>v+1)}>{loading?'Загрузка…':'Загрузить'}</button>}</div>}
  {expression&&!url&&!photo&&<button disabled={loading} onClick={()=>setAttempt(v=>v+1)}>{loading?'Загрузка…':'Загрузить анимацию'}</button>}
  {audio&&url&&<details className="media-save"><summary aria-label="Сохранить аудио">Сохранить</summary>{download}</details>}
- {preview&&<PhotoViewer file={file} gallery={gallery} token={token} onClose={()=>setPreview(false)}/>}
+ {preview&&<PhotoViewer file={{...file,messageId}} gallery={gallery} token={token} onClose={()=>setPreview(false)}/>}
  </div>;
 }

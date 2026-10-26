@@ -1,3 +1,4 @@
+const {photoPayload}=require('./photo-files.cjs');
 const {windowChromeOptions,applyWindowChrome}=require('./window-chrome.cjs');
 const {mediaPermissions}=require('./media-permissions.cjs');
 const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage,screen,powerMonitor,nativeImage}=require('electron');
@@ -65,6 +66,7 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть VLN',click:show},{label:'Проверить обновления',click:()=>{show();updates.check(true);}},{type:'separator'},{label:'Выйти',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',show);
   const idleFile=path.join(app.getPath('userData'),'update-settings.json');let idleInstall=false;try{idleInstall=JSON.parse(fs.readFileSync(idleFile,'utf8')).idleInstall===true;}catch{}
   const {autoUpdater}=require('electron-updater');updates=createUpdates({idleInstall,idleSeconds:()=>powerMonitor.getSystemIdleTime(),saveIdleInstall:value=>{const temp=idleFile+'.tmp';fs.writeFileSync(temp,JSON.stringify({idleInstall:value}),{mode:0o600});fs.renameSync(temp,idleFile);},updater:autoUpdater,version:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',publish:state=>{if(!win.isDestroyed())win.webContents.send('desktop:update-state',state);},inCall:()=>activeCall||transfers.size>0,isSessionBusy:()=>sessionRefresh?.pending()===true,install:()=>{quitting=true;autoUpdater.quitAndInstall(true,true);}});
+  ipc('desktop:save-photo',async(value,event)=>{const photo=photoPayload(value);const result=await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender),{title:'Сохранить фото',defaultPath:path.join(app.getPath('pictures'),photo.name)});if(result.canceled||!result.filePath)return {saved:false};await fs.promises.writeFile(result.filePath,photo.bytes);if(photo.reveal)shell.showItemInFolder(result.filePath);return {saved:true};});
   ipc('desktop:window-theme',(theme,event)=>applyWindowChrome(BrowserWindow.fromWebContents(event.sender),theme,process.platform));
   ipc('desktop:editor-focus',(value,event)=>{editorFocus.set(event.sender,value===true);});
   ipc('desktop:open-window',value=>{if(!Number.isSafeInteger(value?.chatId)||value.chatId<1||!Number.isSafeInteger(value.accountId)||value.accountId<1)throw Error('Invalid chat');createWindow(value.chatId,value.accountId);return true;});

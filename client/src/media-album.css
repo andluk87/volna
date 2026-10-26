@@ -1,0 +1,22 @@
+.album-frame{width:min(430px,82%);margin:4px 0;position:relative;flex-shrink:0;isolation:isolate}
+.album-frame.outgoing-album{margin-left:auto}.album-frame.incoming-album{margin-right:auto}
+.album-media{position:relative;border-radius:var(--bubble-radius,15px);overflow:hidden;background:transparent}
+.album-frame .media-album{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:2px;width:100%;max-width:none;border-radius:0;background:transparent;overflow:hidden}
+.album-frame .media-album>.message-row{width:100%;height:auto;min-height:0;padding:0;align-items:stretch;margin:0}
+.album-frame .media-album .message{position:relative;width:100%;height:100%;min-width:0;max-width:none;padding:0!important;margin:0;border-radius:0!important;box-shadow:none;background:transparent!important;overflow:hidden}
+.album-frame .media-album .attachment,.album-frame .media-album .image-open,.album-frame .media-album .photo-placeholder,.album-frame .media-album .video-placeholder,.album-frame .media-album video{display:block;width:100%;height:100%;min-height:0;max-height:none;margin:0;padding:0;border:0;border-radius:0;object-fit:cover}
+.album-frame .media-album .image-open img{display:block;width:100%;height:100%;max-height:none;margin:0;border-radius:0;object-fit:cover}
+.album-frame .media-album .file-label{display:none}.album-frame .media-album .message:after,.album-frame .media-album .message:before{display:none}
+.album-overlay-meta{position:absolute;right:6px;bottom:6px;z-index:2;border-radius:12px;padding:2px 6px;background:#0007;color:#fff;pointer-events:none}
+.album-overlay-meta .message-meta{position:static!important;display:flex;margin:0;padding:0!important;background:none!important;color:inherit!important;opacity:1;font-size:11px}
+.album-overlay-meta .message-meta .read{color:#fff!important}
+.album-heading,.album-captions{padding:6px 10px;background:var(--in);border-radius:var(--bubble-radius,15px)}
+.outgoing-album>.album-heading,.outgoing-album>.album-captions{background:var(--out)}
+.album-heading{margin-bottom:2px}.album-captions{margin-top:2px}.album-caption{position:relative}.album-caption-meta{display:flex;justify-content:flex-end}.album-caption .message-text{font-size:var(--message-size,16px)}
+.message.media-photo.photo-only{padding:0!important;background:transparent!important;box-shadow:none;overflow:hidden}
+.message.media-photo.photo-only .image-open{padding:0;margin:0;border:0;border-radius:var(--bubble-radius,15px);display:block}
+.message.media-photo.photo-only .image-open img{display:block;margin:0;border-radius:inherit;max-width:100%}
+.message.media-photo.photo-only>.message-meta{position:absolute!important;bottom:6px!important;right:6px!important;margin:0!important;padding:2px 6px!important;border-radius:12px;background:#0007!important;color:#fff!important;opacity:1!important;font-size:11px}
+.message.media-photo.photo-only>.message-meta .read{color:#fff!important}
+.album-frame .media-album .message.media-photo.photo-only>.message-meta{display:none}
+.selecting-messages .album-frame .media-album .message-row{padding-right:0}.selecting-messages .album-frame .message-selected{outline:3px solid var(--accent);outline-offset:-3px}

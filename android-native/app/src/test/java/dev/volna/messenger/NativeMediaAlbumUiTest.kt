@@ -108,6 +108,19 @@ class NativeMediaAlbumUiTest {
         compose.onAllNodesWithContentDescription("Доставлено").assertCountEquals(1)
         screenshot("four-photos-dark")
     }
+    @Test fun photoGapsShowTheChatBackgroundEvenWithCaptions() {
+        content(photos.mapIndexed { index, m -> if (index == 0) m.copy(text = "Подпись") else m })
+        val a = compose.onNodeWithTag("album-item-11", true).getUnclippedBoundsInRoot()
+        val b = compose.onNodeWithTag("album-item-12", true).getUnclippedBoundsInRoot()
+        compose.runOnUiThread {
+            val view = activity.get().findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0)
+            val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bitmap))
+            val gap = bitmap.getPixel(((a.right.value+b.left.value)/2).toInt(), ((a.top.value+a.bottom.value)/2).toInt())
+            assertEquals(bitmap.getPixel(0, 2), gap)
+            bitmap.recycle()
+        }
+    }
     @Test fun singlePhotoHasTimeInsideImageWithoutASeparateFooter() {
         content(listOf(photos.first()))
         val media = compose.onNodeWithTag("message-media-10", true).getUnclippedBoundsInRoot()

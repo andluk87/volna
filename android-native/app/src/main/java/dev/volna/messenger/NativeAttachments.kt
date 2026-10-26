@@ -162,7 +162,7 @@ fun AttachmentViewer(message: VolnaMessage, token: String, api: NativeApi, onDis
 }
 
 @Composable
-fun AttachmentGallery(chat: VolnaChat, token: String, api: NativeApi, onOpen: (VolnaMessage) -> Unit, onDismiss: () -> Unit) {
+fun AttachmentGallery(chat: VolnaChat, token: String, api: NativeApi, onOpen: (VolnaMessage, List<VolnaMessage>) -> Unit, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     val media = remember(chat.id) { mutableStateListOf<VolnaMessage>() }
     var busy by remember { mutableStateOf(false) }
@@ -194,8 +194,8 @@ fun AttachmentGallery(chat: VolnaChat, token: String, api: NativeApi, onOpen: (V
                 if (error.isNotBlank()) ErrorBanner(error, Modifier.padding(12.dp))
                 val visible = media.filter { message -> when (filter) { "image" -> message.attachmentMime?.startsWith("image/") == true; "video" -> message.attachmentMime?.startsWith("video/") == true; "file" -> message.attachmentMime?.startsWith("image/") != true && message.attachmentMime?.startsWith("video/") != true; else -> true } }
                 LazyVerticalGrid(GridCells.Adaptive(135.dp), modifier = Modifier.weight(1f).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(visible, key = { it.id }) { message -> Column(Modifier.clickable { onOpen(message) }) {
-                        AttachmentThumbnail(message, token, { onOpen(message) }, Modifier.fillMaxWidth().height(120.dp))
+                    items(visible, key = { it.id }) { message -> Column(Modifier.clickable { onOpen(message, media.toList()) }) {
+                        AttachmentThumbnail(message, token, { onOpen(message, media.toList()) }, Modifier.fillMaxWidth().height(120.dp))
                         NativeText(message.attachmentName ?: "Вложение", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         NativeText("${(message.attachmentSize / 1024).coerceAtLeast(1)} КБ", color = Muted, fontSize = 10.sp)
                     } }

@@ -196,7 +196,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessageId: Long?, openAccountId: Long?, incomingShare: NativeIncomingShare?, onShareConsumed: () -> Unit, onIntentConsumed: () -> Unit) {
+private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessageId: Long?, openAccountId: Long?, externalIncomingShare: NativeIncomingShare?, consumeExternalShare: () -> Unit, onIntentConsumed: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val api = remember { NativeApi(BuildConfig.API_BASE_URL) }
     val cache = remember { NativeCache(context) }
@@ -215,6 +215,11 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     var topicsGroup by remember { mutableStateOf<VolnaChat?>(null) }
     var manageCommunity by remember { mutableStateOf<VolnaChat?>(null) }
     var galleryChat by remember { mutableStateOf<VolnaChat?>(null) }
+    var photoShare by remember { mutableStateOf<NativeIncomingShare?>(null) }
+    val incomingShare = externalIncomingShare ?: photoShare
+    val onShareConsumed: () -> Unit = { if (externalIncomingShare != null) consumeExternalShare() else photoShare = null }
+    var photoReply by remember { mutableStateOf<VolnaMessage?>(null) }
+    var photoGallery by remember { mutableStateOf(emptyList<VolnaMessage>()) }
     var attachmentPreview by remember { mutableStateOf<VolnaMessage?>(null) }
     val callState by NativeCalls.state.collectAsState()
     val incomingAccountCalls by NativeBackgroundCalls.calls.collectAsState()
@@ -508,7 +513,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         if (token.isBlank()) {
             MessagingService.stop(context)
             profileTargetId = null; appearanceOpen = false; communityEntry = null
-            manageCommunity = null; topicsGroup = null; galleryChat = null; attachmentPreview = null
+            manageCommunity = null; topicsGroup = null; galleryChat = null; attachmentPreview = null; photoReply = null; photoGallery = emptyList(); photoShare = null
             voicePlayback.stop()
             me = null
             qrOpen = false
@@ -650,7 +655,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                         if (callState.call != null || attachmentSending) error = "Завершите звонок или дождитесь отправки перед переключением аккаунта"
                         else {
                             MessagingService.stop(context); selectedChat = null; messages.clear(); chats.clear(); me = account?.user
-                            profileTargetId = null; manageCommunity = null; topicsGroup = null; galleryChat = null; attachmentPreview = null; forwardTargetMessage = null; attachmentBatch = null
+                            profileTargetId = null; manageCommunity = null; topicsGroup = null; galleryChat = null; attachmentPreview = null; photoReply = null; photoGallery = emptyList(); photoShare = null; forwardTargetMessage = null; attachmentBatch = null
                             prefs.edit().remove("token").putLong("user_id", account?.user?.id ?: 0).apply()
                             token = account?.token.orEmpty(); error = ""; query = ""; qrOpen = false
                         }
@@ -754,7 +759,8 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     onCommunity = { if(selectedChat?.parentId != 0L && selectedChat?.parentId != null) topicsGroup=chats.firstOrNull { it.id==selectedChat?.parentId } else manageCommunity = selectedChat },
                     topicNavigation = { selectedChat?.takeIf { it.kind == "group" }?.let { chat -> NativeTopicTabs(chat,token,api) { id -> selectedChat=chats.firstOrNull{it.id==id};messages.clear();focusMessageId=context.getSharedPreferences("volna-topic-position-${me?.id ?: 0}",android.content.Context.MODE_PRIVATE).getLong("message:$id",0).takeIf{it>0} } } },
                     onTopics = { topicsGroup=chats.firstOrNull { it.id==(selectedChat?.parentId?.takeIf { id -> id != 0L } ?: selectedChat?.id) } }, onGallery = { galleryChat = selectedChat },
-                    onOpenAttachment = { attachmentPreview = it },
+                    onOpenAttachment = { photoGallery = messages.toList(); attachmentPreview = it },
+                    photoReply = photoReply, onPhotoReplyConsumed = { photoReply = null },
                     error = error,
                     onBack = { val parent = nativeTopicParent(selectedChat,chats); selectedChat = parent; topicsGroup = parent; messages.clear(); messageQuery = "" },
                     api = api,
@@ -854,7 +860,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     userId = profileId, currentUser = me, token = token, api = api, cache = cache, chats = chats.toList(), refresh = profileRevision,
                     onDismiss = { profileTargetId = null },
                     onAppearance = { chat -> appearanceChat = chat.id; appearanceOpen = true },
-                    onOpenAttachment = { attachmentPreview = it },
+                    onOpenAttachment = { photoGallery = messages.toList(); attachmentPreview = it },
                     onOpenChat = { chat, search -> profileTargetId = null; selectedChat = chat; messages.clear(); profileSearchRequested = search },
                     onMute = { chat -> scope.launch { try { withContext(Dispatchers.IO) { api.updateChatPreference(token, chat.id, "muted", !chat.muted) }; val rows = withContext(Dispatchers.IO) { api.chats(token) }; chats.clear(); chats.addAll(rows) } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось изменить уведомления" } } },
                     onVideo = startVideo,
@@ -886,9 +892,20 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             manageCommunity?.let { chat -> CommunityManageDialog(chat, me, token, api, { manageCommunity = null }, {
                 scope.launch { try { chats.clear(); chats.addAll(withContext(Dispatchers.IO) { api.chats(token) }); selectedChat = chats.firstOrNull { it.id == selectedChat?.id } }
                     catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось обновить чаты" } }
-            }, { manageCommunity = null; selectedChat = null; messages.clear() }, onOpenAttachment = { attachmentPreview = it }) }
-            galleryChat?.let { chat -> AttachmentGallery(chat, token, api, { attachmentPreview = it }, { galleryChat = null }) }
-            attachmentPreview?.let { message -> AttachmentViewer(message, token, api, { attachmentPreview = null }) }
+            }, { manageCommunity = null; selectedChat = null; messages.clear() }, onOpenAttachment = { photoGallery = messages.toList(); attachmentPreview = it }) }
+            galleryChat?.let { chat -> AttachmentGallery(chat, token, api, { photo, gallery -> photoGallery = gallery; attachmentPreview = photo }, { galleryChat = null }) }
+            attachmentPreview?.let { message ->
+                if (message.attachmentMime?.startsWith("image/") == true) NativePhotoViewer(message, photoGallery, token, api,
+                    onEditedReady = { file -> photoShare = NativeIncomingShare(UUID.randomUUID().toString(), "", listOf(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))); attachmentPreview = null },
+                    canReply = { photo -> chats.firstOrNull { it.id == photo.chatId }?.canSend == true },
+                    canDelete = { it.senderId == me?.id || chats.firstOrNull { chat -> chat.id == it.chatId }?.role in listOf("owner", "admin") },
+                    onAction = { photo, action -> when (action) {
+                        "forward" -> { forwardTargetMessage = photo; forwardBatch = emptyList(); forwardNonce = UUID.randomUUID().toString() }
+                        "reply", "show" -> { selectedChat = chats.firstOrNull { it.id == photo.chatId } ?: selectedChat; galleryChat = null; profileTargetId = null; manageCommunity = null; focusMessageId = photo.id; if (action == "reply") photoReply = photo }
+                        "delete" -> scope.launch { try { val updated = withContext(Dispatchers.IO) { api.deleteMessage(token, photo.id) }; listOf(messages, messageSearchResults, pinnedMessages).forEach { rows -> val pos = rows.indexOfFirst { it.id == photo.id }; if (pos >= 0) { if (rows === pinnedMessages) rows.removeAt(pos) else rows[pos] = updated } } } catch (problem: Exception) { error = problem.message ?: "Не удалось удалить фото" } }
+                    } }, onDismiss = { attachmentPreview = null })
+                else AttachmentViewer(message, token, api, { attachmentPreview = null })
+            }
             if (incomingShare != null && token.isNotBlank() && me?.profileSetupRequired != true) key(incomingShare.id, me?.id) {
                 NativeIncomingShareDialog(incomingShare, chats, token, me?.name.orEmpty(), api,
                     attachmentSending || attachmentBatch != null, onShareConsumed,

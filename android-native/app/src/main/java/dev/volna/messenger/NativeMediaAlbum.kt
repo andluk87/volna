@@ -1,10 +1,8 @@
 package dev.volna.messenger
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Constraints
@@ -48,7 +46,7 @@ internal fun nativeAlbumGeometry(count: Int, width: Float, gap: Float): NativeAl
 @Composable
 internal fun NativeMediaAlbum(messages: List<VolnaMessage>, token: String, onOpen: (VolnaMessage) -> Unit,
     onLong: (VolnaMessage) -> Unit, modifier: Modifier = Modifier) {
-    Layout(modifier = modifier.background(Color.White), content = {
+    Layout(modifier = modifier, content = {
         messages.forEach { photo ->
             AttachmentThumbnail(photo, token, { onOpen(photo) }, Modifier.testTag("album-item-${photo.id}"),
                 onLongPress = { onLong(photo) }, seamless = true)
