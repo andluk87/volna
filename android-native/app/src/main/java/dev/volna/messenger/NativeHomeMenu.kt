@@ -1,45 +1,55 @@
 package dev.volna.messenger
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** Main actions stay compact; less frequent actions remain available under More. */
 @Composable
-internal fun NativeHomeMenu(expanded: Boolean, dark: Boolean, dismiss: () -> Unit,
-    onTheme: () -> Unit, onGroup: () -> Unit, onSaved: () -> Unit, onSettings: () -> Unit,
-    onNewChat: () -> Unit, onChannel: () -> Unit, onJoin: () -> Unit, onArchive: () -> Unit, onAccounts: () -> Unit) {
+internal fun NativeHomeMenu(expanded: Boolean, onDismiss: () -> Unit, onTheme: (Boolean) -> Unit,
+    onGroup: () -> Unit, onSaved: () -> Unit, onSettings: () -> Unit, onNewChat: () -> Unit,
+    onChannel: () -> Unit, onJoin: () -> Unit, onArchive: () -> Unit, onAccounts: () -> Unit
+) {
     var more by remember { mutableStateOf(false) }
     LaunchedEffect(expanded) { if (!expanded) more = false }
-    DropdownMenu(expanded, dismiss, modifier = Modifier.width(256.dp), shape = RoundedCornerShape(14.dp),
-        containerColor = Panel, tonalElevation = 0.dp) {
-        @Composable fun entry(title: String, icon: ImageVector, action: () -> Unit) {
-            DropdownMenuItem(text = { NativeText(title, color = TextMain, fontSize = 18.sp) },
-                leadingIcon = { Icon(icon, null, tint = TextMain, modifier = Modifier.size(26.dp)) },
-                modifier = Modifier.heightIn(min = 56.dp), contentPadding = PaddingValues(horizontal = 20.dp),
-                onClick = { dismiss(); action() })
-        }
-        entry(if (dark) "Дневной режим" else "Ночной режим", if (dark) Icons.Outlined.LightMode else Icons.Outlined.DarkMode, onTheme)
-        HorizontalDivider(color = Ink.copy(alpha = .45f), thickness = 8.dp)
-        entry("Создать группу", Icons.Outlined.Groups, onGroup)
-        entry("Избранное", Icons.Outlined.BookmarkBorder, onSaved)
-        entry("Настройки", Icons.Outlined.Settings, onSettings)
-        HorizontalDivider(color = Ink.copy(alpha = .45f), thickness = 8.dp)
-        DropdownMenuItem(text = { NativeText(if (more) "Свернуть" else "Ещё", color = TextMain, fontSize = 18.sp) },
-            leadingIcon = { Icon(if (more) Icons.Outlined.ExpandLess else Icons.Outlined.MoreHoriz, null, tint = TextMain, modifier = Modifier.size(26.dp)) },
-            modifier = Modifier.heightIn(min = 56.dp), contentPadding = PaddingValues(horizontal = 20.dp), onClick = { more = !more })
-        if (more) {
-            entry("Новый чат", Icons.Outlined.ChatBubbleOutline, onNewChat)
-            entry("Создать канал", Icons.Outlined.Campaign, onChannel)
-            entry("Войти по приглашению", Icons.Outlined.Link, onJoin)
-            entry("Архив", Icons.Outlined.Archive, onArchive)
-            entry("Аккаунты", Icons.Outlined.ManageAccounts, onAccounts)
+    val dark = MaterialTheme.colorScheme.background.luminance() < .5f
+    val surface = lerp(Panel, Hover, .5f)
+    @Composable fun Item(label: String, icon: ImageVector, action: () -> Unit) {
+        DropdownMenuItem(text = { NativeText(label, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Normal) },
+            leadingIcon = { Icon(icon, null, tint = TextMain) }, modifier = Modifier.height(48.dp),
+            onClick = action)
+    }
+    fun select(action: () -> Unit) { onDismiss(); action() }
+    DropdownMenu(expanded, onDismiss, Modifier.width(216.dp), offset = DpOffset(0.dp, (-48).dp),
+        shape = RoundedCornerShape(12.dp), containerColor = surface, tonalElevation = 0.dp, shadowElevation = 6.dp) {
+        if (!more) {
+            Item(if (dark) "Дневной режим" else "Ночной режим", if (dark) Icons.Outlined.LightMode else Icons.Outlined.DarkMode) { select { onTheme(!dark) } }
+            HorizontalDivider(color = Ink.copy(alpha = .3f))
+            Item("Создать группу", Icons.Outlined.Groups) { select(onGroup) }
+            Item("Избранное", Icons.Outlined.BookmarkBorder) { select(onSaved) }
+            Item("Настройки", Icons.Outlined.Settings) { select(onSettings) }
+            HorizontalDivider(color = Ink.copy(alpha = .3f))
+            Item("Ещё", Icons.Outlined.MoreHoriz) { more = true }
+        } else {
+            Item("Назад", Icons.Outlined.ArrowBack) { more = false }
+            HorizontalDivider(color = Ink.copy(alpha = .3f))
+            Item("Новый чат", Icons.Outlined.ChatBubbleOutline) { select(onNewChat) }
+            Item("Создать канал", Icons.Outlined.Campaign) { select(onChannel) }
+            Item("Войти по приглашению", Icons.Outlined.Link) { select(onJoin) }
+            Item("Архив", Icons.Outlined.Archive) { select(onArchive) }
+            Item("Аккаунты", Icons.Outlined.ManageAccounts) { select(onAccounts) }
         }
     }
 }

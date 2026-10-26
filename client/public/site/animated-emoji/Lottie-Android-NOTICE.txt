@@ -1,0 +1,5 @@
+Lottie Android 6.6.7
+https://github.com/airbnb/lottie-android
+https://repo.maven.apache.org/maven2/com/airbnb/android/lottie/6.6.7/
+Distributed under the Apache License, Version 2.0; see Lottie-Android-LICENSE.txt.
+This dependency renders the bundled vector animation data on Android.

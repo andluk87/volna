@@ -60,3 +60,5 @@ in `smmisha/telegram-animated-emojis-60fps`, pinned at
 `8b81dfed18dab9aace949d9e59d863e2fef1b063`. Its dataset card declares MIT;
 see `public/site/animated-emoji/SOURCE.md` for provenance and `manifest.json` for
 file hashes. The publisher supplies no separate license text for the artwork.
+
+Lottie Android 6.6.7 is distributed under Apache-2.0. Its license and component notice are bundled in the Android animated-emoji assets.

@@ -5,78 +5,86 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.LottieComposition
 import com.airbnb.lottie.LottieCompositionFactory
-import com.airbnb.lottie.compose.LottieAnimation
-import com.airbnb.lottie.compose.rememberLottieAnimatable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.zip.GZIPInputStream
 
-internal object NativeAnimatedEmojiAssets {
-    private var files: Map<String, String>? = null
-    @Synchronized fun file(context: Context, text: String): String? {
-        val index = files ?: runCatching {
-            val json = JSONObject(context.assets.open("animated-emoji/index.json").bufferedReader().use { it.readText() })
-            json.keys().asSequence().associateWith { json.getString(it) }
-        }.getOrDefault(emptyMap()).also { files = it }
-        return index[text.replace("\uFE0F", "")]
+internal object NativeAnimatedEmojiCatalog {
+    @Volatile private var entries: Map<String, String>? = null
+    fun file(context: Context, text: String): String? {
+        val index = entries ?: synchronized(this) {
+            entries ?: runCatching {
+                val rows = JSONObject(context.assets.open("animated-emoji/manifest.json").bufferedReader().use { it.readText() }).getJSONObject("entries")
+                rows.keys().asSequence().associateWith { rows.getJSONObject(it).getString("file") }
+            }.getOrDefault(emptyMap()).also { entries = it }
+        }
+        return index[text.trim().replace("\uFE0F", "")]
     }
+    fun load(context: Context, file: String): LottieComposition? = runCatching {
+        GZIPInputStream(context.assets.open("animated-emoji/$file")).use {
+            LottieCompositionFactory.fromJsonInputStreamSync(it, "volna-telegram-$file").value
+        }
+    }.getOrNull()
 }
 
 @Composable
-internal fun NativeAnimatedEmoji(text: String, replay: Int) {
+internal fun NativeAnimatedEmoji(text: String, file: String, replay: Int) {
     val context = LocalContext.current
-    val file = remember(text) { NativeAnimatedEmojiAssets.file(context, text) }
-    if (file == null) { NativeText(text, fontSize = 96.sp, lineHeight = 104.sp); return }
     val owner = LocalLifecycleOwner.current
     val motion = LocalMotionEnabled.current
     var visible by remember(file) { mutableStateOf(false) }
     var foreground by remember(owner) { mutableStateOf(owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
     var composition by remember(file) { mutableStateOf<LottieComposition?>(null) }
-    var failed by remember(file) { mutableStateOf(false) }
-    var runningReplay by remember(file) { mutableIntStateOf(-1) }
-    var finishedReplay by remember(file) { mutableIntStateOf(-1) }
-    val animation = rememberLottieAnimatable()
+    var animationView by remember(file) { mutableStateOf<LottieAnimationView?>(null) }
+    var startedReplay by remember(file) { mutableIntStateOf(-1) }
+    LaunchedEffect(file, visible) {
+        if (visible && composition == null) composition = withContext(Dispatchers.IO) { NativeAnimatedEmojiCatalog.load(context, file) }
+    }
+    LaunchedEffect(animationView, replay, motion, visible, foreground) {
+        animationView?.let { view ->
+            if (!visible || !foreground || (!motion && replay == 0)) view.pauseAnimation()
+            else if (startedReplay != replay) { startedReplay = replay; view.progress = 0f; view.playAnimation() }
+            else if (view.progress < 1f && !view.isAnimating) view.resumeAnimation()
+        }
+    }
     DisposableEffect(owner) {
         val observer = LifecycleEventObserver { _, _ -> foreground = owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(file, visible) {
-        if (visible && composition == null && !failed) {
-            composition = withContext(Dispatchers.IO) {
-                runCatching { GZIPInputStream(context.assets.open("animated-emoji/$file")).use { LottieCompositionFactory.fromJsonInputStreamSync(it, "emoji:$file").value } }.getOrNull()
-            }
-            failed = composition == null
-        }
+    DisposableEffect(animationView) {
+        val view = animationView
+        onDispose { view?.cancelAnimation() }
     }
-    LaunchedEffect(composition, replay, visible, foreground, motion) {
-        val loaded = composition ?: return@LaunchedEffect
-        if (visible && foreground && (motion || replay > 0) && finishedReplay != replay) {
-            val start = if (runningReplay == replay) animation.progress else 0f
-            runningReplay = replay
-            animation.animate(loaded, iterations = 1, initialProgress = start, continueFromPreviousAnimate = false)
-            finishedReplay = replay
-        }
-    }
-    Box(Modifier.size(96.dp).semantics { contentDescription = text }.onGloballyPositioned {
+    Box(Modifier.size(128.dp).semantics { contentDescription = "Анимированный эмодзи $text" }.onGloballyPositioned {
         val bounds = it.boundsInWindow()
-        visible = bounds != Rect.Zero && bounds.width > 0f && bounds.height > 0f
-    }) {
-        if (composition == null || failed) NativeText(text, fontSize = 96.sp, lineHeight = 104.sp)
-        else LottieAnimation(composition, progress = { if (animation.composition == composition) animation.progress else 0f }, modifier = Modifier.size(96.dp))
+        visible = bounds.width > 0f && bounds.height > 0f
+    }, contentAlignment = Alignment.Center) {
+        val value = composition
+        if (value == null) NativeText(text, fontSize = 96.sp, lineHeight = 104.sp)
+        else AndroidView(factory = { ctx ->
+            LottieAnimationView(ctx).apply {
+                enableMergePathsForKitKatAndAbove(true)
+                setIgnoreDisabledSystemAnimations(true)
+                setComposition(value); repeatCount = 0; progress = 0f
+                animationView = this
+            }
+        }, modifier = Modifier.size(128.dp), onRelease = { it.cancelAnimation(); animationView = null })
     }
 }

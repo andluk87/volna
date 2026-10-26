@@ -105,9 +105,8 @@ internal fun NativeIncomingShareDialog(share: NativeIncomingShare, chats: List<V
     DisposableEffect(share.id) { onDispose { if (!handedOff) prepared?.directory?.deleteRecursively() } }
     val target = chats.firstOrNull { it.id == targetId && it.canSend }
     val writable = chats.filter { it.canSend && (query.isBlank() || it.name.contains(query, ignoreCase = true)) }
-    AlertDialog(onDismissRequest = { if (!sending) onDismiss() }, containerColor = Panel,
-        title = { NativeText("Отправить в VLN", color = TextMain) }, text = {
-            Column {
+    NativeFullScreen("Отправить в VLN", { if (!sending) onDismiss() }) {
+        Column(Modifier.fillMaxSize().imePadding().padding(horizontal = 16.dp, vertical = 12.dp)) {
                 NativeText("Аккаунт: $accountName", color = Muted, fontSize = 12.sp)
                 NativeOutlinedTextField(text, { text = it }, label = { NativeText(if (share.uris.isEmpty()) "Текст или ссылка" else "Подпись") },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp), maxLines = 4, enabled = !sending && submittedText == null,
@@ -118,7 +117,7 @@ internal fun NativeIncomingShareDialog(share: NativeIncomingShare, chats: List<V
                 if (failure.isNotBlank()) NativeText(failure, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 if (transferBusy) NativeText("Сначала завершите отправку или закройте прежнее вложение", color = Muted, fontSize = 12.sp)
                 NativeOutlinedTextField(query, { query = it }, label = { NativeText("Выберите получателя") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
-                LazyColumn(Modifier.heightIn(max = 240.dp)) {
+                LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                     items(writable, key = { it.id }) { chat ->
                         Row(Modifier.fillMaxWidth().clickable(enabled = !sending && submittedText == null) { targetId = chat.id }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = targetId == chat.id, onClick = { targetId = chat.id }, enabled = !sending && submittedText == null)
@@ -127,8 +126,8 @@ internal fun NativeIncomingShareDialog(share: NativeIncomingShare, chats: List<V
                     }
                     if (writable.isEmpty()) item { NativeText("Нет доступных переписок. Создайте чат и повторите «Поделиться».", color = Muted, fontSize = 13.sp) }
                 }
-            }
-        }, confirmButton = {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(enabled = !sending, onClick = onDismiss) { NativeText("Отмена") }
             TextButton(enabled = target != null && prepared != null && !preparing && !sending && !transferBusy && text.length <= 4000 && share.error.isBlank() && (text.isNotBlank() || prepared?.files?.isNotEmpty() == true), onClick = {
                 val destination = target ?: return@TextButton
                 val data = prepared ?: return@TextButton
@@ -147,5 +146,7 @@ internal fun NativeIncomingShareDialog(share: NativeIncomingShare, chats: List<V
                     }
                 }
             }) { NativeText(if (sending) "Отправляем…" else if (submittedText != null && failure.isNotBlank()) "Повторить" else if (prepared?.files?.isNotEmpty() == true) "Далее" else "Отправить") }
-        }, dismissButton = { TextButton(enabled = !sending, onClick = onDismiss) { NativeText("Отмена") } })
+            }
+        }
+    }
 }

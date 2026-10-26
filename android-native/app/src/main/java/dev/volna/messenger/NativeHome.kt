@@ -28,7 +28,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -163,11 +162,10 @@ internal fun ChatListScreen(
             if (tab == "profile") IconButton(onClick = { user?.id?.let(onOpenProfile) }, enabled = user != null) { Icon(Icons.Outlined.Edit, "Редактировать профиль", tint = Accent) }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Действия", tint = Muted) }
-                val dark = TextMain.luminance() > .5f
-                NativeHomeMenu(menu, dark, { menu = false },
-                    onTheme = { onAppearanceChange(appearance.copy(theme = if (dark) "light" else "dark")) },
+                NativeHomeMenu(menu, { menu = false },
+                    onTheme = { dark -> onAppearanceChange(appearance.copy(theme = if (dark) "dark" else "light")) },
                     onGroup = { onCommunityEntry("create-group") }, onSaved = onSavedMessages,
-                    onSettings = { tab = "profile"; onQuery("") }, onNewChat = { tab = "contacts" },
+                    onSettings = { tab = "profile" }, onNewChat = { tab = "contacts" },
                     onChannel = { onCommunityEntry("create-channel") }, onJoin = { onCommunityEntry("join") },
                     onArchive = { filter = "archived"; tab = "chats" }, onAccounts = { accountsOpen = true })
             }
@@ -458,7 +456,7 @@ private fun NativeSettingsScreen(user: VolnaUser?, token: String, appearance: Na
             NativeSettingRow(Icons.Outlined.SystemUpdate, "Обновления", "Автоматическая загрузка и установка") { onSection("updates") }
             NativeSettingRow(Icons.Outlined.ManageAccounts, "Аккаунты", "Добавить или переключить") { onAccounts() }
         } }
-        item { NativeText("Эмодзи: Telegram Desktop · GPL-3.0\nАнимации: Telegram TGS · smmisha/telegram-animated-emojis-60fps\nПлеер: Lottie Android 6.6.2 · Apache 2.0\nДанные: Unicode 17 / CLDR 48 · Unicode License\nСтеклянные эффекты: Haze 1.5.4 · Apache 2.0", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(12.dp)) }
+        item { NativeText("Эмодзи: Telegram Desktop · GPL-3.0\nАнимации: Telegram TGS · Lottie Android 6.6.7 · Apache 2.0\nДанные: Unicode 17 / CLDR 48 · Unicode License\nСтеклянные эффекты: Haze 1.5.4 · Apache 2.0", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(12.dp)) }
         item { NativeText("VLN ${BuildConfig.VERSION_NAME} · Android\n${android.net.Uri.parse(BuildConfig.API_BASE_URL).host}", color = Muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(12.dp)) }
     }
 }

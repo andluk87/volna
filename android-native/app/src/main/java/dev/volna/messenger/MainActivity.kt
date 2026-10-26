@@ -141,6 +141,7 @@ private val QuickEmoji = listOf("👍", "❤️", "😂", "🔥", "🎉", "😮"
 
 class MainActivity : ComponentActivity() {
     private val incomingShare = mutableStateOf<NativeIncomingShare?>(null)
+    private var incomingShareSource: Intent? = null
     private val authReturn = mutableStateOf<String?>(null)
     private val openChatRequest = mutableStateOf<Long?>(null)
     private val openMessageRequest = mutableStateOf<Long?>(null)
@@ -152,6 +153,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState?.getBoolean("share_handled", false) != true) {
             val source = savedInstanceState?.getParcelable<Intent>("share_intent") ?: intent
             incomingShare.value = NativeIncomingShare.parse(source, savedInstanceState?.getString("share_id") ?: UUID.randomUUID().toString())
+            if (incomingShare.value != null) incomingShareSource = source?.let(::Intent)
         }
         enableEdgeToEdge()
         configureCallPip()
@@ -165,14 +167,14 @@ class MainActivity : ComponentActivity() {
         setContent { NativeEmojiProvider {
             Box(Modifier.fillMaxSize()) {
                 VolnaNativeApp(authReturn.value, openChatRequest.value, openMessageRequest.value, openAccountRequest.value,
-                    incomingShare.value, { incomingShare.value = null; setIntent(Intent(this@MainActivity, MainActivity::class.java)) }) { openChatRequest.value = null; openMessageRequest.value = null; openAccountRequest.value = null }
+                    incomingShare.value, { incomingShare.value = null; incomingShareSource = null; setIntent(Intent(this@MainActivity, MainActivity::class.java)) }) { openChatRequest.value = null; openMessageRequest.value = null; openAccountRequest.value = null }
                 if (NativeCallLayout.inPip) { val state by NativeCalls.state.collectAsState(); val account = getSharedPreferences("volna-native", MODE_PRIVATE).getLong("user_id", 0); VolnaTheme(rememberNativeCallAppearance(account)) { NativeCallScreen(state, NativeCredentials.access(account), standalone = true, pip = true) } }
             }
         } }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        incomingShare.value?.let { outState.putString("share_id", it.id); outState.putParcelable("share_intent", intent) }
+        incomingShare.value?.let { outState.putString("share_id", it.id); outState.putParcelable("share_intent", incomingShareSource) }
         outState.putBoolean("share_handled", incomingShare.value == null)
         super.onSaveInstanceState(outState)
     }
@@ -182,7 +184,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        NativeIncomingShare.parse(intent)?.let { incomingShare.value = it }
+        NativeIncomingShare.parse(intent)?.let { incomingShare.value = it; incomingShareSource = Intent(intent) }
         authReturn.value = intent.dataString
         if (intent.getBooleanExtra("open_call", false)) NativeCalls.minimize(false)
         openChatRequest.value = intent.getLongExtra("chat_id", 0L).takeIf { it > 0 } ?: nativeLinkedTopicChat(intent.dataString, BuildConfig.API_BASE_URL)

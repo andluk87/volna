@@ -12,6 +12,7 @@ if [ "$offline" = 1 ]; then
 else
   python3 scripts/prepare-expressions.py --cache "$cache"
 fi
+python3 scripts/prepare-animated-emojis.py
 if [ ! -x "$sdkmanager" ]; then
   if [ "$offline" = 1 ]; then echo 'Android SDK is not cached. Run one build with ANDROID_BUILD_OFFLINE=0.' >&2; exit 1; fi
   cli_version=${ANDROID_CLI_VERSION:-13114758}
@@ -66,6 +67,7 @@ done
 echo 'Verified Android network permissions in compiled APK.'
 python3 scripts/check-apk-version.py "$ANDROID_HOME/build-tools/36.0.0/aapt2" "$apk" app/build.gradle.kts
 unzip -l "$apk" | grep -Fq 'assets/emoji/TelegramEmoji.ttf' || { echo 'APK is missing bundled emoji graphics.' >&2; exit 1; }
+unzip -l "$apk" | grep -Fq 'assets/animated-emoji/manifest.json' || { echo 'APK is missing animated emoji assets.' >&2; exit 1; }
 unzip -l "$apk" | grep -Fq 'assets/emoji/catalog.json' || { echo 'APK is missing the emoji catalog.' >&2; exit 1; }
 
 # Derive the Retriever hash from the signature of the APK we actually export.

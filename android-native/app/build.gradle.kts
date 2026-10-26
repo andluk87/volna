@@ -11,8 +11,8 @@ val apiUrl = (project.findProperty("volnaApiUrl") as String?)
     ?: ""
 require(apiUrl.startsWith("https://")) { "Set ANDROID_API_URL to your Volna HTTPS base URL" }
 val safeApiUrl = apiUrl.trimEnd('/')
-val volnaVersionCode = 12_071
-val volnaVersionName = "0.12.71"
+val volnaVersionCode = 12_072
+val volnaVersionName = "0.12.72"
 val volnaWebRtcVersion = "150.7871.01"
 
 android {
@@ -66,9 +66,9 @@ dependencies {
     implementation("com.googlecode.libphonenumber:libphonenumber:8.13.55")
     implementation("io.github.webrtc-sdk:android:$volnaWebRtcVersion")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
-    implementation("com.airbnb.android:lottie-compose:6.6.2")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-gif:2.7.0")
+    implementation("com.airbnb.android:lottie:6.6.7")
     implementation("io.coil-kt:coil-video:2.7.0")
     implementation("dev.chrisbanes.haze:haze:1.5.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
@@ -82,16 +82,3 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation("org.json:json:20250517")
 }
-
-// Package the same pinned local TGS artwork as Web/Windows, including offline builds.
-val animatedEmojiArtwork = System.getenv("VOLNA_ANIMATED_EMOJI_ARTWORK")?.let(::File)
-    ?: rootProject.file("../client/public/site/animated-emoji")
-val prepareAnimatedEmojiAssets by tasks.registering(Sync::class) {
-    from(animatedEmojiArtwork) { include("*.tgs", "manifest.json", "SOURCE.md"); into("animated-emoji") }
-    from(if (File(animatedEmojiArtwork, "index.json").exists()) File(animatedEmojiArtwork, "index.json") else rootProject.file("../client/src/animated-emoji-index.json")) {
-        into("animated-emoji"); rename { "index.json" }
-    }
-    into(layout.buildDirectory.dir("generated/animatedEmojiAssets"))
-}
-android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/animatedEmojiAssets"))
-tasks.named("preBuild").configure { dependsOn(prepareAnimatedEmojiAssets) }

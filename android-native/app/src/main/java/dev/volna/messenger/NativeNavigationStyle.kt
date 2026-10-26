@@ -19,7 +19,7 @@ data class NativeNavigationStyle(
         val TextSizeRange = 8..32
         val IconSizeRange = 12..64
         val Folders = NativeNavigationStyle()
-        val Bottom = NativeNavigationStyle(height = 52, radius = 32, sideInset = 28, textSize = 10)
+        val Bottom = NativeNavigationStyle(thirdTab = "calls", height = 52, radius = 32, sideInset = 28, textSize = 10)
         fun parse(raw: String?, defaults: NativeNavigationStyle): NativeNavigationStyle = runCatching {
             val o = JSONObject(raw ?: return defaults)
             fun color(key: String) = o.optLong(key).takeIf { it == 0L || it in 0xFF000000L..0xFFFFFFFFL } ?: 0L
