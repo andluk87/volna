@@ -11,8 +11,8 @@ val apiUrl = (project.findProperty("volnaApiUrl") as String?)
     ?: ""
 require(apiUrl.startsWith("https://")) { "Set ANDROID_API_URL to your Volna HTTPS base URL" }
 val safeApiUrl = apiUrl.trimEnd('/')
-val volnaVersionCode = 12_070
-val volnaVersionName = "0.12.70"
+val volnaVersionCode = 12_071
+val volnaVersionName = "0.12.71"
 val volnaWebRtcVersion = "150.7871.01"
 
 android {
@@ -68,6 +68,7 @@ dependencies {
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-gif:2.7.0")
+    implementation("com.airbnb.android:lottie:6.6.7")
     implementation("io.coil-kt:coil-video:2.7.0")
     implementation("dev.chrisbanes.haze:haze:1.5.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")

@@ -162,15 +162,12 @@ internal fun ChatListScreen(
             if (tab == "profile") IconButton(onClick = { user?.id?.let(onOpenProfile) }, enabled = user != null) { Icon(Icons.Outlined.Edit, "Редактировать профиль", tint = Accent) }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Действия", tint = Muted) }
-                DropdownMenu(menu, { menu = false }) {
-                    DropdownMenuItem(text = { NativeText("Новый чат") }, leadingIcon = { Icon(Icons.Outlined.ChatBubbleOutline, null) }, onClick = { menu = false; tab = "contacts" })
-                    DropdownMenuItem(text = { NativeText("Создать группу") }, leadingIcon = { Icon(Icons.Outlined.Groups, null) }, onClick = { menu = false; onCommunityEntry("create-group") })
-                    DropdownMenuItem(text = { NativeText("Создать канал") }, leadingIcon = { Icon(Icons.Outlined.Campaign, null) }, onClick = { menu = false; onCommunityEntry("create-channel") })
-                    DropdownMenuItem(text = { NativeText("Войти по приглашению") }, onClick = { menu = false; onCommunityEntry("join") })
-                    DropdownMenuItem(text = { NativeText("Избранное") }, leadingIcon = { Icon(Icons.Outlined.BookmarkBorder, null) }, onClick = { menu = false; onSavedMessages() })
-                    DropdownMenuItem(text = { NativeText("Архив") }, onClick = { menu = false; filter = "archived"; tab = "chats" })
-                    DropdownMenuItem(text = { NativeText("Аккаунты") }, onClick = { menu = false; accountsOpen = true })
-                }
+                NativeHomeMenu(menu, { menu = false },
+                    onTheme = { dark -> onAppearanceChange(appearance.copy(theme = if (dark) "dark" else "light")) },
+                    onGroup = { onCommunityEntry("create-group") }, onSaved = onSavedMessages,
+                    onSettings = { tab = "profile" }, onNewChat = { tab = "contacts" },
+                    onChannel = { onCommunityEntry("create-channel") }, onJoin = { onCommunityEntry("join") },
+                    onArchive = { filter = "archived"; tab = "chats" }, onAccounts = { accountsOpen = true })
             }
         }
         }
