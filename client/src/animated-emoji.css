@@ -1,0 +1,7 @@
+.animated-emoji{display:inline-block;position:relative;width:1em;height:1em;min-width:0;padding:0;margin:0;border:0;border-radius:8px;background:transparent;color:inherit;font:inherit;line-height:1;vertical-align:top;cursor:pointer;user-select:text;overflow:visible}
+.animated-emoji:disabled{opacity:1;cursor:default}
+.animated-emoji:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.animated-emoji-fallback{display:block;width:100%;height:100%}
+.animated-emoji.is-ready .animated-emoji-fallback{opacity:0}
+.animated-emoji-surface{position:absolute;inset:0;pointer-events:none;user-select:none}
+.animated-emoji .animated-emoji-surface>svg{display:block;width:100%!important;height:100%!important}

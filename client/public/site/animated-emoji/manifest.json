@@ -1,0 +1,3600 @@
+{
+  "repository": "smmisha/telegram-animated-emojis-60fps",
+  "revision": "8b81dfed18dab9aace949d9e59d863e2fef1b063",
+  "animations": [
+    {
+      "unicode": "❤",
+      "file": "tg_emoji_001.tgs",
+      "name": "Red Heart",
+      "sha256": "f65a0d707f31c1fa196f5b5cc77928a88424a8f806ddcacb241f7661aef3f363"
+    },
+    {
+      "unicode": "😒",
+      "file": "tg_emoji_002.tgs",
+      "name": "Unamused Face",
+      "sha256": "94f566f6bf59af5e96d203f7a82c05faba2879e8b847fc29bad8bfd62748577d"
+    },
+    {
+      "unicode": "😳",
+      "file": "tg_emoji_003.tgs",
+      "name": "Flushed Face",
+      "sha256": "6390445efb5567725def9c49fbfecaaff684831d5134b96ff0ebf7f422ab3a73"
+    },
+    {
+      "unicode": "🥳",
+      "file": "tg_emoji_004.tgs",
+      "name": "Partying Face",
+      "sha256": "d869498e66ede2107118918f8c01e26bf5c7f4e8b3b47bc066df6e58139ae7bd"
+    },
+    {
+      "unicode": "😡",
+      "file": "tg_emoji_005.tgs",
+      "name": "Enraged Face",
+      "sha256": "b15e21a48ac70f0d64af251ba3a1be31254de35cc985ed6addc501d0e6b284e1"
+    },
+    {
+      "unicode": "😧",
+      "file": "tg_emoji_006.tgs",
+      "name": "Anguished Face",
+      "sha256": "71a1caa07775f8bbcee41f540db0bc87683101ca100b91c3bb850d89ffcb83c6"
+    },
+    {
+      "unicode": "😢",
+      "file": "tg_emoji_007.tgs",
+      "name": "Crying Face",
+      "sha256": "165628a6f5d9380601d4459c4f7f2ba83d990b5b708303ed2f525c75e5684b38"
+    },
+    {
+      "unicode": "😁",
+      "file": "tg_emoji_008.tgs",
+      "name": "Beaming Face With Smiling Eyes",
+      "sha256": "e519cb8438b98583e832db2027a14dc533329d1df250ec9b71eb6b88761de4f5"
+    },
+    {
+      "unicode": "😮",
+      "file": "tg_emoji_009.tgs",
+      "name": "Face With Open Mouth",
+      "sha256": "9ee73a5cae94a7f4eef4be7a1d7024131d73903666996d263427c3b380fd21f6"
+    },
+    {
+      "unicode": "💀",
+      "file": "tg_emoji_010.tgs",
+      "name": "Skull",
+      "sha256": "f65a0d707f31c1fa196f5b5cc77928a88424a8f806ddcacb241f7661aef3f363"
+    },
+    {
+      "unicode": "🙄",
+      "file": "tg_emoji_011.tgs",
+      "name": "Face With Rolling Eyes",
+      "sha256": "8e2bd68f26c3fec753682e448c67583ef500ce497d0fdce5eb09e006b4381edc"
+    },
+    {
+      "unicode": "😍",
+      "file": "tg_emoji_012.tgs",
+      "name": "Smiling Face With Heart-Eyes",
+      "sha256": "85431aa4f0024353591773d8dd05bb6c8f76d88c99245e91d778515cc473809b"
+    },
+    {
+      "unicode": "💋",
+      "file": "tg_emoji_013.tgs",
+      "name": "Kiss Mark",
+      "sha256": "b036044c66480ede1b280025c2295eb2d7e84a8d9965642cb2045ed15509113f"
+    },
+    {
+      "unicode": "🧐",
+      "file": "tg_emoji_014.tgs",
+      "name": "Face With Monocle",
+      "sha256": "f8a5ec37dd7c6b229bd270d7e9d0f69b5c1fafe1efe52346754c2f54bbe475c1"
+    },
+    {
+      "unicode": "😘",
+      "file": "tg_emoji_015.tgs",
+      "name": "Face Blowing A Kiss",
+      "sha256": "dbfc924f111c3ec88739c5cf139933c500afff26b9e89adf2f61c12f608c7d7e"
+    },
+    {
+      "unicode": "💎",
+      "file": "tg_emoji_016.tgs",
+      "name": "Gem Stone",
+      "sha256": "b0c1b8de4d84a3840a27e182daa6b7e1045f34c29b62e5000e0f99092b06d533"
+    },
+    {
+      "unicode": "🔐",
+      "file": "tg_emoji_017.tgs",
+      "name": "Locked With Key",
+      "sha256": "cd07f645f28e46b813ce2e57720c3c13fd1842bb2f31f85f12be0d59d4c14f59"
+    },
+    {
+      "unicode": "⌨",
+      "file": "tg_emoji_018.tgs",
+      "name": "Keyboard",
+      "sha256": "b32f322592cb567a1f57e9084a991a607c73263f6d0e685d233eae33a6e8a860"
+    },
+    {
+      "unicode": "💸",
+      "file": "tg_emoji_019.tgs",
+      "name": "Money With Wings",
+      "sha256": "eda98b2d236f54e2b93f7ed6d5f7c6c45ce50f4f99eaff193fc937858661e210"
+    },
+    {
+      "unicode": "📝",
+      "file": "tg_emoji_020.tgs",
+      "name": "Memo",
+      "sha256": "200176f939c3d075e9696d567fa579180cd4eabb5aa96c0ef3351dba3e6a47e1"
+    },
+    {
+      "unicode": "🙈",
+      "file": "tg_emoji_021.tgs",
+      "name": "See-No-Evil Monkey",
+      "sha256": "795af93c9b6a030330e0ee8d7298fcd3897cac0fa744b4f5e162d33d1f1634e0"
+    },
+    {
+      "unicode": "👨‍🏫",
+      "file": "tg_emoji_022.tgs",
+      "name": "Man Teacher",
+      "sha256": "da52895f90cc0641fc490ec73a556b034be9e94ff22c33607d4fb78d5b1c7b5a"
+    },
+    {
+      "unicode": "⏳",
+      "file": "tg_emoji_023.tgs",
+      "name": "Hourglass Not Done",
+      "sha256": "152778aaa43bc44e9b9d167f163cc4412ace273c1fbe1f857f12c401b697556b"
+    },
+    {
+      "unicode": "📬",
+      "file": "tg_emoji_024.tgs",
+      "name": "Open Mailbox With Raised Flag",
+      "sha256": "3e1c2c75368d2eec86715dc14cbff46b7ec2b3e46831835d8f60f4c94d2634a8"
+    },
+    {
+      "unicode": "😔",
+      "file": "tg_emoji_025.tgs",
+      "name": "Pensive Face",
+      "sha256": "a3ddbd2eff5809c863ec51dc681e9a44d1dc410ff8cda5cdf2b911b959b9f671"
+    },
+    {
+      "unicode": "💡",
+      "file": "tg_emoji_026.tgs",
+      "name": "Light Bulb",
+      "sha256": "b0fe51ff7b7bda8c121a8d74a2eb0daa9b94a33df814517adb201159bb29c1f0"
+    },
+    {
+      "unicode": "👛",
+      "file": "tg_emoji_027.tgs",
+      "name": "Purse",
+      "sha256": "17ea8fd8c722e552b5e1e84a8d8095982e9252f219f2212c94158498aac2b18b"
+    },
+    {
+      "unicode": "💱",
+      "file": "tg_emoji_028.tgs",
+      "name": "Currency Exchange",
+      "sha256": "a96c9648d446b64b71919af2c29734744169206d32cdb092ce4544127b7b35dc"
+    },
+    {
+      "unicode": "🎄",
+      "file": "tg_emoji_029.tgs",
+      "name": "Christmas Tree",
+      "sha256": "7eceb8c5d6cc4cbca067c8bce244d4dda7a61e3cd524af6dbfd02a96f0b167bc"
+    },
+    {
+      "unicode": "☃",
+      "file": "tg_emoji_030.tgs",
+      "name": "Snowman",
+      "sha256": "94a4d68cfb0deb13a16f2eed4a84d5fc928ff2cd556cc89d653df39346d55d33"
+    },
+    {
+      "unicode": "🧡",
+      "file": "tg_emoji_031.tgs",
+      "name": "Orange Heart",
+      "sha256": "4bb78c7189075760e0a8fa72f28bab5ccb2c1ee09132e740a6aeaf9dd6bf159b"
+    },
+    {
+      "unicode": "💛",
+      "file": "tg_emoji_032.tgs",
+      "name": "Yellow Heart",
+      "sha256": "c2c73d0d0466a050591bf03d460b86f62b93b4866bd610dd8091c014fc95ef6d"
+    },
+    {
+      "unicode": "💚",
+      "file": "tg_emoji_033.tgs",
+      "name": "Green Heart",
+      "sha256": "b7dd02a19753ed81ef9077c3d94819f6dcebdeafcf77fdb3c91754b330817f47"
+    },
+    {
+      "unicode": "💙",
+      "file": "tg_emoji_034.tgs",
+      "name": "Blue Heart",
+      "sha256": "eb0f6b89195c66f6123d1597b2012624aa9e2afea7c0fc7425d16eae361baa77"
+    },
+    {
+      "unicode": "💜",
+      "file": "tg_emoji_035.tgs",
+      "name": "Purple Heart",
+      "sha256": "ee1a8234978022cf74f1739d45e89bf53cf8f6eb83cbc41c2f4d6ba697063b33"
+    },
+    {
+      "unicode": "🖤",
+      "file": "tg_emoji_036.tgs",
+      "name": "Black Heart",
+      "sha256": "73b81598066d4be1aaa3b3f47af64a8b316fb7ee9fdd7d337369bdf6cd374354"
+    },
+    {
+      "unicode": "🤍",
+      "file": "tg_emoji_037.tgs",
+      "name": "White Heart",
+      "sha256": "81d7684e4f18fb12f1f3b1168c851ca34e7023d0bf0d90e4b02c0647a47f0c9e"
+    },
+    {
+      "unicode": "🤎",
+      "file": "tg_emoji_038.tgs",
+      "name": "Brown Heart",
+      "sha256": "43ac821ccbd39ff9a0dfa5e86ab4aa83101ec0dfa4544e04fb5d198738f7cb3c"
+    },
+    {
+      "unicode": "😻",
+      "file": "tg_emoji_039.tgs",
+      "name": "Smiling Cat With Heart-Eyes",
+      "sha256": "54d239140cc43b82e4fea111b142a4ad0a0d2d5489eefd90c56585469d51e161"
+    },
+    {
+      "unicode": "🥰",
+      "file": "tg_emoji_040.tgs",
+      "name": "Smiling Face With Hearts",
+      "sha256": "9ef916330dff5b2ac6a72d32c58e32489f6c3e3b7b97ed75d5a0a2dfc172c04b"
+    },
+    {
+      "unicode": "💌",
+      "file": "tg_emoji_041.tgs",
+      "name": "Love Letter",
+      "sha256": "ca90a393625cb53000c214aa495cd56da578637264155ce4a67ca13fb3e129a1"
+    },
+    {
+      "unicode": "💘",
+      "file": "tg_emoji_042.tgs",
+      "name": "Heart With Arrow",
+      "sha256": "41db5f192116bc66c2d70c260c111b652088df9306f5e5a21f1b4d868b3bb6a7"
+    },
+    {
+      "unicode": "💔",
+      "file": "tg_emoji_043.tgs",
+      "name": "Broken Heart",
+      "sha256": "c0b8c4e844e9bc94318ea4281e90fd7754a8163398cb9297b3e161afef0f3afe"
+    },
+    {
+      "unicode": "🧭",
+      "file": "tg_emoji_044.tgs",
+      "name": "Compass",
+      "sha256": "36d40eebaeb5408d991fc494226d8f7bbcbe10606d2bfdb938329fa1031272ac"
+    },
+    {
+      "unicode": "💝",
+      "file": "tg_emoji_045.tgs",
+      "name": "Heart With Ribbon",
+      "sha256": "6a39536d22fbde6a8dd149cbe548703021d0df9b9a0e6f8866951b02404730ba"
+    },
+    {
+      "unicode": "📣",
+      "file": "tg_emoji_046.tgs",
+      "name": "Megaphone",
+      "sha256": "c30510850e1f87d35224b4609b8803fbd98eecb6f44aa50a29e026ba8de481db"
+    },
+    {
+      "unicode": "🧮",
+      "file": "tg_emoji_047.tgs",
+      "name": "Abacus",
+      "sha256": "cad2c3125297ec66d7443e233541b9340313ec39bfece2bb1a22b17112819891"
+    },
+    {
+      "unicode": "📁",
+      "file": "tg_emoji_048.tgs",
+      "name": "File Folder",
+      "sha256": "8c05807fefa6d1dc9275af6cef0707352b10efb788199f9debe9d79992f189a5"
+    },
+    {
+      "unicode": "📂",
+      "file": "tg_emoji_049.tgs",
+      "name": "Open File Folder",
+      "sha256": "5265c5c046515e1cbe23003998d9a07e0d74109f2b8960f635b628da5d1c77a5"
+    },
+    {
+      "unicode": "🦠",
+      "file": "tg_emoji_050.tgs",
+      "name": "Microbe",
+      "sha256": "19fdfe3d7b8bf7958dd664049439c6dc0f43fe09cd51ae999769cc11409fd8d2"
+    },
+    {
+      "unicode": "🤒",
+      "file": "tg_emoji_051.tgs",
+      "name": "Face With Thermometer",
+      "sha256": "beb9155e57d1d4076d5aae8622d322b9f76c214a51d21ba35387caef6356d4b8"
+    },
+    {
+      "unicode": "🤢",
+      "file": "tg_emoji_052.tgs",
+      "name": "Nauseated Face",
+      "sha256": "0dd48fcb8aa9db266b81fbaeb4128bce2ab07999d040eb5168b1477e03cc0bde"
+    },
+    {
+      "unicode": "🤕",
+      "file": "tg_emoji_053.tgs",
+      "name": "Face With Head-Bandage",
+      "sha256": "ca6aa50354d0a162bb9e217e528d45e3fcff536f612b9d0b832e1bac49446f77"
+    },
+    {
+      "unicode": "🤧",
+      "file": "tg_emoji_054.tgs",
+      "name": "Sneezing Face",
+      "sha256": "ad66cf7f873aa819fc13c266a73fa595f059c385b27e8e386d6575020b33269f"
+    },
+    {
+      "unicode": "🧼",
+      "file": "tg_emoji_055.tgs",
+      "name": "Soap",
+      "sha256": "86b2f5132ddb5248dc2c53482676d0395324df6e8560296f3b8e64f4abe3f680"
+    },
+    {
+      "unicode": "🚑",
+      "file": "tg_emoji_056.tgs",
+      "name": "Ambulance",
+      "sha256": "c1a56bb1403169e668ab4c39cd4d713abd350403fe77b04123d06f78456b78e2"
+    },
+    {
+      "unicode": "🤮",
+      "file": "tg_emoji_057.tgs",
+      "name": "Face Vomiting",
+      "sha256": "ec981ab7fc20e6c9ce68529e09dc7fb9042b062969844999dd18e7902abe653f"
+    },
+    {
+      "unicode": "💊",
+      "file": "tg_emoji_058.tgs",
+      "name": "Pill",
+      "sha256": "c7c6b14a35cc2f0cc9de4f5e319b6b16b6745b05257a7fe93d5d38729eb8e5f3"
+    },
+    {
+      "unicode": "🧻",
+      "file": "tg_emoji_059.tgs",
+      "name": "Roll Of Paper",
+      "sha256": "a0c244bc92c24e6dbb783f52291b8367336a3f9dd8bb88857974a8a5943ec397"
+    },
+    {
+      "unicode": "👩‍⚕",
+      "file": "tg_emoji_060.tgs",
+      "name": "Woman Health Worker",
+      "sha256": "e6e5cd4f216f83fde12b7e0cb7daf4ceda53366a647287392a86b4628851ff98"
+    },
+    {
+      "unicode": "👨‍⚕",
+      "file": "tg_emoji_061.tgs",
+      "name": "Man Health Worker",
+      "sha256": "df69c3ff6e44696012f3e1748b72591f8bd9e0e16539d31aecd82464fdcb2308"
+    },
+    {
+      "unicode": "🤷‍♀",
+      "file": "tg_emoji_062.tgs",
+      "name": "Woman Shrugging",
+      "sha256": "186b865ffd5f25f14cdbf9f93c737f6c9a8e4c797c208030d207b66ac9296c02"
+    },
+    {
+      "unicode": "🤷‍♂",
+      "file": "tg_emoji_063.tgs",
+      "name": "Man Shrugging",
+      "sha256": "a604c208555072f5b3d0f5cf88806561e52fd1908e73d3266c1bdbdbdad2e0de"
+    },
+    {
+      "unicode": "🧽",
+      "file": "tg_emoji_064.tgs",
+      "name": "Sponge",
+      "sha256": "8af8ab7e8cfb8cdc94f3d82e9e67b21452a5fc96b8a4745ad3a121dcaedfd5cd"
+    },
+    {
+      "unicode": "🤔",
+      "file": "tg_emoji_065.tgs",
+      "name": "Thinking Face",
+      "sha256": "3b3fb4637da0726016f2b397da3409094b514df6d8121388fbe472911b889750"
+    },
+    {
+      "unicode": "😌",
+      "file": "tg_emoji_066.tgs",
+      "name": "Relieved Face",
+      "sha256": "192b3e2dc865104d5134937a75bde124208af4b84ddf5328996d52f1f98e6a8a"
+    },
+    {
+      "unicode": "😭",
+      "file": "tg_emoji_067.tgs",
+      "name": "Loudly Crying Face",
+      "sha256": "0797f252bb5446d1946748aefe8331ae357ccf8e742a45aa38f856b2a8a9b4be"
+    },
+    {
+      "unicode": "🙊",
+      "file": "tg_emoji_068.tgs",
+      "name": "Speak-No-Evil Monkey",
+      "sha256": "2f25ee87841b99320bac2ba5ba4f72457e86ae162cfa0fea0a0fb3397098184a"
+    },
+    {
+      "unicode": "😜",
+      "file": "tg_emoji_069.tgs",
+      "name": "Winking Face With Tongue",
+      "sha256": "7d4c98c1dfe0b8fab47c94b708780d168c8a0e1605d74e645ba58c5957620c07"
+    },
+    {
+      "unicode": "😋",
+      "file": "tg_emoji_070.tgs",
+      "name": "Face Savoring Food",
+      "sha256": "bc141a513dcf15c0d64b29cbd1c8cefd151783c612f50713bfa653c67f461ab4"
+    },
+    {
+      "unicode": "😝",
+      "file": "tg_emoji_071.tgs",
+      "name": "Squinting Face With Tongue",
+      "sha256": "9ed0178b0c8f1e1cbad0c0eaad9c26c9e8d9988bf7a4d2d7781c16e773d6cc63"
+    },
+    {
+      "unicode": "😉",
+      "file": "tg_emoji_072.tgs",
+      "name": "Winking Face",
+      "sha256": "795415035c79e3de4390dd65a10ad55e321977f5d2045bf7936e4737e2d54bef"
+    },
+    {
+      "unicode": "😏",
+      "file": "tg_emoji_073.tgs",
+      "name": "Smirking Face",
+      "sha256": "306b1ec24b8ab61263e91870343f63a4818295e9819673c27fb841b28e2ee7b5"
+    },
+    {
+      "unicode": "😚",
+      "file": "tg_emoji_074.tgs",
+      "name": "Kissing Face With Closed Eyes",
+      "sha256": "8edf4422c8cf9fccfbd698a0798d74e54615bea5330e903d0d6c92d70d52aac2"
+    },
+    {
+      "unicode": "😞",
+      "file": "tg_emoji_075.tgs",
+      "name": "Disappointed Face",
+      "sha256": "fa3d15672f2c86791ac48c4ac8b86db5319e0a8eaad8385b382bc1d518e7f925"
+    },
+    {
+      "unicode": "😕",
+      "file": "tg_emoji_076.tgs",
+      "name": "Confused Face",
+      "sha256": "131d4ce06279b4545e590211117245aaef0d3bf3e19971c2137befb8a7df111e"
+    },
+    {
+      "unicode": "😟",
+      "file": "tg_emoji_077.tgs",
+      "name": "Worried Face",
+      "sha256": "eb62d47a8f4bf08ed64635f4779b0082dc85889bca5224ef2f9bbe0bd54290d8"
+    },
+    {
+      "unicode": "😱",
+      "file": "tg_emoji_078.tgs",
+      "name": "Face Screaming In Fear",
+      "sha256": "c5a5d7fa931843653ab2b097907b82648275a9bf1d30d08550beeb89dc46c2ce"
+    },
+    {
+      "unicode": "☺",
+      "file": "tg_emoji_079.tgs",
+      "name": "Smiling Face",
+      "sha256": "f83c6f9b3a0592d714b00f3e268c414dc264a4a4bb0115de577b45ebc1fc045f"
+    },
+    {
+      "unicode": "😴",
+      "file": "tg_emoji_080.tgs",
+      "name": "Sleeping Face",
+      "sha256": "d2ca72595c67a1dc45c89936f7807b90c0be435a346b6a34090c242d21fa29d2"
+    },
+    {
+      "unicode": "😎",
+      "file": "tg_emoji_081.tgs",
+      "name": "Smiling Face With Sunglasses",
+      "sha256": "a755cf5750cda26e2304a7a851f19b2de5c943d9b5e0f77dfa17c667e589a335"
+    },
+    {
+      "unicode": "😿",
+      "file": "tg_emoji_082.tgs",
+      "name": "Crying Cat",
+      "sha256": "2bc8058de8eb2a48f9e8a7f8d75aceb1fa63a1516bb5d8ff2aa9e47cfa371530"
+    },
+    {
+      "unicode": "😺",
+      "file": "tg_emoji_083.tgs",
+      "name": "Grinning Cat",
+      "sha256": "b3ddf4040ccb4bb1f720b7ffa1dc82499e072d7a6274c2dc636cacee61812954"
+    },
+    {
+      "unicode": "😸",
+      "file": "tg_emoji_084.tgs",
+      "name": "Grinning Cat With Smiling Eyes",
+      "sha256": "8d3b9264e741a782c840a508d2a23cc6f48ca3e64efd8f4729cb469b2b13fb5e"
+    },
+    {
+      "unicode": "🙀",
+      "file": "tg_emoji_085.tgs",
+      "name": "Weary Cat",
+      "sha256": "efc243eb3d936902fd80e084e49d3d4c8f34a99c78486abbfb474750e55f2d48"
+    },
+    {
+      "unicode": "😹",
+      "file": "tg_emoji_086.tgs",
+      "name": "Cat With Tears Of Joy",
+      "sha256": "4250e621d7086a913e7e20f3e1859ac057899cb5eb9c47bafa423cedced311a4"
+    },
+    {
+      "unicode": "😽",
+      "file": "tg_emoji_087.tgs",
+      "name": "Kissing Cat",
+      "sha256": "1856791f88c53ae47cf48185baa81e91af13d41b92abba564f997a6b62802149"
+    },
+    {
+      "unicode": "😼",
+      "file": "tg_emoji_088.tgs",
+      "name": "Cat With Wry Smile",
+      "sha256": "508cbfb3e7ab2adcf7f7b93465c5658fc62f1d647cdf688a7e20d27698ed9048"
+    },
+    {
+      "unicode": "😾",
+      "file": "tg_emoji_089.tgs",
+      "name": "Pouting Cat",
+      "sha256": "e55a749a76643935efaf39c0ff92f948ea2f3ade673702a7e1e53ecd54a070f8"
+    },
+    {
+      "unicode": "🎊",
+      "file": "tg_emoji_090.tgs",
+      "name": "Confetti Ball",
+      "sha256": "79f4677f2a3d71079d503209b86148e9702f233bd9531e3cd78b0c60768e0544"
+    },
+    {
+      "unicode": "👿",
+      "file": "tg_emoji_091.tgs",
+      "name": "Angry Face With Horns",
+      "sha256": "e78a22c0ff7125850d3afe0c80fdd41eff2ad716e9fefb01769468022665be2e"
+    },
+    {
+      "unicode": "😈",
+      "file": "tg_emoji_092.tgs",
+      "name": "Smiling Face With Horns",
+      "sha256": "9c263f23e4054ee3403374808824806428bbbb7e7305bc7913e81fe530374349"
+    },
+    {
+      "unicode": "🔥",
+      "file": "tg_emoji_093.tgs",
+      "name": "Fire",
+      "sha256": "59e6f1788ea259b01a21e6484b1293a50645c8e4a97abace7cf06194267f4f4e"
+    },
+    {
+      "unicode": "😀",
+      "file": "tg_emoji_094.tgs",
+      "name": "Grinning Face",
+      "sha256": "761921586998ac383e334ed9efd4d797685b3b8206ee5b5be77531caac386a26"
+    },
+    {
+      "unicode": "😃",
+      "file": "tg_emoji_095.tgs",
+      "name": "Grinning Face With Big Eyes",
+      "sha256": "e7fd8de1c7a3521dc659a67571551f84cfb932f2d08878091e56230a9f498fda"
+    },
+    {
+      "unicode": "😆",
+      "file": "tg_emoji_096.tgs",
+      "name": "Grinning Squinting Face",
+      "sha256": "44049dca1463314b5a7f7aab2c6e08cd86dc5b057aac32e6a03b0680d1645133"
+    },
+    {
+      "unicode": "😅",
+      "file": "tg_emoji_097.tgs",
+      "name": "Grinning Face With Sweat",
+      "sha256": "0daf3614f5aadce90808e4c693b4094be9816122d7144f84986dd87de9bd9aa1"
+    },
+    {
+      "unicode": "🤣",
+      "file": "tg_emoji_098.tgs",
+      "name": "Rolling On The Floor Laughing",
+      "sha256": "f67dc31cf4254f87932de618bdb655b93292dc6a0605c8b1c8c94263ebfcb124"
+    },
+    {
+      "unicode": "🎂",
+      "file": "tg_emoji_099.tgs",
+      "name": "Birthday Cake",
+      "sha256": "11e5a99c2471f47a13fc5b0c13c0d67d5fc3ac366beb8d35124c881af6a513d5"
+    },
+    {
+      "unicode": "😄",
+      "file": "tg_emoji_100.tgs",
+      "name": "Grinning Face With Smiling Eyes",
+      "sha256": "c5c83f6c201b4c6ce4a234fc11da89eced92d7a863267634f9315b81bb2f8868"
+    },
+    {
+      "unicode": "🤬",
+      "file": "tg_emoji_101.tgs",
+      "name": "Face With Symbols On Mouth",
+      "sha256": "dab9ef85eb94bd2c0154c3e66ed1abe4d7f7c52db9077772748099c9ce3b0053"
+    },
+    {
+      "unicode": "😤",
+      "file": "tg_emoji_102.tgs",
+      "name": "Face With Steam From Nose",
+      "sha256": "516975a8665c668abcae0e06d5a81eb3d3f7ce94c37bbea44482eece9eb262c7"
+    },
+    {
+      "unicode": "🤪",
+      "file": "tg_emoji_103.tgs",
+      "name": "Zany Face",
+      "sha256": "1e66a11ede95ebc6fb1b11d0f9930a3d0b367a3ac12b1383601e71feea42f8c6"
+    },
+    {
+      "unicode": "😛",
+      "file": "tg_emoji_104.tgs",
+      "name": "Face With Tongue",
+      "sha256": "e7605c9ae466ede04150c074d33e9bea5381360be0a87a87ac127325fc6ff567"
+    },
+    {
+      "unicode": "🥵",
+      "file": "tg_emoji_105.tgs",
+      "name": "Hot Face",
+      "sha256": "746d9512d7b5fc53841a17aa0d8b5742e078b8fa5699c61f7cddd22305849ca7"
+    },
+    {
+      "unicode": "🥶",
+      "file": "tg_emoji_106.tgs",
+      "name": "Cold Face",
+      "sha256": "0bd588f57e9675bef8a3687b9b51725de14f1b79e09cee10a9dd9ac06413abe1"
+    },
+    {
+      "unicode": "🤯",
+      "file": "tg_emoji_107.tgs",
+      "name": "Exploding Head",
+      "sha256": "4ea44fdcea337f089099b24c9af8e09a03105e48b65b4e2c570d17ccc94a53cd"
+    },
+    {
+      "unicode": "🌕",
+      "file": "tg_emoji_108.tgs",
+      "name": "Full Moon",
+      "sha256": "8b28ef90c2195ac13f38798b69791b16f5370de45f909992d72a0289a2514851"
+    },
+    {
+      "unicode": "🌖",
+      "file": "tg_emoji_109.tgs",
+      "name": "Waning Gibbous Moon",
+      "sha256": "c90f7346bea20df031a53a98ad0b1bb0cd7c33974287cccb8c59299a6337a22b"
+    },
+    {
+      "unicode": "🌗",
+      "file": "tg_emoji_110.tgs",
+      "name": "Last Quarter Moon",
+      "sha256": "34975a15718fd2d046b5ba2abf7941dc61e25d7123407790d7e3fe461be85cc9"
+    },
+    {
+      "unicode": "🌘",
+      "file": "tg_emoji_111.tgs",
+      "name": "Waning Crescent Moon",
+      "sha256": "0967a62f0cc28712e685a11f6a82fce6677b1b801f9ed71b42c4afe49dffdb2a"
+    },
+    {
+      "unicode": "🌑",
+      "file": "tg_emoji_112.tgs",
+      "name": "New Moon",
+      "sha256": "b15143ae84dafad45fe9c7dfd1ea23f07daef72e9246ed3b40b2e67f614a45c8"
+    },
+    {
+      "unicode": "🌒",
+      "file": "tg_emoji_113.tgs",
+      "name": "Waxing Crescent Moon",
+      "sha256": "20f4656a611d5d488b30aa7d1966d8cc2e561c3ec56f01958c0ee4b16b0e89c0"
+    },
+    {
+      "unicode": "🌓",
+      "file": "tg_emoji_114.tgs",
+      "name": "First Quarter Moon",
+      "sha256": "f179732a4d6af3012db3f26df8271af8e2c5b5ebf6c7facfe8756b01b52f864f"
+    },
+    {
+      "unicode": "🌔",
+      "file": "tg_emoji_115.tgs",
+      "name": "Waxing Gibbous Moon",
+      "sha256": "0c108bbafbf05360e5fa02be22c0b4fc6fb157e984db9cb2e6271dd8445d8895"
+    },
+    {
+      "unicode": "🌞",
+      "file": "tg_emoji_116.tgs",
+      "name": "Sun With Face",
+      "sha256": "a8c13c658e59b64193e43dd1c19d71e919431a21528a43105610bebc8e2ea403"
+    },
+    {
+      "unicode": "🌝",
+      "file": "tg_emoji_117.tgs",
+      "name": "Full Moon Face",
+      "sha256": "b60aa830cf78484dc94ce4aa7775c60987c57e8c91801ec5aa448690ca11a376"
+    },
+    {
+      "unicode": "😇",
+      "file": "tg_emoji_118.tgs",
+      "name": "Smiling Face With Halo",
+      "sha256": "65c7e0f016bce4a4c469c353ed1bffc27914a702801d17ad81bf37cc900e3809"
+    },
+    {
+      "unicode": "😯",
+      "file": "tg_emoji_119.tgs",
+      "name": "Hushed Face",
+      "sha256": "47e1d248a3d4f40ba476aaba080b5fb6a2fbc07b8a54ebc6f1689d720ed436df"
+    },
+    {
+      "unicode": "😦",
+      "file": "tg_emoji_120.tgs",
+      "name": "Frowning Face With Open Mouth",
+      "sha256": "acb12315df7f178110e7b31aea7eadaf276b22f68b1247bda7940b97d144d766"
+    },
+    {
+      "unicode": "🥱",
+      "file": "tg_emoji_121.tgs",
+      "name": "Yawning Face",
+      "sha256": "0aef96c4844c004f9c6127d70576b5ca366830864a2cdd7fa7d809dac1990c84"
+    },
+    {
+      "unicode": "🚕",
+      "file": "tg_emoji_122.tgs",
+      "name": "Taxi",
+      "sha256": "f8c187a2fc727ef2e23ce3d345c3f6fa33017348f6231b3080bfc14aa6c064f9"
+    },
+    {
+      "unicode": "😲",
+      "file": "tg_emoji_123.tgs",
+      "name": "Astonished Face",
+      "sha256": "26b3a3f36e91614deace68059be4a8bc3e2765347c0510dd4ac32246887a1e88"
+    },
+    {
+      "unicode": "😊",
+      "file": "tg_emoji_124.tgs",
+      "name": "Smiling Face With Smiling Eyes",
+      "sha256": "2cca11f6d4e59998dd2ee43c5ec43ae3fe7ed8373159f5392446efad2e544af7"
+    },
+    {
+      "unicode": "🙂",
+      "file": "tg_emoji_125.tgs",
+      "name": "Slightly Smiling Face",
+      "sha256": "3d7fb3e4bdda6cc10668040536cf6b32e6b2b74e5c069cfbf33efe574a43245e"
+    },
+    {
+      "unicode": "🙃",
+      "file": "tg_emoji_126.tgs",
+      "name": "Upside-Down Face",
+      "sha256": "fb842994a9c3b4676d504158e7d5669cf94a5bf4148506d24ff0711627b48b6a"
+    },
+    {
+      "unicode": "😷",
+      "file": "tg_emoji_127.tgs",
+      "name": "Face With Medical Mask",
+      "sha256": "255a06f9b2741b40e9928b7a3efea04bc2cd21752d029f643e72b7c24abce3f9"
+    },
+    {
+      "unicode": "🌚",
+      "file": "tg_emoji_128.tgs",
+      "name": "New Moon Face",
+      "sha256": "8b155fe36c03e5bd7277d970cdd314e6563ac977cb152a1de5a4a970b210f52e"
+    },
+    {
+      "unicode": "🌛",
+      "file": "tg_emoji_129.tgs",
+      "name": "First Quarter Moon Face",
+      "sha256": "0ae4cb8e909373395c748b50ac291d60458a06104b121d6d6535d0f3d3a99c5b"
+    },
+    {
+      "unicode": "🌜",
+      "file": "tg_emoji_130.tgs",
+      "name": "Last Quarter Moon Face",
+      "sha256": "c579c3d2b35440e8432406dc4c8b35905cbbfb3047454ddf2abe5b794b03075b"
+    },
+    {
+      "unicode": "🧟‍♀",
+      "file": "tg_emoji_131.tgs",
+      "name": "Woman Zombie",
+      "sha256": "9c1630083b1425a0ee3474de6cd45926646d215a6904680166b967163e9daa37"
+    },
+    {
+      "unicode": "🧟",
+      "file": "tg_emoji_132.tgs",
+      "name": "Zombie",
+      "sha256": "2d9ac9543266ca8db60cf3fed2345b74d2c70b82925adc52a75854824c811c76"
+    },
+    {
+      "unicode": "🧛‍♀",
+      "file": "tg_emoji_133.tgs",
+      "name": "Woman Vampire",
+      "sha256": "7fb130f72141eeed036a6660d51831aa83d20dbc4c0dbfe6c66ad6a68f68422e"
+    },
+    {
+      "unicode": "🧛",
+      "file": "tg_emoji_134.tgs",
+      "name": "Vampire",
+      "sha256": "e75750e43c9ea5487169b8d4a5ea0448026523bd2f3c51c8b9ea68ddff682bbf"
+    },
+    {
+      "unicode": "🧛‍♂",
+      "file": "tg_emoji_135.tgs",
+      "name": "Man Vampire",
+      "sha256": "81a6107a871b09c796f516c89d19640326cf38bc52608337ab803786de8a7539"
+    },
+    {
+      "unicode": "🕷",
+      "file": "tg_emoji_136.tgs",
+      "name": "Spider",
+      "sha256": "93e960045258d392a9e1a714df168b1fb16ea5a23c5f55e62eec5489b41a58b7"
+    },
+    {
+      "unicode": "🦇",
+      "file": "tg_emoji_137.tgs",
+      "name": "Bat",
+      "sha256": "e8c61b1baf2f101fc3a1f25a7128530ad8d91ff9a62300765f0b6306084ebcf6"
+    },
+    {
+      "unicode": "⚰",
+      "file": "tg_emoji_138.tgs",
+      "name": "Coffin",
+      "sha256": "1358f7041c02be25a2bc0db6ec739b6649bce48d1352860989b148d149b6a861"
+    },
+    {
+      "unicode": "🕸",
+      "file": "tg_emoji_139.tgs",
+      "name": "Spider Web",
+      "sha256": "587c086c51eaafffb79ef8304eaaafd639dce30884d3efb4ea6c4d8188a10ee3"
+    },
+    {
+      "unicode": "😐",
+      "file": "tg_emoji_140.tgs",
+      "name": "Neutral Face",
+      "sha256": "5184199b2ae577967032a9203a78b6ea9c66caac2f64252702734ce394e5e87c"
+    },
+    {
+      "unicode": "👻",
+      "file": "tg_emoji_141.tgs",
+      "name": "Ghost",
+      "sha256": "6cab4928857eb4b6ba943460e3aa53ad650b100932cc709925d8524082742ded"
+    },
+    {
+      "unicode": "🧟‍♂",
+      "file": "tg_emoji_142.tgs",
+      "name": "Man Zombie",
+      "sha256": "2ef64810dd998a86e75f7cef504085a6a4080c265e8f0dd9fe22cd8a6bab61b1"
+    },
+    {
+      "unicode": "🗿",
+      "file": "tg_emoji_143.tgs",
+      "name": "Moai",
+      "sha256": "27257c56755055e68186a7570e2f3035e7793b41223487671f12e70f799e459b"
+    },
+    {
+      "unicode": "🎃",
+      "file": "tg_emoji_144.tgs",
+      "name": "Jack-O-Lantern",
+      "sha256": "53ed355b69d57a7981017079a8b3f6f8c9aadeb511f6d0676a1d85629a0ed550"
+    },
+    {
+      "unicode": "🤗",
+      "file": "tg_emoji_145.tgs",
+      "name": "Smiling Face With Open Hands",
+      "sha256": "9f1cf09f8bbd88f4c7ee8680192dc2f75d34f0a8a9548950cf7f79970283ebfd"
+    },
+    {
+      "unicode": "🥺",
+      "file": "tg_emoji_146.tgs",
+      "name": "Pleading Face",
+      "sha256": "3a4150a77f9027e36e0f021fa49eea4e9dee4899b4063737a31730d794a0938f"
+    },
+    {
+      "unicode": "🤠",
+      "file": "tg_emoji_147.tgs",
+      "name": "Cowboy Hat Face",
+      "sha256": "43f7c050a7909a7978e4ceb09f888cae0408582a3d78584655f5aea0981fde98"
+    },
+    {
+      "unicode": "🥴",
+      "file": "tg_emoji_148.tgs",
+      "name": "Woozy Face",
+      "sha256": "a69d4881d1077e88945533e6e4c5e1f9884342791c074ba14c3ffd5ad56fc5a8"
+    },
+    {
+      "unicode": "☠",
+      "file": "tg_emoji_149.tgs",
+      "name": "Skull And Crossbones",
+      "sha256": "f7ebe586d0b229d2bbb7888017fca1114182417415076f595854501df180ae4f"
+    },
+    {
+      "unicode": "🔍",
+      "file": "tg_emoji_150.tgs",
+      "name": "Magnifying Glass Tilted Left",
+      "sha256": "1e277a50d57db1181a77637afd493903f3c66836ab5f6d3fb3caf0477e5f0b66"
+    },
+    {
+      "unicode": "🔎",
+      "file": "tg_emoji_151.tgs",
+      "name": "Magnifying Glass Tilted Right",
+      "sha256": "165e1f86f980adc9044057f43f2af441e0dcb1547e7356f1cba536175885033c"
+    },
+    {
+      "unicode": "✨",
+      "file": "tg_emoji_152.tgs",
+      "name": "Sparkles",
+      "sha256": "0a433a3c4cfb59d7a5b78f49065c957cb9b045d7aa7e0cf401d54e9846c78a08"
+    },
+    {
+      "unicode": "🤫",
+      "file": "tg_emoji_153.tgs",
+      "name": "Shushing Face",
+      "sha256": "9e41603c81377451022888008c273ef25fc9119c1c43d1e7e0340cdd0430b42e"
+    },
+    {
+      "unicode": "💤",
+      "file": "tg_emoji_154.tgs",
+      "name": "Zzz",
+      "sha256": "734452d1c33cdb8e3dd918d3d677c6b56aed04ab954e43690ef906e867eb73ea"
+    },
+    {
+      "unicode": "🤑",
+      "file": "tg_emoji_155.tgs",
+      "name": "Money-Mouth Face",
+      "sha256": "c9678a2905f1f80139e1b1ed5cede912f09b55ae70540d89ceb3dbb7c7b276e9"
+    },
+    {
+      "unicode": "🤭",
+      "file": "tg_emoji_156.tgs",
+      "name": "Face With Hand Over Mouth",
+      "sha256": "b8d435cc2e8d50bf77836a46391f2397fa0db8b8022a54d229bf1436d5fc8f63"
+    },
+    {
+      "unicode": "⚡",
+      "file": "tg_emoji_157.tgs",
+      "name": "High Voltage",
+      "sha256": "7f84df43ab22fc57000122a7d143a2fce054bb5dda138b3027ec3130da55821b"
+    },
+    {
+      "unicode": "⭐",
+      "file": "tg_emoji_158.tgs",
+      "name": "Star",
+      "sha256": "cac90c0748ce96ac53031cc0cdb4fbb70b12c8412c3c184db40ce3496c53eba4"
+    },
+    {
+      "unicode": "🦾",
+      "file": "tg_emoji_159.tgs",
+      "name": "Mechanical Arm",
+      "sha256": "11fb1ad570cdd99c20bb7af258400e06f5ec53feabbc590fa514136d24cc6b74"
+    },
+    {
+      "unicode": "🎆",
+      "file": "tg_emoji_160.tgs",
+      "name": "Fireworks",
+      "sha256": "9e8f3d84b2cf6687d11b89b3a5a9843e16d19b6a8f2a479afba0df143d240158"
+    },
+    {
+      "unicode": "🤥",
+      "file": "tg_emoji_161.tgs",
+      "name": "Lying Face",
+      "sha256": "a976ebf9129c5d6a337ba8cc3011c28a2ce3f15520c020f05d58dd8b23eee977"
+    },
+    {
+      "unicode": "🎇",
+      "file": "tg_emoji_162.tgs",
+      "name": "Sparkler",
+      "sha256": "1e94c8b11efdeb4a1c371759a157043ba7c7afccb7d268641e3ea4c1fdfeaf69"
+    },
+    {
+      "unicode": "❄",
+      "file": "tg_emoji_163.tgs",
+      "name": "Snowflake",
+      "sha256": "de479f60457e69c5b41d04e6e499a56677560b68efdcf9147cb5e72aa6456e38"
+    },
+    {
+      "unicode": "🎅",
+      "file": "tg_emoji_164.tgs",
+      "name": "Santa Claus",
+      "sha256": "2fc438fc797d5c1bd0336183fe6458e13529d8e2f50f4b369bcca434dfc64865"
+    },
+    {
+      "unicode": "🤶",
+      "file": "tg_emoji_165.tgs",
+      "name": "Mrs. Claus",
+      "sha256": "3997bb4c1c5412d5604bbf4f557082b256fb5d70cbfa873e12d7e33b89639c02"
+    },
+    {
+      "unicode": "🤡",
+      "file": "tg_emoji_166.tgs",
+      "name": "Clown Face",
+      "sha256": "df1cc2b7980216a9f05a0688f349697fc36bd9860ee5f6feb668d5934dc53e3a"
+    },
+    {
+      "unicode": "🚗",
+      "file": "tg_emoji_167.tgs",
+      "name": "Automobile",
+      "sha256": "ac6bdc79a5b39ca6f7c8e036e83a4a8180d05ea6c89df2e43d0df39c8e605ad1"
+    },
+    {
+      "unicode": "🍾",
+      "file": "tg_emoji_168.tgs",
+      "name": "Bottle With Popping Cork",
+      "sha256": "009f29a092cb642251077a394a7d4b5714fe4fd149722ff5346358ca70bed097"
+    },
+    {
+      "unicode": "😗",
+      "file": "tg_emoji_169.tgs",
+      "name": "Kissing Face",
+      "sha256": "0eb36ca89557dfdd7e90c616d62c648f3d19e841a2809c53d28890bb5acd35a5"
+    },
+    {
+      "unicode": "😙",
+      "file": "tg_emoji_170.tgs",
+      "name": "Kissing Face With Smiling Eyes",
+      "sha256": "f6129fd373b6ae8af5fb0fc5aa7830aea9d56819e1a263bf3298edd41e1200ee"
+    },
+    {
+      "unicode": "🌟",
+      "file": "tg_emoji_171.tgs",
+      "name": "Glowing Star",
+      "sha256": "d9c5148b81834fbc107c139144b57e71a74be4a5339684ddab51cbbf3e9dce27"
+    },
+    {
+      "unicode": "💫",
+      "file": "tg_emoji_172.tgs",
+      "name": "Dizzy",
+      "sha256": "91a59aa154b83a05dc4f11ad4f0d030d8bba6650e85218073c2050752fdaab69"
+    },
+    {
+      "unicode": "💞",
+      "file": "tg_emoji_173.tgs",
+      "name": "Revolving Hearts",
+      "sha256": "6f908dadae1a08ddeea315f99278d23348a28a3b224b00ec260bd59c0875c1c6"
+    },
+    {
+      "unicode": "💗",
+      "file": "tg_emoji_174.tgs",
+      "name": "Growing Heart",
+      "sha256": "b743266ef673ef63e7526688b029a5b73667171025fbbef4ed5d9b7dfc240431"
+    },
+    {
+      "unicode": "💓",
+      "file": "tg_emoji_175.tgs",
+      "name": "Beating Heart",
+      "sha256": "f34006c421b94614631ed4111d4b1427a8d2f4654efca4b6987118eaf888e62d"
+    },
+    {
+      "unicode": "❣",
+      "file": "tg_emoji_176.tgs",
+      "name": "Heart Exclamation",
+      "sha256": "96db3a971b365f1e394fd7f994fa520dd350ef3a4e7163e010153ac35bbd2c19"
+    },
+    {
+      "unicode": "👮‍♀",
+      "file": "tg_emoji_177.tgs",
+      "name": "Woman Police Officer",
+      "sha256": "843f0b46fdcf58d8e396cc9bcb5f34ffcfdec53aa07dc4ccd0762efb53a65881"
+    },
+    {
+      "unicode": "🚓",
+      "file": "tg_emoji_178.tgs",
+      "name": "Police Car",
+      "sha256": "b42f14fa8254b23a869a03e168ee8260d2acbd791d5be1fd4b55f90fcfdda776"
+    },
+    {
+      "unicode": "🎮",
+      "file": "tg_emoji_179.tgs",
+      "name": "Video Game",
+      "sha256": "5f014a394a8af3e0accef9ed6a47366dad58056da678f7d727b1f07bca497114"
+    },
+    {
+      "unicode": "💖",
+      "file": "tg_emoji_180.tgs",
+      "name": "Sparkling Heart",
+      "sha256": "7c419136eaf4405450882f02953723ab78183cab7f451ac286fcc39153dbb536"
+    },
+    {
+      "unicode": "💕",
+      "file": "tg_emoji_181.tgs",
+      "name": "Two Hearts",
+      "sha256": "e8f13535fd8f8882b8e0c8602709949bbe1ec2549067fd0d1d4d873996c4cd99"
+    },
+    {
+      "unicode": "🤩",
+      "file": "tg_emoji_182.tgs",
+      "name": "Star-Struck",
+      "sha256": "8e913e7806e88d261cfc70e3dddbd48cd7e0add9b35636ed026252b224d2289e"
+    },
+    {
+      "unicode": "🥂",
+      "file": "tg_emoji_183.tgs",
+      "name": "Clinking Glasses",
+      "sha256": "6beea8fcb12b411a4acf925fc2226b1b68b90308e5f2fdca9ddfdee4a3608cde"
+    },
+    {
+      "unicode": "💉",
+      "file": "tg_emoji_184.tgs",
+      "name": "Syringe",
+      "sha256": "a9a81fcc78d219ef2def551451fffd2d88128118555b369d4591762629bb6c2a"
+    },
+    {
+      "unicode": "🥲",
+      "file": "tg_emoji_185.tgs",
+      "name": "Smiling Face With Tear",
+      "sha256": "1b0d3b4ac6816272b793a0c7f17aa0bd372415d0cd5ef0e2709e93075a6aabc7"
+    },
+    {
+      "unicode": "🤤",
+      "file": "tg_emoji_186.tgs",
+      "name": "Drooling Face",
+      "sha256": "f9ae054fa525baec36be61951de879887ebf9d716a5b47c18785dc1c290b5587"
+    },
+    {
+      "unicode": "🥸",
+      "file": "tg_emoji_187.tgs",
+      "name": "Disguised Face",
+      "sha256": "1d11f526cca29487420cba64f25e43c1623505374411ffb16a8c90f70d2809a7"
+    },
+    {
+      "unicode": "😬",
+      "file": "tg_emoji_188.tgs",
+      "name": "Grimacing Face",
+      "sha256": "b680913c2f0c2e88577ae99768a82ff7ce8e224d475d99bb89bb17208bd30191"
+    },
+    {
+      "unicode": "🤓",
+      "file": "tg_emoji_189.tgs",
+      "name": "Nerd Face",
+      "sha256": "b73dc97501dd84176886213887bbfbf2e49611427557db4c3acc0ad80b29bc72"
+    },
+    {
+      "unicode": "😑",
+      "file": "tg_emoji_190.tgs",
+      "name": "Expressionless Face",
+      "sha256": "79375e336022016203193ac92e7bba791baf92cd7a1d319dbc0caa43e6e85fdf"
+    },
+    {
+      "unicode": "❌",
+      "file": "tg_emoji_191.tgs",
+      "name": "Cross Mark",
+      "sha256": "759487b2ae6f96e5e68213a688f711d95f49b402861a9f8a42aa3a52c29c101b"
+    },
+    {
+      "unicode": "💯",
+      "file": "tg_emoji_192.tgs",
+      "name": "Hundred Points",
+      "sha256": "29fc2b6e6c243a1da9ed5b2e343828aa23cef8d55d022cf5105a7004fa3fdff5"
+    },
+    {
+      "unicode": "❗",
+      "file": "tg_emoji_193.tgs",
+      "name": "Red Exclamation Mark",
+      "sha256": "5ccbfe870c9149b923ad9e46d175bf1ca409a67b30566e7a6d997c9d06fcf735"
+    },
+    {
+      "unicode": "💢",
+      "file": "tg_emoji_194.tgs",
+      "name": "Anger Symbol",
+      "sha256": "208b799a7ecf9d211c523973ceb3a5315ee2890abd0cac5350abd1806ffeba5e"
+    },
+    {
+      "unicode": "♨",
+      "file": "tg_emoji_195.tgs",
+      "name": "Hot Springs",
+      "sha256": "9807bb046b55003f2f1fa4c9510d8c205281945a13986d5e94f6c4b335d2cff2"
+    },
+    {
+      "unicode": "💬",
+      "file": "tg_emoji_196.tgs",
+      "name": "Speech Balloon",
+      "sha256": "2837888077aa87bb314fe4b8d1b300b680f8a5f1eb5089348b244fbd49b21085"
+    },
+    {
+      "unicode": "💭",
+      "file": "tg_emoji_197.tgs",
+      "name": "Thought Balloon",
+      "sha256": "b715c4994275d6f5ecea024cd7db851d15f0dc3cdb9710b707ee9ad34e48c263"
+    },
+    {
+      "unicode": "🗯",
+      "file": "tg_emoji_198.tgs",
+      "name": "Right Anger Bubble",
+      "sha256": "dfd4c98514b3135ec24b3c17474285b9f1bdc7a5efe8e9c316aa8a9c0f6037a4"
+    },
+    {
+      "unicode": "🤟",
+      "file": "tg_emoji_199.tgs",
+      "name": "Love-You Gesture",
+      "sha256": "335e961fb37da0429efb50ae9d0a8ae08ba7f6dbbf5f88fff839725997123894"
+    },
+    {
+      "unicode": "❕",
+      "file": "tg_emoji_200.tgs",
+      "name": "White Exclamation Mark",
+      "sha256": "c13ec20e51159f49b1e0f447a5ccacfbfdc88d45d9b8f95bd64221f4c5f64f95"
+    },
+    {
+      "unicode": "❔",
+      "file": "tg_emoji_201.tgs",
+      "name": "White Question Mark",
+      "sha256": "66e7e6c2f0867c3095a70f8bb3fa3a3a08f27f8683515c06e4559ce099e619ee"
+    },
+    {
+      "unicode": "❓",
+      "file": "tg_emoji_202.tgs",
+      "name": "Red Question Mark",
+      "sha256": "ffd5e9ad3a2f9f81fa121897dcb8500e75e9daa0b026d05eb852d1970cc5e52e"
+    },
+    {
+      "unicode": "🗂",
+      "file": "tg_emoji_203.tgs",
+      "name": "Card Index Dividers",
+      "sha256": "942bf554b86662ddd916d909d2064af280276ab606803bdeae6a4598d9e17b52"
+    },
+    {
+      "unicode": "😶",
+      "file": "tg_emoji_204.tgs",
+      "name": "Face Without Mouth",
+      "sha256": "e78fc4ab8b28f29029aad94c294d46d0832cd62014e30b92d70e281a48bfde1a"
+    },
+    {
+      "unicode": "🦉",
+      "file": "tg_emoji_205.tgs",
+      "name": "Owl",
+      "sha256": "827fc4aded4a80068d1a71b6812b9a56a4841370649a5ab476b84cd20b92e143"
+    },
+    {
+      "unicode": "🌱",
+      "file": "tg_emoji_206.tgs",
+      "name": "Seedling",
+      "sha256": "992a7a1c52e5c12396a14d1305ba7787cda3338e8711b21d822c500ad8f95060"
+    },
+    {
+      "unicode": "🕺",
+      "file": "tg_emoji_207.tgs",
+      "name": "Man Dancing",
+      "sha256": "5f7ae96e02f01522cb7e45c01745367108fe88f9191a182b3d466c821c499caa"
+    },
+    {
+      "unicode": "🐣",
+      "file": "tg_emoji_208.tgs",
+      "name": "Hatching Chick",
+      "sha256": "40360a953b3ea02a22a96d0dd763025d92fa9e7f592268a09822aa0ac60a670b"
+    },
+    {
+      "unicode": "🌲",
+      "file": "tg_emoji_209.tgs",
+      "name": "Evergreen Tree",
+      "sha256": "e884acfe7b1187286f9d5db57a27f63137c195d42a12008a5630ff111b2a56d5"
+    },
+    {
+      "unicode": "🙁",
+      "file": "tg_emoji_210.tgs",
+      "name": "Slightly Frowning Face",
+      "sha256": "37932dacfc82056cfd73db32106e25b22faf5783df3c7fb98587e2d30d6d15fc"
+    },
+    {
+      "unicode": "💃",
+      "file": "tg_emoji_211.tgs",
+      "name": "Woman Dancing",
+      "sha256": "33064b6e5dccbb81d5153b00ace69e23e62a58fa1d87fcdfbd69547f5ef980ea"
+    },
+    {
+      "unicode": "☹",
+      "file": "tg_emoji_212.tgs",
+      "name": "Frowning Face",
+      "sha256": "b56ad6135891e36bb347f10ecf56e8f862af552c55624c03ea83f09d28843e72"
+    },
+    {
+      "unicode": "🌺",
+      "file": "tg_emoji_213.tgs",
+      "name": "Hibiscus",
+      "sha256": "6e298cc8e36d183866caab948f269f96f8b5e740de532cd0c4f95ebc37250eaf"
+    },
+    {
+      "unicode": "🌿",
+      "file": "tg_emoji_214.tgs",
+      "name": "Herb",
+      "sha256": "023f9519b324693c9f00cebdecd98a9151a79702ec2b583e18199621ca2f9f17"
+    },
+    {
+      "unicode": "🌵",
+      "file": "tg_emoji_215.tgs",
+      "name": "Cactus",
+      "sha256": "26c7262265da3beb403630038c4522be63b8e894a4d44b9baf8b266378791d94"
+    },
+    {
+      "unicode": "🌴",
+      "file": "tg_emoji_216.tgs",
+      "name": "Palm Tree",
+      "sha256": "ad2a59d03506e415302f4bd9f8520717c4a7fb3a162969809c46a30eb77a3719"
+    },
+    {
+      "unicode": "🌳",
+      "file": "tg_emoji_217.tgs",
+      "name": "Deciduous Tree",
+      "sha256": "fd9c5b6f7146aae0741f32909489f23a65ae199f2463fa319f455a0e608e216e"
+    },
+    {
+      "unicode": "💥",
+      "file": "tg_emoji_218.tgs",
+      "name": "Collision",
+      "sha256": "9766547a01cee3a84488c8cb436728603df725bfd70746df9cdaf50ec547d8a3"
+    },
+    {
+      "unicode": "👑",
+      "file": "tg_emoji_219.tgs",
+      "name": "Crown",
+      "sha256": "72cda60cb25a08e412204c4a64f8434cac40c84c7e06763d4254a54e827d86aa"
+    },
+    {
+      "unicode": "🏠",
+      "file": "tg_emoji_220.tgs",
+      "name": "House",
+      "sha256": "e106a746cfb943e3020e0a8cc8d312fa1198d349fce8d6ae976347cf297e4495"
+    },
+    {
+      "unicode": "😰",
+      "file": "tg_emoji_221.tgs",
+      "name": "Anxious Face With Sweat",
+      "sha256": "00e2193e99acdb8f92bb3c6607463dcbf3faea51a4bbb124c325043527f86666"
+    },
+    {
+      "unicode": "😓",
+      "file": "tg_emoji_222.tgs",
+      "name": "Downcast Face With Sweat",
+      "sha256": "d58ae87c2c6135e9043d9f85fda9f9e672760a0d63f3aaaf2881e208dc9d3bf3"
+    },
+    {
+      "unicode": "👩‍💻",
+      "file": "tg_emoji_223.tgs",
+      "name": "Woman Technologist",
+      "sha256": "9974fd9dd94ee0c7308b44c7f4edf50f9ea7e2169659c1e43863553829553cff"
+    },
+    {
+      "unicode": "🧑‍💻",
+      "file": "tg_emoji_224.tgs",
+      "name": "Technologist",
+      "sha256": "04c1bd5cfc5b6c26b8daf6bf38d14323c00d15271cc140e2863245b4bfa67a7b"
+    },
+    {
+      "unicode": "👨‍💻",
+      "file": "tg_emoji_225.tgs",
+      "name": "Man Technologist",
+      "sha256": "0e97f815a349ef22b36b18638fc6aae1ce79ac84e7c4875fb440ecb5ce089866"
+    },
+    {
+      "unicode": "👵",
+      "file": "tg_emoji_226.tgs",
+      "name": "Old Woman",
+      "sha256": "ceec8634a265ce744bc0cbf193703235cc23f9d093457a46beee0a9088f3bb03"
+    },
+    {
+      "unicode": "😪",
+      "file": "tg_emoji_227.tgs",
+      "name": "Sleepy Face",
+      "sha256": "862f28874adf8a94b1072f71195daa6cc30f8415ad1be050513cf6817227ad3b"
+    },
+    {
+      "unicode": "✍",
+      "file": "tg_emoji_228.tgs",
+      "name": "Writing Hand",
+      "sha256": "655976b747655d0fddf9d2aa60acf885128ad42a6e09170d9529ad3cfe01d8b0"
+    },
+    {
+      "unicode": "😫",
+      "file": "tg_emoji_229.tgs",
+      "name": "Tired Face",
+      "sha256": "50fe3b1676656b4d7164b7b1c9784490cd9dd12096c3c808ecab40c8d667ef52"
+    },
+    {
+      "unicode": "🏖",
+      "file": "tg_emoji_230.tgs",
+      "name": "Beach With Umbrella",
+      "sha256": "de38796873058779791fc83ca0cac6b37547021976ca33c09024686b24eb3249"
+    },
+    {
+      "unicode": "😨",
+      "file": "tg_emoji_231.tgs",
+      "name": "Fearful Face",
+      "sha256": "01fd9a011f651f5875e0e7ab955d2962cb0981646d58b6c1dded946ca11ebd10"
+    },
+    {
+      "unicode": "🌷",
+      "file": "tg_emoji_232.tgs",
+      "name": "Tulip",
+      "sha256": "6c6f7279eb1412d9bf51d1bd2041883af1986e52f96ae33d7628d7c353c45982"
+    },
+    {
+      "unicode": "💩",
+      "file": "tg_emoji_233.tgs",
+      "name": "Pile Of Poo",
+      "sha256": "22e73314eabadb21b188e06cc12d3061e7886f5bbc07486609cece9fa86ac566"
+    },
+    {
+      "unicode": "🎉",
+      "file": "tg_emoji_234.tgs",
+      "name": "Party Popper",
+      "sha256": "bc5b17d266c7ab351e88ff2da9ab45add8f608ea85ea4ab4340bc4aa8fc7cd02"
+    },
+    {
+      "unicode": "💟",
+      "file": "tg_emoji_235.tgs",
+      "name": "Heart Decoration",
+      "sha256": "7ac65197436b84cbcef0f0817cfb0793579bf1e0646b85fe27e21ee2880c7455"
+    },
+    {
+      "unicode": "🎈",
+      "file": "tg_emoji_236.tgs",
+      "name": "Balloon",
+      "sha256": "f84dd7b3d4da5377b41427c26b9d7fab17fe42712a1eee014e7f17fe2b22df63"
+    },
+    {
+      "unicode": "😖",
+      "file": "tg_emoji_237.tgs",
+      "name": "Confounded Face",
+      "sha256": "923a2c44bc7304a8ac77341eba61d1abcd5123246e2c8552a7add7f1df8e738a"
+    },
+    {
+      "unicode": "😩",
+      "file": "tg_emoji_238.tgs",
+      "name": "Weary Face",
+      "sha256": "1b10fb86859fd97417887fafd70e4fb1424270403203ec107751f87acf5835a5"
+    },
+    {
+      "unicode": "🐥",
+      "file": "tg_emoji_239.tgs",
+      "name": "Front-Facing Baby Chick",
+      "sha256": "bdb02a7c9eac96abc1e0e97e9037b239a6d90d4c5fc660cd07c415008d860bbd"
+    },
+    {
+      "unicode": "🤐",
+      "file": "tg_emoji_240.tgs",
+      "name": "Zipper-Mouth Face",
+      "sha256": "e44cd07ea4533c1c53c948c5188f4eefc344be5b42323ce116655f8c524c6fe2"
+    },
+    {
+      "unicode": "😂",
+      "file": "tg_emoji_241.tgs",
+      "name": "Face With Tears Of Joy",
+      "sha256": "098e50dfc55eaccd259355f57d8c285d158298e219ac156fc1d41bc8cfae21ab"
+    },
+    {
+      "unicode": "🎨",
+      "file": "tg_emoji_242.tgs",
+      "name": "Artist Palette",
+      "sha256": "84c170a1c72c5291ca61430dc575a6dd3a6a391715c36ee77e59a280e5fa1d0c"
+    },
+    {
+      "unicode": "🌹",
+      "file": "tg_emoji_243.tgs",
+      "name": "Rose",
+      "sha256": "5c7b8e0ae278d42cff6f665f80f727d982a78b30f37ebb69dace72dbc84bd4f9"
+    },
+    {
+      "unicode": "🌸",
+      "file": "tg_emoji_244.tgs",
+      "name": "Cherry Blossom",
+      "sha256": "1e996862996382913c3b018ff0de0d9f335dc7ffebc231ad30ece2dfb38e87fb"
+    },
+    {
+      "unicode": "🤖",
+      "file": "tg_emoji_245.tgs",
+      "name": "Robot",
+      "sha256": "a9aaab6c911ba51cf1f73781dcb060c2f7d2e8e36256fde650dcc43273f418bf"
+    },
+    {
+      "unicode": "💻",
+      "file": "tg_emoji_246.tgs",
+      "name": "Laptop",
+      "sha256": "5d12113413ca484491f78cc47094238a1a2e3cda4738f20ac284b9396a334196"
+    },
+    {
+      "unicode": "☝",
+      "file": "tg_emoji_247.tgs",
+      "name": "Index Pointing Up",
+      "sha256": "cc96732da287344bf24897879fca28ba76dd8dc1cf8d0fd0de4ed43c83e1b7cb"
+    },
+    {
+      "unicode": "✊",
+      "file": "tg_emoji_248.tgs",
+      "name": "Raised Fist",
+      "sha256": "1fa048f58bf790ed33b5af14d26c859d9073c04d480bebcad02386ee1d4a8037"
+    },
+    {
+      "unicode": "✋",
+      "file": "tg_emoji_249.tgs",
+      "name": "Raised Hand",
+      "sha256": "8427fa182c45b8ed772294a70a6c4ae93e8a5f5c13d336e49864fb85f370c6c9"
+    },
+    {
+      "unicode": "✌",
+      "file": "tg_emoji_250.tgs",
+      "name": "Victory Hand",
+      "sha256": "d85ecadca898cceb912cbdceac8431d16e8992f264a84f9f6d0e925057a8743a"
+    },
+    {
+      "unicode": "👂",
+      "file": "tg_emoji_251.tgs",
+      "name": "Ear",
+      "sha256": "2a89b1d627e2e8d29a96c8af99b9bed6071062de36a19e6491d233eee94470df"
+    },
+    {
+      "unicode": "👃",
+      "file": "tg_emoji_252.tgs",
+      "name": "Nose",
+      "sha256": "fb95167ac9383e9355ff5ace601ec04af03843675999d71eef3278a1f7f9ebdc"
+    },
+    {
+      "unicode": "👆",
+      "file": "tg_emoji_253.tgs",
+      "name": "Backhand Index Pointing Up",
+      "sha256": "dae5492e5d3fef7562b3c4d10afa5174ee3b9b2e872ed3b910a322819bec1d40"
+    },
+    {
+      "unicode": "👇",
+      "file": "tg_emoji_254.tgs",
+      "name": "Backhand Index Pointing Down",
+      "sha256": "dbcc1d4ca146ea88143189404f58d67444f7ef944454f5e7f366be75e89b6dcb"
+    },
+    {
+      "unicode": "👈",
+      "file": "tg_emoji_255.tgs",
+      "name": "Backhand Index Pointing Left",
+      "sha256": "380a2003079cf8d635152cdc8186bf8ad5680f1c92ef0c1fcac6af01f660a243"
+    },
+    {
+      "unicode": "👉",
+      "file": "tg_emoji_256.tgs",
+      "name": "Backhand Index Pointing Right",
+      "sha256": "b49626971220bf89aa31829b4715c8c88f186e313c41416904874551bd88e256"
+    },
+    {
+      "unicode": "👊",
+      "file": "tg_emoji_257.tgs",
+      "name": "Oncoming Fist",
+      "sha256": "2fbe91f636355c7d42bb89085a76cf75fff7305fb1f7245fe57faf79a7b82af9"
+    },
+    {
+      "unicode": "👋",
+      "file": "tg_emoji_258.tgs",
+      "name": "Waving Hand",
+      "sha256": "4f6b8b281cacc15d412a47b7291f670073602cf769b71308b13ef109470e455c"
+    },
+    {
+      "unicode": "👌",
+      "file": "tg_emoji_259.tgs",
+      "name": "Ok Hand",
+      "sha256": "5c692a545e3a723981081c980bdaef4629e1809fb989a874cc0f46f0d8d1e3c3"
+    },
+    {
+      "unicode": "👍",
+      "file": "tg_emoji_260.tgs",
+      "name": "Thumbs Up",
+      "sha256": "50316904646ba286a2f8f2191fd31c39947780128e7fc4870d355c396469703b"
+    },
+    {
+      "unicode": "👎",
+      "file": "tg_emoji_261.tgs",
+      "name": "Thumbs Down",
+      "sha256": "90c4ed046ea8c6a2ee19aa0b12fa7113b18b6d3309ce0d6c7e1867c93d819b3d"
+    },
+    {
+      "unicode": "👏",
+      "file": "tg_emoji_262.tgs",
+      "name": "Clapping Hands",
+      "sha256": "50439d8025ad42881be4c28877064ff1eaf1be9432c3838d6cd2b6e3cf556707"
+    },
+    {
+      "unicode": "👐",
+      "file": "tg_emoji_263.tgs",
+      "name": "Open Hands",
+      "sha256": "909390da6f5b338faf91eb0304e7c0f022164625e3e6f119a45dde09f4a46fb5"
+    },
+    {
+      "unicode": "💪",
+      "file": "tg_emoji_264.tgs",
+      "name": "Flexed Biceps",
+      "sha256": "1bd94380f7dfacc0695176abdcc24935687657608665caf0e19d96ee8af33e14"
+    },
+    {
+      "unicode": "🖕",
+      "file": "tg_emoji_265.tgs",
+      "name": "Middle Finger",
+      "sha256": "7700dec47dcfe81ac90c2188445109b414182ec05039367e83e9ca95117d5db7"
+    },
+    {
+      "unicode": "🖖",
+      "file": "tg_emoji_266.tgs",
+      "name": "Vulcan Salute",
+      "sha256": "3326b89d2aea84a7ee4c2eeed748703317c03fdf94267aea795ed812297f382a"
+    },
+    {
+      "unicode": "🤌",
+      "file": "tg_emoji_267.tgs",
+      "name": "Pinched Fingers",
+      "sha256": "973dadb3b810013a5ce0e1acbad4ca0570c18e93c4ad06d3adefaa32286d1677"
+    },
+    {
+      "unicode": "🤏",
+      "file": "tg_emoji_268.tgs",
+      "name": "Pinching Hand",
+      "sha256": "14b896b0dde1c2cbe34c09eda655e07179698b61302970efe608ae865c98d44b"
+    },
+    {
+      "unicode": "🤘",
+      "file": "tg_emoji_269.tgs",
+      "name": "Sign Of The Horns",
+      "sha256": "2d09630255b5d273da8ac8cfe5bcd8a12332e174d52763042a9996482f6baa63"
+    },
+    {
+      "unicode": "🤙",
+      "file": "tg_emoji_270.tgs",
+      "name": "Call Me Hand",
+      "sha256": "154db5c2cf7fed8a20146c9967e92cedcf306df1a9fd246eef621a2743fa6e1b"
+    },
+    {
+      "unicode": "🤚",
+      "file": "tg_emoji_271.tgs",
+      "name": "Raised Back Of Hand",
+      "sha256": "9fc0c658a0e3aa0306ceded00099d51a698a0d59251bb56ad61a83c1a283c8f6"
+    },
+    {
+      "unicode": "🤛",
+      "file": "tg_emoji_272.tgs",
+      "name": "Left-Facing Fist",
+      "sha256": "f3956e1159ff2145140a4e9264f336672809437a2cb91b3a26bb725d97272a27"
+    },
+    {
+      "unicode": "🤜",
+      "file": "tg_emoji_273.tgs",
+      "name": "Right-Facing Fist",
+      "sha256": "925d87d1fb2779cca52c46e43ef4c3abac71ca995f3af596d3edb9f80b9c9c1a"
+    },
+    {
+      "unicode": "🤝",
+      "file": "tg_emoji_274.tgs",
+      "name": "Handshake",
+      "sha256": "4aa11c5825f2315c03442fb045fa290689be24b31097d621cf7ab29e141c1b0c"
+    },
+    {
+      "unicode": "🤞",
+      "file": "tg_emoji_275.tgs",
+      "name": "Crossed Fingers",
+      "sha256": "0d17848a8d731f9d70ade22c3d8f191371af20a85f8e608df4df7a68ec03839d"
+    },
+    {
+      "unicode": "🤲",
+      "file": "tg_emoji_276.tgs",
+      "name": "Palms Up Together",
+      "sha256": "6a39523d644ed5f45d5ef22a68a7cd7e18fbfbe6bae993eb05b3f63b5d3c4ab6"
+    },
+    {
+      "unicode": "🦻",
+      "file": "tg_emoji_277.tgs",
+      "name": "Ear With Hearing Aid",
+      "sha256": "ef5e5dbf170fe373961e0ab1f024f1d998e69c23e827b01c9381c886b45ab3f1"
+    },
+    {
+      "unicode": "🙌",
+      "file": "tg_emoji_278.tgs",
+      "name": "Raising Hands",
+      "sha256": "d40837f1c78dc9b97226ac5cb548ce81d6442070d8a99d113a6a6b93e0845786"
+    },
+    {
+      "unicode": "🙏",
+      "file": "tg_emoji_279.tgs",
+      "name": "Folded Hands",
+      "sha256": "e98c80726b59c00bbae89fcf0ba6162855101a43d6ecf73b49ac87786784b51c"
+    },
+    {
+      "unicode": "🦶",
+      "file": "tg_emoji_280.tgs",
+      "name": "Foot",
+      "sha256": "3b49fe8366da3b11183cb2d71fb2610b2770d5736f65d246db80779072c0e811"
+    },
+    {
+      "unicode": "🏝",
+      "file": "tg_emoji_281.tgs",
+      "name": "Desert Island",
+      "sha256": "7b9c32bc12dbc7eb8ec149d2bf3f74297394f48a021f61932f35d0a0b666cc4d"
+    },
+    {
+      "unicode": "📊",
+      "file": "tg_emoji_282.tgs",
+      "name": "Bar Chart",
+      "sha256": "e2dd87e7f928434336c9c135ca011e0aee7d5cf27026c9e30d408e2a6099a9e3"
+    },
+    {
+      "unicode": "🕊",
+      "file": "tg_emoji_283.tgs",
+      "name": "Dove",
+      "sha256": "388d8a8a208a539725acfd19e56a5618fa744980cad902f9105b35685916299b"
+    },
+    {
+      "unicode": "🦵",
+      "file": "tg_emoji_284.tgs",
+      "name": "Leg",
+      "sha256": "ebc04dcacdfd65befcc71614d12e2b73d8202092df93693f40ada1affefa1c66"
+    },
+    {
+      "unicode": "🦿",
+      "file": "tg_emoji_285.tgs",
+      "name": "Mechanical Leg",
+      "sha256": "3d33040ff43c5fa24a64f88eea0c451d42845a5cfcd757119999523a7cd7c5ca"
+    },
+    {
+      "unicode": "🍿",
+      "file": "tg_emoji_286.tgs",
+      "name": "Popcorn",
+      "sha256": "ba3f5e5440a055f6f3f84844e0e1cab3f3cc9f9feb8171e3eab5aef69eea429c"
+    },
+    {
+      "unicode": "🌭",
+      "file": "tg_emoji_287.tgs",
+      "name": "Hot Dog",
+      "sha256": "229a90e3653bed96e1fd26904b157ff405e733f6b9b3595278f2d3b74eeba148"
+    },
+    {
+      "unicode": "🌮",
+      "file": "tg_emoji_288.tgs",
+      "name": "Taco",
+      "sha256": "485020dbdedd8d9b31d4b274ef815d30b23ee2adff7c714cac6bdda890c582e7"
+    },
+    {
+      "unicode": "🍮",
+      "file": "tg_emoji_289.tgs",
+      "name": "Custard",
+      "sha256": "72e53595c2ff7f6ae269c0d3b750b110e8cdc87551a6cbfbefabb10274cf1ac8"
+    },
+    {
+      "unicode": "🍰",
+      "file": "tg_emoji_290.tgs",
+      "name": "Shortcake",
+      "sha256": "6dddd404afe2cbe1cef7fd2bd13f99bf2afd8e7bcc4bef246118608a0e03c28f"
+    },
+    {
+      "unicode": "🍕",
+      "file": "tg_emoji_291.tgs",
+      "name": "Pizza",
+      "sha256": "47c15e86412d50eb793b0846864b5c883a5970333c8985e3619a29ae8d07d218"
+    },
+    {
+      "unicode": "🍟",
+      "file": "tg_emoji_292.tgs",
+      "name": "French Fries",
+      "sha256": "f4608bbbe3b609893b049ceaa6f9475dc8c84c527b2e5a61430c2b8988e322b7"
+    },
+    {
+      "unicode": "🍔",
+      "file": "tg_emoji_293.tgs",
+      "name": "Hamburger",
+      "sha256": "ac3f1ba4e4e1e89eeb60743b2d1ea77b4e592f56b187615b5d171571671d2a0e"
+    },
+    {
+      "unicode": "🍪",
+      "file": "tg_emoji_294.tgs",
+      "name": "Cookie",
+      "sha256": "a26cf7514d5d44702ecb65659be03fba4d86dd74a3f5cb170de045682d9d087e"
+    },
+    {
+      "unicode": "🥤",
+      "file": "tg_emoji_295.tgs",
+      "name": "Cup With Straw",
+      "sha256": "af5db008a03638baace04c3ae52d343a2d576ced1d14356b3c6567010bf314e4"
+    },
+    {
+      "unicode": "☎",
+      "file": "tg_emoji_296.tgs",
+      "name": "Telephone",
+      "sha256": "65acf27a967c6b6f1e360c7c8b2b1454b4ac838f7f96fbceab9c5b77e83fa51e"
+    },
+    {
+      "unicode": "📞",
+      "file": "tg_emoji_297.tgs",
+      "name": "Telephone Receiver",
+      "sha256": "77aa0866dd5845d343a8bd4871ea12f0742ad992e72e531bb0395b9422477f95"
+    },
+    {
+      "unicode": "🍦",
+      "file": "tg_emoji_298.tgs",
+      "name": "Soft Ice Cream",
+      "sha256": "3ab391bced039c07d3388d525a5a83a2ab82922e351a403b50f9b16a45ed03f3"
+    },
+    {
+      "unicode": "🍩",
+      "file": "tg_emoji_299.tgs",
+      "name": "Doughnut",
+      "sha256": "67e9836f32d9cccb25d3a129bf93661718201b0c11db15ac3f1807b78c6d8773"
+    },
+    {
+      "unicode": "🥞",
+      "file": "tg_emoji_300.tgs",
+      "name": "Pancakes",
+      "sha256": "7ba0eabc1475df5ca9216e1407edaa4cfa6a7aa1aad67edb90228e2c79e997bb"
+    },
+    {
+      "unicode": "🍢",
+      "file": "tg_emoji_301.tgs",
+      "name": "Oden",
+      "sha256": "7c7157a24d7a50458259121b4776a8620dff5cbf77d9c1b424d3e49792c59662"
+    },
+    {
+      "unicode": "🥧",
+      "file": "tg_emoji_302.tgs",
+      "name": "Pie",
+      "sha256": "b10aabda09219a6460331d3c2decbaec8594a4ed2ec18716592af0a7e0672cec"
+    },
+    {
+      "unicode": "🎢",
+      "file": "tg_emoji_303.tgs",
+      "name": "Roller Coaster",
+      "sha256": "cfb034c0602c3e596b93890ba3ac90a5d6b5fe7b803ae2cb619a7febcbb57c6c"
+    },
+    {
+      "unicode": "❤‍🔥",
+      "file": "tg_emoji_304.tgs",
+      "name": "Heart On Fire",
+      "sha256": "def00f63c74cfaa1ad5cefe3c38f8e16a9762678d35533ecf047e7eed854eedc"
+    },
+    {
+      "unicode": "❤‍🩹",
+      "file": "tg_emoji_305.tgs",
+      "name": "Mending Heart",
+      "sha256": "fe8f43369453485e090ac8bb4256c4ce22c3c0acc407936b4029bd7a04d1333e"
+    },
+    {
+      "unicode": "🐳",
+      "file": "tg_emoji_306.tgs",
+      "name": "Spouting Whale",
+      "sha256": "95d332da482aa988603a93315df847898f5f3f7b89222700f87ba3a79ccf46d2"
+    },
+    {
+      "unicode": "🍡",
+      "file": "tg_emoji_307.tgs",
+      "name": "Dango",
+      "sha256": "f314dda9b2c9d83265dfc0deaf7c3da175dcfdb055fa538a91d1f2cd896ea411"
+    },
+    {
+      "unicode": "🤨",
+      "file": "tg_emoji_308.tgs",
+      "name": "Face With Raised Eyebrow",
+      "sha256": "f2a02dd89f1f55ec06c2510921bba3bcdbc324325376ad6b9ae3bdc34b727853"
+    },
+    {
+      "unicode": "🏆",
+      "file": "tg_emoji_309.tgs",
+      "name": "Trophy",
+      "sha256": "d078a783f29230c74f114a8622176d20d2e520b02d10211a72e018760db06ea9"
+    },
+    {
+      "unicode": "🍌",
+      "file": "tg_emoji_310.tgs",
+      "name": "Banana",
+      "sha256": "a34fdfe8512dced53e62114f351a2ff6a142a95c3f8504de7dd5242299aee48d"
+    },
+    {
+      "unicode": "👾",
+      "file": "tg_emoji_311.tgs",
+      "name": "Alien Monster",
+      "sha256": "7e6cee81f256278ff1bef2612e6ecece922d835ce5fe858ca66eb98b448c26a0"
+    },
+    {
+      "unicode": "👹",
+      "file": "tg_emoji_312.tgs",
+      "name": "Ogre",
+      "sha256": "f91b639de92d6774fa98143e224b6d52c25344929bf8ffaef5d0ec9ebc5a1d3a"
+    },
+    {
+      "unicode": "👺",
+      "file": "tg_emoji_313.tgs",
+      "name": "Goblin",
+      "sha256": "a7fa6d176df700414fa57750867f7c8498c32e1de0e1bbc58915d15019a9ba36"
+    },
+    {
+      "unicode": "👽",
+      "file": "tg_emoji_314.tgs",
+      "name": "Alien",
+      "sha256": "1211559b0ccacbea5ca9bdc1ed72b1fa69910eea48cdd26719c69bfb9d5e01fc"
+    },
+    {
+      "unicode": "🫠",
+      "file": "tg_emoji_315.tgs",
+      "name": "Melting Face",
+      "sha256": "5656c3cfc1d4954d6c68f72ed6956977c4b1a0c0f1b662505f759d4e6e43646c"
+    },
+    {
+      "unicode": "🫡",
+      "file": "tg_emoji_316.tgs",
+      "name": "Saluting Face",
+      "sha256": "d98e1123205523b822485644275ee9085ca78d25de11e45c75ec205b82cfabbe"
+    },
+    {
+      "unicode": "🫣",
+      "file": "tg_emoji_317.tgs",
+      "name": "Face With Peeking Eye",
+      "sha256": "5631dcc84d092893ea176695747f68c3b6d287f11c7cf306e0b0533511faf80c"
+    },
+    {
+      "unicode": "🥹",
+      "file": "tg_emoji_318.tgs",
+      "name": "Face Holding Back Tears",
+      "sha256": "a7cb38e2ad3a189aa4b3d125bd7ac23096569d76d3fc0c47103c41a623661423"
+    },
+    {
+      "unicode": "🫤",
+      "file": "tg_emoji_319.tgs",
+      "name": "Face With Diagonal Mouth",
+      "sha256": "f45d9f877fe46e4944f33ba272e066b002ba1d592a30405daab071c14bb30d6c"
+    },
+    {
+      "unicode": "🫢",
+      "file": "tg_emoji_320.tgs",
+      "name": "Face With Open Eyes And Hand Over Mouth",
+      "sha256": "ef5b7181530a6338c7c8ba2199a5285cbc0bf0a9122ee716ca8e85da8dc7241d"
+    },
+    {
+      "unicode": "🫥",
+      "file": "tg_emoji_321.tgs",
+      "name": "Dotted Line Face",
+      "sha256": "5d7d39a99e93aa8b31a401bd8d01bd894d1dfd0efeded53486b01634ddfab9d7"
+    },
+    {
+      "unicode": "😠",
+      "file": "tg_emoji_322.tgs",
+      "name": "Angry Face",
+      "sha256": "61cb374e90448cfd20fca93f6c68209f638a9dbd5970f452db8491c0a33dfc40"
+    },
+    {
+      "unicode": "😥",
+      "file": "tg_emoji_323.tgs",
+      "name": "Sad But Relieved Face",
+      "sha256": "a9abb60a203f3bccc037e6dbca3750e67a5239830fb46aeeee8085deba57ff30"
+    },
+    {
+      "unicode": "😣",
+      "file": "tg_emoji_324.tgs",
+      "name": "Persevering Face",
+      "sha256": "2604f86796e56f55aa4f9338591c35e151bb04a15183c95d037cd81fb47aa34e"
+    },
+    {
+      "unicode": "😮‍💨",
+      "file": "tg_emoji_325.tgs",
+      "name": "Face Exhaling",
+      "sha256": "de02edb59fca231ced3e08b1d5b0e14fc8d4027a00a573f2a2f5a25744b4772c"
+    },
+    {
+      "unicode": "😶‍🌫",
+      "file": "tg_emoji_326.tgs",
+      "name": "Face In Clouds",
+      "sha256": "b17e739026fce2fb214f0b320f2bf7f7533f1f610252b96bd2241c8b6ccfcbe3"
+    },
+    {
+      "unicode": "😵",
+      "file": "tg_emoji_327.tgs",
+      "name": "Face With Crossed-Out Eyes",
+      "sha256": "613afe343a179013b88497ed1675875845266df6c3f206fed3a16f904e185612"
+    },
+    {
+      "unicode": "😵‍💫",
+      "file": "tg_emoji_328.tgs",
+      "name": "Face With Spiral Eyes",
+      "sha256": "4c539f9749c845f5f07655f5a8f6ff230b6e57d4958f1a294f80661a589d206a"
+    },
+    {
+      "unicode": "🫱",
+      "file": "tg_emoji_329.tgs",
+      "name": "Rightwards Hand",
+      "sha256": "4fd72559b16c166c29d6f6b9ad84163c67db81058c7fe23a6aaf497bae5770ff"
+    },
+    {
+      "unicode": "🫲",
+      "file": "tg_emoji_330.tgs",
+      "name": "Leftwards Hand",
+      "sha256": "2462b39551d480d6f696997039b39a26a88efd99097665501345aa357bf700be"
+    },
+    {
+      "unicode": "🧑‍🎄",
+      "file": "tg_emoji_331.tgs",
+      "name": "Mx Claus",
+      "sha256": "0b660b6d6644eb877b9f7bf39acbe530c5d03a0652ccb35ff7b6b8644a0e54fd"
+    },
+    {
+      "unicode": "🍙",
+      "file": "tg_emoji_332.tgs",
+      "name": "Rice Ball",
+      "sha256": "fb3553d6eebca426af60ebfd357eee29735166a2b54abbe504fdae021df0612d"
+    },
+    {
+      "unicode": "🥫",
+      "file": "tg_emoji_333.tgs",
+      "name": "Canned Food",
+      "sha256": "396df3928806762ee394a73e3f9632f1f8e07e93102443c5170db9277d4b955b"
+    },
+    {
+      "unicode": "🍣",
+      "file": "tg_emoji_334.tgs",
+      "name": "Sushi",
+      "sha256": "c795cb4b39be8d9063d0f72ffcccf241fdfee48a084ea46519f1d19ff1c1c651"
+    },
+    {
+      "unicode": "👣",
+      "file": "tg_emoji_335.tgs",
+      "name": "Footprints",
+      "sha256": "067eae6426564dd2f245f7d3fc81ba903dea3cc1a3156e1d3b5a81a790c7afa9"
+    },
+    {
+      "unicode": "🎵",
+      "file": "tg_emoji_336.tgs",
+      "name": "Musical Note",
+      "sha256": "caba6e933b388ff6acb4fb27530162a7c94bac3f705b5919be56231419210627"
+    },
+    {
+      "unicode": "🎶",
+      "file": "tg_emoji_337.tgs",
+      "name": "Musical Notes",
+      "sha256": "b249c2478f8789978f86f9a1433c0a19bf712067a5a13c7f054dffde75cdc256"
+    },
+    {
+      "unicode": "🧋",
+      "file": "tg_emoji_338.tgs",
+      "name": "Bubble Tea",
+      "sha256": "e7d7715c1fb01ab45ca9126653a755a2664d4fe2fb0d6fc5b95e2dbe0d77f638"
+    },
+    {
+      "unicode": "☑",
+      "file": "tg_emoji_339.tgs",
+      "name": "Check Box With Check",
+      "sha256": "2cdb68f36050ce92efe0a1f34b5c74e16374ff011003969d26404f03ea213a3d"
+    },
+    {
+      "unicode": "🐾",
+      "file": "tg_emoji_340.tgs",
+      "name": "Paw Prints",
+      "sha256": "c658ab3ca2957480d7b33942235da22626a5f867e82a02cc7532a731f6439892"
+    },
+    {
+      "unicode": "✅",
+      "file": "tg_emoji_341.tgs",
+      "name": "Check Mark Button",
+      "sha256": "4234e829565d50114f2a228cf69afe8d1d5f5497768933393e4794b645136b0b"
+    },
+    {
+      "unicode": "🍓",
+      "file": "tg_emoji_342.tgs",
+      "name": "Strawberry",
+      "sha256": "ad46f3e9b10c41a2393415adcb2d06e1d88bd4a0af50940e4b1a2a6a3c1587c0"
+    },
+    {
+      "unicode": "✔",
+      "file": "tg_emoji_343.tgs",
+      "name": "Check Mark",
+      "sha256": "f4f5fdebb28fccd0cf5ae6e4790e0548bac2bd2f740e00f9fa1cce11c8feb587"
+    },
+    {
+      "unicode": "🦷",
+      "file": "tg_emoji_344.tgs",
+      "name": "Tooth",
+      "sha256": "c106e10638997666443723987e167ea6e01cee8f261f2e93aad274bbcc2d1837"
+    },
+    {
+      "unicode": "🪄",
+      "file": "tg_emoji_345.tgs",
+      "name": "Magic Wand",
+      "sha256": "7b8f7a3043f534c0b2a81e6384261a1cada2ecca72ede63e8b51d81cea3cff85"
+    },
+    {
+      "unicode": "🌡",
+      "file": "tg_emoji_346.tgs",
+      "name": "Thermometer",
+      "sha256": "bf6892ceddbbcea301caa110ad0afdef043557a88d313dac81ce6d6ee8634ead"
+    },
+    {
+      "unicode": "💣",
+      "file": "tg_emoji_347.tgs",
+      "name": "Bomb",
+      "sha256": "9da1b40e75fa46a75ea345b5194e425a1534731cd4fa823af120e2660146d0d0"
+    },
+    {
+      "unicode": "📭",
+      "file": "tg_emoji_348.tgs",
+      "name": "Open Mailbox With Lowered Flag",
+      "sha256": "be551e5a3aa840acfa963ebac8250759026fd830f6436a6f99c47b9c80557679"
+    },
+    {
+      "unicode": "🧨",
+      "file": "tg_emoji_349.tgs",
+      "name": "Firecracker",
+      "sha256": "06be98e31788a29fd1bcafdab2cf0d54c11a1e942434f95365ca576debdd7c07"
+    },
+    {
+      "unicode": "☀",
+      "file": "tg_emoji_350.tgs",
+      "name": "Sun",
+      "sha256": "3a83eadce8645e82e43a268aed07ee8745322cc191fb59c533ea436b2ffa9821"
+    },
+    {
+      "unicode": "⛈",
+      "file": "tg_emoji_351.tgs",
+      "name": "Cloud With Lightning And Rain",
+      "sha256": "949b8e793aac16f4f4ec357055432908e75e26251d15372c1d432e93e1b9fa0e"
+    },
+    {
+      "unicode": "🍫",
+      "file": "tg_emoji_352.tgs",
+      "name": "Chocolate Bar",
+      "sha256": "092837c2c84b54a81b3d8602978d4432332e635b62bb2a2ad9f2972d2914c146"
+    },
+    {
+      "unicode": "🗯",
+      "file": "tg_emoji_353.tgs",
+      "name": "Right Anger Bubble",
+      "sha256": "1375561add7b5d9b696088e42ba366a9d27631e34d344f9ff2e6e15cb1ffda2e"
+    },
+    {
+      "unicode": "🎩",
+      "file": "tg_emoji_354.tgs",
+      "name": "Top Hat",
+      "sha256": "85005d6c941868cdfb6feb72d90f0f9e10f058dbe7880ecbaca94d0cf5aed49d"
+    },
+    {
+      "unicode": "⁉",
+      "file": "tg_emoji_355.tgs",
+      "name": "Exclamation Question Mark",
+      "sha256": "d91c6935a139a3e9d4c203c0c8af01133de219499ff0458a5127b3fd8de50d4e"
+    },
+    {
+      "unicode": "‼",
+      "file": "tg_emoji_356.tgs",
+      "name": "Double Exclamation Mark",
+      "sha256": "43fc2090c4dfd94b436ada67ab7e81669d722b273e80da1e1a6c3ec876d67a6c"
+    },
+    {
+      "unicode": "👅",
+      "file": "tg_emoji_357.tgs",
+      "name": "Tongue",
+      "sha256": "fd90fee34b81f9421b256cd419e205c8a742e77b47ea03dde59dacf6bf775bbe"
+    },
+    {
+      "unicode": "❗",
+      "file": "tg_emoji_358.tgs",
+      "name": "Red Exclamation Mark",
+      "sha256": "4b2f1feb0f56463146306d5c9df18a0e00e7e1bebf743d1344b4870e8a82d918"
+    },
+    {
+      "unicode": "🧃",
+      "file": "tg_emoji_359.tgs",
+      "name": "Beverage Box",
+      "sha256": "587b247e8d6fb28bfdbc4487f11dfaa855346245193e64a395aea2db94473e30"
+    },
+    {
+      "unicode": "🐵",
+      "file": "tg_emoji_360.tgs",
+      "name": "Monkey Face",
+      "sha256": "44662634fd9733d1ed3c7dd95db9050edce415a13985077a4d2cc4e95ce0da2f"
+    },
+    {
+      "unicode": "🙉",
+      "file": "tg_emoji_361.tgs",
+      "name": "Hear-No-Evil Monkey",
+      "sha256": "2008278ffd759613b20a7cfbace36dd3851cebe1f4a03c7ecaaf1d1c47d8ccc8"
+    },
+    {
+      "unicode": "⌛",
+      "file": "tg_emoji_362.tgs",
+      "name": "Hourglass Done",
+      "sha256": "36718de7ca0649f0400028fa2c3700ab97a7f55e02c51a840220c657255dd7f4"
+    },
+    {
+      "unicode": "🍥",
+      "file": "tg_emoji_363.tgs",
+      "name": "Fish Cake With Swirl",
+      "sha256": "9f320e02cabd44e7f8536934a1c92a5832911d36502348138365f2d9e14bfbe7"
+    },
+    {
+      "unicode": "🍘",
+      "file": "tg_emoji_364.tgs",
+      "name": "Rice Cracker",
+      "sha256": "4714b3d190bd94a566416bd896ec9ab5d43ef942f71b717b8ec556b9daf568b1"
+    },
+    {
+      "unicode": "🦋",
+      "file": "tg_emoji_365.tgs",
+      "name": "Butterfly",
+      "sha256": "e25f022f88eec34f87af09b879a8d5d898f673444761eab148226d6310430517"
+    },
+    {
+      "unicode": "❤",
+      "file": "tg_emoji_366.tgs",
+      "name": "Red Heart",
+      "sha256": "0ab46cc1840020941d0f743ac5384b4d17519a5f72d05d95d3f071299fc879ff"
+    },
+    {
+      "unicode": "🕊",
+      "file": "tg_emoji_367.tgs",
+      "name": "Dove",
+      "sha256": "5aa62158a849aa3ad71d65decacf6cb7c12b470e939e48b3edd8adb88a85cb9a"
+    },
+    {
+      "unicode": "🕸",
+      "file": "tg_emoji_368.tgs",
+      "name": "Spider Web",
+      "sha256": "d674652f3166098021fe3e06ee234d758b1d37ce4667c21b46408c61f457f80d"
+    },
+    {
+      "unicode": "🚀",
+      "file": "tg_emoji_369.tgs",
+      "name": "Rocket",
+      "sha256": "8e29fb5e76c1e4b5932697911bafa38984cba84ec82a97209b230e404f631353"
+    },
+    {
+      "unicode": "⭐",
+      "file": "tg_emoji_370.tgs",
+      "name": "Star",
+      "sha256": "18359197646f50de647d9cd2796ceb797609a06ac61277684f76a20ecf9f0d58"
+    },
+    {
+      "unicode": "💄",
+      "file": "tg_emoji_371.tgs",
+      "name": "Lipstick",
+      "sha256": "78d73714bda88ac5b2a104aa44b42e97945132b7204168cdbdd154578512eb39"
+    },
+    {
+      "unicode": "👁",
+      "file": "tg_emoji_372.tgs",
+      "name": "Eye",
+      "sha256": "6d375085e491aace9c60956a5eede9c766bb69f8f48007b821e52b31b4f90b71"
+    },
+    {
+      "unicode": "🛷",
+      "file": "tg_emoji_373.tgs",
+      "name": "Sled",
+      "sha256": "efe404c06fa7b3015233f96afb00af0bd9c55315c7805bd33fe09e7ca59aa76f"
+    },
+    {
+      "unicode": "⚡",
+      "file": "tg_emoji_374.tgs",
+      "name": "High Voltage",
+      "sha256": "20cac24b9684b273f76abd136c336c0836e130a8251975055bc85fd721095b39"
+    },
+    {
+      "unicode": "🦴",
+      "file": "tg_emoji_375.tgs",
+      "name": "Bone",
+      "sha256": "0e26858be10071f149b3879d7a81f4a381a19b9bb0857473644608e1f881e787"
+    },
+    {
+      "unicode": "🍱",
+      "file": "tg_emoji_376.tgs",
+      "name": "Bento Box",
+      "sha256": "aae8d90951eb2d82b4ccfeec573763ddfaa88af85ec89d5e0614831d7942734f"
+    },
+    {
+      "unicode": "👄",
+      "file": "tg_emoji_377.tgs",
+      "name": "Mouth",
+      "sha256": "dc4c88020f5da1424de68aba68451977d801dbb046e4e21bd23ff327e45dbe8b"
+    },
+    {
+      "unicode": "🍗",
+      "file": "tg_emoji_378.tgs",
+      "name": "Poultry Leg",
+      "sha256": "4b9389a2057504177aeca9260c1de2a15102604a04f339e277e3e3c62a467605"
+    },
+    {
+      "unicode": "🍖",
+      "file": "tg_emoji_379.tgs",
+      "name": "Meat On Bone",
+      "sha256": "4b9030c71bbe4753f2e41473afb2dc1648dc2d154454caceb5812425e912d00a"
+    },
+    {
+      "unicode": "🗂",
+      "file": "tg_emoji_380.tgs",
+      "name": "Card Index Dividers",
+      "sha256": "22a5269fdf155f17850aa3d787e66f4430b22a92c5312e7100535b0b96d411f5"
+    },
+    {
+      "unicode": "🥪",
+      "file": "tg_emoji_381.tgs",
+      "name": "Sandwich",
+      "sha256": "0dd93a4b511a7497b9a1647dbe07ae4c4d73a579221e601c96a82f15af90bb59"
+    },
+    {
+      "unicode": "🫦",
+      "file": "tg_emoji_382.tgs",
+      "name": "Biting Lip",
+      "sha256": "43dc23a3e13ad05a7830b88208f3abacd799d8c9b489156f3e69d7bf38812a8e"
+    },
+    {
+      "unicode": "👀",
+      "file": "tg_emoji_383.tgs",
+      "name": "Eyes",
+      "sha256": "55cd70a469c10a8bd2062de0dc3ad36e322d209ac0d628d298baa8cb75e68198"
+    },
+    {
+      "unicode": "🍳",
+      "file": "tg_emoji_384.tgs",
+      "name": "Cooking",
+      "sha256": "791bf13e0df9003bf8ff0b1e4ee51e9dd9f93b605a371ce6d44ea77f2c86e5d4"
+    },
+    {
+      "unicode": "🍭",
+      "file": "tg_emoji_385.tgs",
+      "name": "Lollipop",
+      "sha256": "99f028ba8c919b47e922d157e4ee3dcf153e5b418ab6a3fec19de03a49dddcf4"
+    },
+    {
+      "unicode": "🥨",
+      "file": "tg_emoji_386.tgs",
+      "name": "Pretzel",
+      "sha256": "cdb5201fb3481ad16942689a267e0ffd462df76b769160c717215b27995f2886"
+    },
+    {
+      "unicode": "🥙",
+      "file": "tg_emoji_387.tgs",
+      "name": "Stuffed Flatbread",
+      "sha256": "6fa7b93755dd121ccfb4daad99d891f3810669dff8b57267b65c541ff7b0a76c"
+    },
+    {
+      "unicode": "🧁",
+      "file": "tg_emoji_388.tgs",
+      "name": "Cupcake",
+      "sha256": "13a6da232b1d535fcbccdb847dbb1366625530dbb68bc96dd2fca1a35749cc8f"
+    },
+    {
+      "unicode": "🫰",
+      "file": "tg_emoji_389.tgs",
+      "name": "Hand With Index Finger And Thumb Crossed",
+      "sha256": "09ef21b7a989f45823182346a4378742ebe343fddea0ed0016f3ddd36ca5e207"
+    },
+    {
+      "unicode": "🫳",
+      "file": "tg_emoji_390.tgs",
+      "name": "Palm Down Hand",
+      "sha256": "1f526542d1e8c337e8610d9fd1efbe1abe886ba0e1a588c45a515acca35d1185"
+    },
+    {
+      "unicode": "🫴",
+      "file": "tg_emoji_391.tgs",
+      "name": "Palm Up Hand",
+      "sha256": "18d93c1532532cb77ee2e8992c2f32999a80c06b583a6ee2442a39384579e7a8"
+    },
+    {
+      "unicode": "🫵",
+      "file": "tg_emoji_392.tgs",
+      "name": "Index Pointing At The Viewer",
+      "sha256": "5a56d0ed193f4ed71f07f536feef55116c594cf02b63bcb496a56bd83553f51b"
+    },
+    {
+      "unicode": "🫶",
+      "file": "tg_emoji_393.tgs",
+      "name": "Heart Hands",
+      "sha256": "513b6e8a0364fdf4b806c3774bc7a291f091e50820412ce0a7750e4b147b0ecc"
+    },
+    {
+      "unicode": "☕",
+      "file": "tg_emoji_394.tgs",
+      "name": "Hot Beverage",
+      "sha256": "1512006db625fb3a674aabcd9f300668618aa0357e11fc7236ee243ff895d404"
+    },
+    {
+      "unicode": "🍹",
+      "file": "tg_emoji_395.tgs",
+      "name": "Tropical Drink",
+      "sha256": "240e0b593d9b6376eeca471c7bc1170a4728413bd01b90664fb9d5570bbcf16c"
+    },
+    {
+      "unicode": "⚽",
+      "file": "tg_emoji_396.tgs",
+      "name": "Soccer Ball",
+      "sha256": "3dd0a372252089fd6c61a457fdc8adebe76defe9b5ba135429f988ac5286d5a1"
+    },
+    {
+      "unicode": "🍽",
+      "file": "tg_emoji_397.tgs",
+      "name": "Fork And Knife With Plate",
+      "sha256": "36eb7bd7f2048edebbc830fe8bf0c43f9909453c96a0fd33ee8e8045d43c824e"
+    },
+    {
+      "unicode": "🎓",
+      "file": "tg_emoji_398.tgs",
+      "name": "Graduation Cap",
+      "sha256": "c425c01cd5048a207378c6107d2be9e051a88e9f13c3ef83171fc18906961f1a"
+    },
+    {
+      "unicode": "⛅",
+      "file": "tg_emoji_399.tgs",
+      "name": "Sun Behind Cloud",
+      "sha256": "8bd78571e1ea8ccfb9082544029e5d21b1e4f0099b9891b8e698047dc95c11b6"
+    },
+    {
+      "unicode": "🎤",
+      "file": "tg_emoji_400.tgs",
+      "name": "Microphone",
+      "sha256": "5644b52753a01a60c3d402c6a605e65b2ea9f49bad57e105a8a8994604d762de"
+    },
+    {
+      "unicode": "🎬",
+      "file": "tg_emoji_401.tgs",
+      "name": "Clapper Board",
+      "sha256": "764ae6522784fb6ed9dcc7a40674216b79f11756046e2fc625f3df03c84868ad"
+    },
+    {
+      "unicode": "🏛",
+      "file": "tg_emoji_402.tgs",
+      "name": "Classical Building",
+      "sha256": "f07b18fa495a6fad71964707ac4b639b4fc61eb3fbdf44ed06a047aba5bbf33a"
+    },
+    {
+      "unicode": "🏴‍☠",
+      "file": "tg_emoji_403.tgs",
+      "name": "Pirate Flag",
+      "sha256": "25653a72cece0c3e90838d3a4d65b82a2db25a41c21bdb5c5a6d466db0ddae20"
+    },
+    {
+      "unicode": "✈",
+      "file": "tg_emoji_404.tgs",
+      "name": "Airplane",
+      "sha256": "6f53e8f889cce00153ab91303c688405b69c5f4d76df16393aa6ac07001e4f47"
+    },
+    {
+      "unicode": "🐟",
+      "file": "tg_emoji_405.tgs",
+      "name": "Fish",
+      "sha256": "e9404704f6a720ff3c00d6535abc7161be306d4ababb383b9547fec72d607987"
+    },
+    {
+      "unicode": "🎭",
+      "file": "tg_emoji_406.tgs",
+      "name": "Performing Arts",
+      "sha256": "f14bb45485f2189945353d2953859228f4aaeacf0510b3824b61ce69624591ac"
+    },
+    {
+      "unicode": "👨‍👩‍👧‍👦",
+      "file": "tg_emoji_407.tgs",
+      "name": "Family: Man, Woman, Girl, Boy",
+      "sha256": "c63955c89a0ccea16d5dbefd3e4eca7af161d6cea011b966fc97b823f596d3c5"
+    },
+    {
+      "unicode": "💰",
+      "file": "tg_emoji_408.tgs",
+      "name": "Money Bag",
+      "sha256": "2e7d177976d9d91b4d1caf26185e8c97721aed60c8fb69317c6e026b9cc609a1"
+    },
+    {
+      "unicode": "👜",
+      "file": "tg_emoji_409.tgs",
+      "name": "Handbag",
+      "sha256": "7fb5978ecce426baee753dfaf198fb2124cefc07799e657338802f42cc6d2696"
+    },
+    {
+      "unicode": "📚",
+      "file": "tg_emoji_410.tgs",
+      "name": "Books",
+      "sha256": "9b75c78222cd972776d7e55915a0b16a3ada1a1d1de5519db2de0e85d2835bd3"
+    },
+    {
+      "unicode": "📺",
+      "file": "tg_emoji_411.tgs",
+      "name": "Television",
+      "sha256": "84bb636c78ce2c35b58c39d8d25295f38566d4a5b14a64f53b5f19f249fd42fc"
+    },
+    {
+      "unicode": "👶",
+      "file": "tg_emoji_412.tgs",
+      "name": "Baby",
+      "sha256": "67057ba3cfbbcbf6cd4e2259faa8936c53a10b76fd56d7c1cbb779f1744d8b23"
+    },
+    {
+      "unicode": "🏕",
+      "file": "tg_emoji_413.tgs",
+      "name": "Camping",
+      "sha256": "0028fa4a28850027d110e6525ce827e390f18c0addaf426c605224fd83658ad9"
+    },
+    {
+      "unicode": "🖨",
+      "file": "tg_emoji_414.tgs",
+      "name": "Printer",
+      "sha256": "ad6b81f5927d66d67b27c20aa5045823b77ac9ffb5c8f16c4d1696cf01d4596c"
+    },
+    {
+      "unicode": "📈",
+      "file": "tg_emoji_415.tgs",
+      "name": "Chart Increasing",
+      "sha256": "afe07624add82e6670d43c14fd58434e5963fda95c6be10938c5198d74cd0d15"
+    },
+    {
+      "unicode": "🗣",
+      "file": "tg_emoji_416.tgs",
+      "name": "Speaking Head",
+      "sha256": "1050ee73f8c78b5fae8c3020b1e2136a40de9808f071f2b97e7c3ee354acf29a"
+    },
+    {
+      "unicode": "🎟",
+      "file": "tg_emoji_417.tgs",
+      "name": "Admission Tickets",
+      "sha256": "49ce3c20d6316f9d4ea9cbed72ec3557899a03be011e4134b6176518970524e7"
+    },
+    {
+      "unicode": "🩺",
+      "file": "tg_emoji_418.tgs",
+      "name": "Stethoscope",
+      "sha256": "3541ca0e9d1abd7730160a69b96ec6ffd838b8ee8aa21574706fb23323a682f0"
+    },
+    {
+      "unicode": "🗳",
+      "file": "tg_emoji_419.tgs",
+      "name": "Ballot Box With Ballot",
+      "sha256": "98a01c6611542528e55fbdf6939463730e18814f9c4f5f9385ad3b6c053adbd9"
+    },
+    {
+      "unicode": "📉",
+      "file": "tg_emoji_420.tgs",
+      "name": "Chart Decreasing",
+      "sha256": "382c8c4d06a480030620ca66cbb8ae6956642ba9a0e9da86212ef0a763f4780c"
+    },
+    {
+      "unicode": "🏀",
+      "file": "tg_emoji_421.tgs",
+      "name": "Basketball",
+      "sha256": "d95e912e991bebedff36194aa099bcdfeb05a0643ae084f81eaabacb58d7bbf1"
+    },
+    {
+      "unicode": "🪖",
+      "file": "tg_emoji_422.tgs",
+      "name": "Military Helmet",
+      "sha256": "c6b6e345280187c9f378c8e1042f70d843b202ea9b75216c934ee54a3d708a3a"
+    },
+    {
+      "unicode": "👠",
+      "file": "tg_emoji_423.tgs",
+      "name": "High-Heeled Shoe",
+      "sha256": "edc156070bfc87268dcfc4543698c2d5e521edc7686e3b3b9a92320f85add514"
+    },
+    {
+      "unicode": "🔬",
+      "file": "tg_emoji_424.tgs",
+      "name": "Microscope",
+      "sha256": "7697911cc7341aac169fc91e97910d86898bf08f3c9b7d7cddbe86182298236f"
+    },
+    {
+      "unicode": "👮‍♂",
+      "file": "tg_emoji_425.tgs",
+      "name": "Man Police Officer",
+      "sha256": "5457e97c721ae5ffd3ad0736b949c62c82f3e30fbccd8661a37dff212027a54e"
+    },
+    {
+      "unicode": "🤰",
+      "file": "tg_emoji_426.tgs",
+      "name": "Pregnant Woman",
+      "sha256": "792684e66ada5111ed9d01cb3d920c2d67d751eccf8c5ce1f09356c70aa64793"
+    },
+    {
+      "unicode": "🛍",
+      "file": "tg_emoji_427.tgs",
+      "name": "Shopping Bags",
+      "sha256": "bfbdce03c27294954ddb84058c9a4d2a45ce1eae48aa934425082814b0a86f5d"
+    },
+    {
+      "unicode": "🪙",
+      "file": "tg_emoji_428.tgs",
+      "name": "Coin",
+      "sha256": "08ed9c80dbab94d2439917a4688189e2d83b38eecf08948c0ef252371d0cd5b6"
+    },
+    {
+      "unicode": "🧳",
+      "file": "tg_emoji_429.tgs",
+      "name": "Luggage",
+      "sha256": "c5b15429b9bc43702c562807e8a73eeee25916328c14a45b106629e0710f2838"
+    },
+    {
+      "unicode": "💅",
+      "file": "tg_emoji_430.tgs",
+      "name": "Nail Polish",
+      "sha256": "e6c4f80c540f849d27c7a97241aeb2f21de164ac5f5ea1f132f831501b62aadf"
+    },
+    {
+      "unicode": "💼",
+      "file": "tg_emoji_431.tgs",
+      "name": "Briefcase",
+      "sha256": "48ee524bae2ab63a47d6ffadaa1bd6de6b1ab40b53ba256aa3181535ad5e1145"
+    },
+    {
+      "unicode": "🛥",
+      "file": "tg_emoji_432.tgs",
+      "name": "Motor Boat",
+      "sha256": "0b1ba2c9da6cbad8a982ca05f88a974d21ac24a3cb48a72d5482f42ad8e14186"
+    },
+    {
+      "unicode": "🔭",
+      "file": "tg_emoji_433.tgs",
+      "name": "Telescope",
+      "sha256": "8573b0340ca4ba18f08cd1d0051d72a87cb963e90c2ce8a65870de4d00c07378"
+    },
+    {
+      "unicode": "🪩",
+      "file": "tg_emoji_434.tgs",
+      "name": "Mirror Ball",
+      "sha256": "409f79e1f524f26051a7fcc59093ee37716789beabd912c720779fc00afffc47"
+    },
+    {
+      "unicode": "🚂",
+      "file": "tg_emoji_435.tgs",
+      "name": "Locomotive",
+      "sha256": "6fd052cdb58cd2201ecdcbfde4330663625c161240312a208dcba56c78a52c94"
+    },
+    {
+      "unicode": "🛃",
+      "file": "tg_emoji_436.tgs",
+      "name": "Customs",
+      "sha256": "593804055c1bbdfb928b1276ea4b39957b00d76f689253f2c46de9c1a06005ae"
+    },
+    {
+      "unicode": "🔮",
+      "file": "tg_emoji_437.tgs",
+      "name": "Crystal Ball",
+      "sha256": "1af87854298d9e477777a1c838110fa0cc1982d83c099f044e1ee6219d7c835d"
+    },
+    {
+      "unicode": "🎙",
+      "file": "tg_emoji_438.tgs",
+      "name": "Studio Microphone",
+      "sha256": "eaa5af703130fe10ae3535e1d26f0a8b3fb85355d91d696f7359d55effb95ee9"
+    },
+    {
+      "unicode": "🏁",
+      "file": "tg_emoji_439.tgs",
+      "name": "Chequered Flag",
+      "sha256": "98a2ec3c2e2fe75c3cc44c6cbb944bad5922304c65c5a28fe31d6ff859074e2e"
+    },
+    {
+      "unicode": "📤",
+      "file": "tg_emoji_440.tgs",
+      "name": "Outbox Tray",
+      "sha256": "2d88a1a7b31c470461eeb83573ff3f31b88e2f9e2aaeacc129b608292eb53ad2"
+    },
+    {
+      "unicode": "🏳",
+      "file": "tg_emoji_441.tgs",
+      "name": "White Flag",
+      "sha256": "e7e6ddf556387bf10603400345b874f5bc0825458e138a9f2bf3fc1a5298b419"
+    },
+    {
+      "unicode": "📥",
+      "file": "tg_emoji_442.tgs",
+      "name": "Inbox Tray",
+      "sha256": "c33ae4958abda81e4f684746fffa4b198edf5c2c81c243593fc2dc50812e6b74"
+    },
+    {
+      "unicode": "🏴",
+      "file": "tg_emoji_443.tgs",
+      "name": "Black Flag",
+      "sha256": "2cef66ebe7afed6fd6614b92902caae284cdd434f838731b96f156fdc61522dc"
+    },
+    {
+      "unicode": "🔞",
+      "file": "tg_emoji_444.tgs",
+      "name": "No One Under Eighteen",
+      "sha256": "5f22db879378980fc9007309f6c94fd816dfb02f3551477e249baa29125c8f4f"
+    },
+    {
+      "unicode": "📨",
+      "file": "tg_emoji_445.tgs",
+      "name": "Incoming Envelope",
+      "sha256": "4065539bea1703d03773fc435db9d45413477e9546fa524bfddc675a9f84cf0f"
+    },
+    {
+      "unicode": "📆",
+      "file": "tg_emoji_446.tgs",
+      "name": "Tear-Off Calendar",
+      "sha256": "da64530807fc9de7c2363cfd2a6fd9f6755027aebc14a8671e121606cac70080"
+    },
+    {
+      "unicode": "🚩",
+      "file": "tg_emoji_447.tgs",
+      "name": "Triangular Flag",
+      "sha256": "cfc2e1e7f94dd3fb8949715820fe7206978c7e5d25154c1c1238d6020c368723"
+    },
+    {
+      "unicode": "🦄",
+      "file": "tg_emoji_448.tgs",
+      "name": "Unicorn",
+      "sha256": "3fb18307d6b3fc0678855e49b5cecebd3251a75d300c2fd6706628eba316edf2"
+    },
+    {
+      "unicode": "📰",
+      "file": "tg_emoji_449.tgs",
+      "name": "Newspaper",
+      "sha256": "e7377c4feda8bb4e514b95dd7c857229f514be59f02b53be1a0b06ee1a38fe5e"
+    },
+    {
+      "unicode": "🧪",
+      "file": "tg_emoji_450.tgs",
+      "name": "Test Tube",
+      "sha256": "ba66b867713a61f7e606dad6fa53a90ba9b79b25678be2e0b9926ba451c98180"
+    },
+    {
+      "unicode": "🛒",
+      "file": "tg_emoji_451.tgs",
+      "name": "Shopping Cart",
+      "sha256": "dca53dd68aaefc49a00a3767fe1edae1a297c0ca7d93312a3d75c3a14d81be3d"
+    },
+    {
+      "unicode": "📱",
+      "file": "tg_emoji_452.tgs",
+      "name": "Mobile Phone",
+      "sha256": "9ed70602e989079168cc8dba6c8e9521d9aa3758f7bf0e7cb92f2e95c7d32c0d"
+    },
+    {
+      "unicode": "🔝",
+      "file": "tg_emoji_453.tgs",
+      "name": "Top Arrow",
+      "sha256": "0764fc6eb1bec9dd87da36b6f19535ae5bece26b20fecbd03c2901e42f6c53f6"
+    },
+    {
+      "unicode": "🧰",
+      "file": "tg_emoji_454.tgs",
+      "name": "Toolbox",
+      "sha256": "9d6eeeea14d17d80ccc68a42cae897c806cf63989ce39ec617b66e6b124e1fc2"
+    },
+    {
+      "unicode": "🪪",
+      "file": "tg_emoji_455.tgs",
+      "name": "Identification Card",
+      "sha256": "1a316b6dd24f4b0c4953f8e80f85762b373ef8e809f003c6852d55817d04fff7"
+    },
+    {
+      "unicode": "🖐",
+      "file": "tg_emoji_456.tgs",
+      "name": "Hand With Fingers Splayed",
+      "sha256": "19cc75b03265ce4bd5e6bb63dac2a791fef1a88ada9bcac346309af20955c79d"
+    },
+    {
+      "unicode": "⛄",
+      "file": "tg_emoji_457.tgs",
+      "name": "Snowman Without Snow",
+      "sha256": "5d455a108c9daba5233a894e0213d38791b0e526e4bf3aba03c3d4f3400948a8"
+    },
+    {
+      "unicode": "🧑‍🎄",
+      "file": "tg_emoji_458.tgs",
+      "name": "Mx Claus",
+      "sha256": "b8e3b9c5325a3e42b8027c0ad50e112d59cca6100e5bc615b5f60bbef7f9f25c"
+    },
+    {
+      "unicode": "☁",
+      "file": "tg_emoji_459.tgs",
+      "name": "Cloud",
+      "sha256": "acf0f4f0ad76da642d7dff2795b1dfe2bbdd625ef96ec3d756bd43e897fddb3f"
+    },
+    {
+      "unicode": "🌥",
+      "file": "tg_emoji_460.tgs",
+      "name": "Sun Behind Large Cloud",
+      "sha256": "06503d28bdbd94ba0523528fbad962047f7ccae025d5a106ae6e041f8ee9fb78"
+    },
+    {
+      "unicode": "🌦",
+      "file": "tg_emoji_461.tgs",
+      "name": "Sun Behind Rain Cloud",
+      "sha256": "691f4cc6c5eac3a5a78ef716ce7b2e0cba4e7ae9e8a98aaa2250814e95d7340e"
+    },
+    {
+      "unicode": "🌧",
+      "file": "tg_emoji_462.tgs",
+      "name": "Cloud With Rain",
+      "sha256": "5a6cba578cc4f3e47ad44d0c5bf383d3b7b76fc1ced0542201106a26eb8c0971"
+    },
+    {
+      "unicode": "🌤",
+      "file": "tg_emoji_463.tgs",
+      "name": "Sun Behind Small Cloud",
+      "sha256": "d4fe8475a1cf03e33b42868af7d34be7792dddc066fd9a3e2c53ed200cb8c992"
+    },
+    {
+      "unicode": "🌩",
+      "file": "tg_emoji_464.tgs",
+      "name": "Cloud With Lightning",
+      "sha256": "ae4dbe50a23f951c428641e05e06cb8a3833aff06c8b2e8363d8f78a25abae9b"
+    },
+    {
+      "unicode": "🐤",
+      "file": "tg_emoji_465.tgs",
+      "name": "Baby Chick",
+      "sha256": "c2432ffa94ac0065c7a5ce4e607250290aa65a503afd0d72e78f583a054c062e"
+    },
+    {
+      "unicode": "🐔",
+      "file": "tg_emoji_466.tgs",
+      "name": "Chicken",
+      "sha256": "0c20c6458ec5395b832c62fa54ff126006c8691a4340af34a81f2325bab9ff49"
+    },
+    {
+      "unicode": "🐭",
+      "file": "tg_emoji_467.tgs",
+      "name": "Mouse Face",
+      "sha256": "71964da9cefbada84dc10c4789270cfeba7d296e5274cc563f52c6c4acdf3f8a"
+    },
+    {
+      "unicode": "🌨",
+      "file": "tg_emoji_468.tgs",
+      "name": "Cloud With Snow",
+      "sha256": "b6e30466f5ded1c8c19367d7afc7281e79a5ea8133b66380e57eae3bd818cabc"
+    },
+    {
+      "unicode": "🐨",
+      "file": "tg_emoji_469.tgs",
+      "name": "Koala",
+      "sha256": "106f56df79018378db444d86db0674e52e57c983594dbd78260e9add5eb13f83"
+    },
+    {
+      "unicode": "🐹",
+      "file": "tg_emoji_470.tgs",
+      "name": "Hamster",
+      "sha256": "e250c7dbcb1dd0d5c9103b0a89335e1891da2824aaa80416f838300087371032"
+    },
+    {
+      "unicode": "🐻",
+      "file": "tg_emoji_471.tgs",
+      "name": "Bear",
+      "sha256": "1f5738bac14f8ba3357b98df7316819b46007cfb22840f86da5ca89dc1f2b58e"
+    },
+    {
+      "unicode": "🐶",
+      "file": "tg_emoji_472.tgs",
+      "name": "Dog Face",
+      "sha256": "9eb64cb33f7abb84a5f9926cac3e563fea7d1c740915072cad18d132f2df4942"
+    },
+    {
+      "unicode": "🐱",
+      "file": "tg_emoji_473.tgs",
+      "name": "Cat Face",
+      "sha256": "c176a244bd165d974e4c188ffaf7d0352859b5ddc62dbed28d9750e15c782538"
+    },
+    {
+      "unicode": "📖",
+      "file": "tg_emoji_474.tgs",
+      "name": "Open Book",
+      "sha256": "55205c82cafe7de2b876be87d62c6bf3b87e10e8f805e2d58b5e3c2f301d1a11"
+    },
+    {
+      "unicode": "🤦",
+      "file": "tg_emoji_475.tgs",
+      "name": "Person Facepalming",
+      "sha256": "72679ae0f80dad58dacd7a9b431d67bdd6c1d0b4dfc92ac1a08c5ddb387a385c"
+    },
+    {
+      "unicode": "🐼",
+      "file": "tg_emoji_476.tgs",
+      "name": "Panda",
+      "sha256": "93305b27fb2253dc9514a94cc37dfcbffb8fae0c3b2f9cd4c427bf19d64e71f9"
+    },
+    {
+      "unicode": "🥈",
+      "file": "tg_emoji_477.tgs",
+      "name": "2Nd Place Medal",
+      "sha256": "fe0cc359687d4f326b5e25c58b0a29735b6bedef70c105ca12b2b1e4127f16f7"
+    },
+    {
+      "unicode": "🤦‍♀",
+      "file": "tg_emoji_478.tgs",
+      "name": "Woman Facepalming",
+      "sha256": "98af790ce9f89d2e02d586e241b3ee528875b990fd85207e465bc9df271a5dc0"
+    },
+    {
+      "unicode": "🥇",
+      "file": "tg_emoji_479.tgs",
+      "name": "1St Place Medal",
+      "sha256": "f4d97997309b7a091dce56296b34166bb07b8a8ee691840b97c647bc4a41142e"
+    },
+    {
+      "unicode": "🤦‍♂",
+      "file": "tg_emoji_480.tgs",
+      "name": "Man Facepalming",
+      "sha256": "f6d907e324cccf3d2ca7a33bd1912bedb1751b2ca734fbc1d49a699e1e0e95d3"
+    },
+    {
+      "unicode": "🐻‍❄",
+      "file": "tg_emoji_481.tgs",
+      "name": "Polar Bear",
+      "sha256": "2a000fa769fd1b9479aae979f24955b5778059f5c22e1e46d1e0af641685c1c0"
+    },
+    {
+      "unicode": "🦊",
+      "file": "tg_emoji_482.tgs",
+      "name": "Fox",
+      "sha256": "7106d3b46b53d4ea3247c76547433bac5b30ca0f2c0886a37f2d519a8f86a986"
+    },
+    {
+      "unicode": "🥉",
+      "file": "tg_emoji_483.tgs",
+      "name": "3Rd Place Medal",
+      "sha256": "8afde6acd3ab51862ea56c4682f0af60c46fb43762c2fa5c10202ff0de98acc1"
+    },
+    {
+      "unicode": "🆕",
+      "file": "tg_emoji_484.tgs",
+      "name": "New Button",
+      "sha256": "145c7d2c514fffa8cebf1f79d60666e9065003c1df0fff8f6ed53396cb39b701"
+    },
+    {
+      "unicode": "🆒",
+      "file": "tg_emoji_485.tgs",
+      "name": "Cool Button",
+      "sha256": "df41978a4cc6fafa13fbea1fc065cee5074b9412181313a27ac0a50ad2262dbb"
+    },
+    {
+      "unicode": "☘",
+      "file": "tg_emoji_486.tgs",
+      "name": "Shamrock",
+      "sha256": "153b64f814e949431d2f022a129cce129dd8bb82554c087a21dc6bcd6a6b4b4c"
+    },
+    {
+      "unicode": "✏",
+      "file": "tg_emoji_487.tgs",
+      "name": "Pencil",
+      "sha256": "1b4f73afbd53d30ab061332d65fb524568e3720d61d2f00ad657658ef89449da"
+    },
+    {
+      "unicode": "🎖",
+      "file": "tg_emoji_488.tgs",
+      "name": "Military Medal",
+      "sha256": "1df80215b4a779609f4e55537d106a425539adc9e99f329945b67014a89d8f07"
+    },
+    {
+      "unicode": "🐙",
+      "file": "tg_emoji_489.tgs",
+      "name": "Octopus",
+      "sha256": "f2bd21f501fab4b93635850a7582b6dfd9fb55f8190004c6006165fc9b9d79bf"
+    },
+    {
+      "unicode": "🏅",
+      "file": "tg_emoji_490.tgs",
+      "name": "Sports Medal",
+      "sha256": "0319f4ba48865b21a938e0578a9dfc1f792bbbf2b2a750296c8023acd28262bc"
+    },
+    {
+      "unicode": "🌼",
+      "file": "tg_emoji_491.tgs",
+      "name": "Blossom",
+      "sha256": "1b5d0a9212b5638020fc68fce8e7b20207d5b48aea4c993a9577b01a0daf2567"
+    },
+    {
+      "unicode": "🐧",
+      "file": "tg_emoji_492.tgs",
+      "name": "Penguin",
+      "sha256": "4a57c38e37bc47bffc23e8e6108ded976d0c150ba090f36d611c44795124ed92"
+    },
+    {
+      "unicode": "🍷",
+      "file": "tg_emoji_493.tgs",
+      "name": "Wine Glass",
+      "sha256": "4a1d4b06fc00c34f7fc2caa467241ee6aab7796c337ec7831d612d76abba5edc"
+    },
+    {
+      "unicode": "🐌",
+      "file": "tg_emoji_494.tgs",
+      "name": "Snail",
+      "sha256": "a3bd926c5a460c0b8c6c0768df11442a6e400b5e839ca182f8454ff560d299a6"
+    },
+    {
+      "unicode": "🐯",
+      "file": "tg_emoji_495.tgs",
+      "name": "Tiger Face",
+      "sha256": "8a3dbb0ff9ad98c1dad78d306dc9953d76456c299c5f310557a5590169e9166b"
+    },
+    {
+      "unicode": "🍸",
+      "file": "tg_emoji_496.tgs",
+      "name": "Cocktail Glass",
+      "sha256": "13c5bba4df562262a180e4228b1b133082bbffc00e9a3e8200f39c02f40fcfa5"
+    },
+    {
+      "unicode": "🐽",
+      "file": "tg_emoji_497.tgs",
+      "name": "Pig Nose",
+      "sha256": "2ef938c9d8c2a3015acdfc866a8cd5d42b608f8cbe90f2cc7e292592c241fc0a"
+    },
+    {
+      "unicode": "🐢",
+      "file": "tg_emoji_498.tgs",
+      "name": "Turtle",
+      "sha256": "16ae0a3642f299f3adb8b8c285f748a3c1ec0f9d238ffb57a354cd881c53eae7"
+    },
+    {
+      "unicode": "👤",
+      "file": "tg_emoji_499.tgs",
+      "name": "Bust In Silhouette",
+      "sha256": "11ebe06f1cb2cdca4c8628e17441975f8818e4710b5f3ddb1004d398fc6bf3d0"
+    },
+    {
+      "unicode": "🐎",
+      "file": "tg_emoji_500.tgs",
+      "name": "Horse",
+      "sha256": "3e9166f1a9dac62ad2e6b90a9d2cc3de85e9cd9031e64cebecf76315dc57450b"
+    },
+    {
+      "unicode": "🐴",
+      "file": "tg_emoji_501.tgs",
+      "name": "Horse Face",
+      "sha256": "1a808a10b0654b147209667b4a4a0529f337922f4d49d43e0c56a89a11c84d41"
+    },
+    {
+      "unicode": "🔑",
+      "file": "tg_emoji_502.tgs",
+      "name": "Key",
+      "sha256": "2998f9d9711f568b73139cd4e512113619989fc518bb78f7bc9e5217fcb07542"
+    },
+    {
+      "unicode": "🐞",
+      "file": "tg_emoji_503.tgs",
+      "name": "Lady Beetle",
+      "sha256": "0f243e31f2c18b77659a4fdc5ce98e63d5a5eb2e7aa14277ef318579075a6a8e"
+    },
+    {
+      "unicode": "🗝",
+      "file": "tg_emoji_504.tgs",
+      "name": "Old Key",
+      "sha256": "f9b53deb459d58b7dc7816fe6627ff8641feda916802be916a9856ba3d520597"
+    },
+    {
+      "unicode": "👥",
+      "file": "tg_emoji_505.tgs",
+      "name": "Busts In Silhouette",
+      "sha256": "f9772c0eafde6aac3e6fe2410d943da0558cb7dcb55eba77707fd6dd74512c7b"
+    },
+    {
+      "unicode": "🐦",
+      "file": "tg_emoji_506.tgs",
+      "name": "Bird",
+      "sha256": "8d14b276cbde5a9f44629a68c20ac528f4c5172357e9102721a2e9f6c96927df"
+    },
+    {
+      "unicode": "🦐",
+      "file": "tg_emoji_507.tgs",
+      "name": "Shrimp",
+      "sha256": "c08c9a1a9f46d4a7e143321e8044b7c7fa24b9d92b906a9b4a9f189f0f509326"
+    },
+    {
+      "unicode": "🐷",
+      "file": "tg_emoji_508.tgs",
+      "name": "Pig Face",
+      "sha256": "21f2f4a31f721556e562453962bf9018d54398cadbc0bc83a047740d9084dd31"
+    },
+    {
+      "unicode": "🥃",
+      "file": "tg_emoji_509.tgs",
+      "name": "Tumbler Glass",
+      "sha256": "295f48a2cbdf5b46b4181c4bcf5121b5c3a821f0dc1fc89e84b0655e5d46732b"
+    },
+    {
+      "unicode": "🦬",
+      "file": "tg_emoji_510.tgs",
+      "name": "Bison",
+      "sha256": "3699f5b023ed4cabdee9cec898dfdb2e08e3fccf95d7e4a0aa14828706a645aa"
+    },
+    {
+      "unicode": "🫂",
+      "file": "tg_emoji_511.tgs",
+      "name": "People Hugging",
+      "sha256": "e70c37901baa74c8c5f5ee27658d089b913b7844139abb4c2aa2b8e915e957d6"
+    },
+    {
+      "unicode": "🦆",
+      "file": "tg_emoji_512.tgs",
+      "name": "Duck",
+      "sha256": "779c0e3f2baaa8716001c34466e42e37ea9393691e6783586b01ffa9b44ebffd"
+    },
+    {
+      "unicode": "🦙",
+      "file": "tg_emoji_513.tgs",
+      "name": "Llama",
+      "sha256": "963202b73008099b46da295a6963b14f4b9b02a1372a19cefdc272f8546855d1"
+    },
+    {
+      "unicode": "🚹",
+      "file": "tg_emoji_514.tgs",
+      "name": "Men’S Room",
+      "sha256": "86264f02c4fc692085dbeae0ab94932e55bbe142a881ae635910410a5893af5f"
+    },
+    {
+      "unicode": "🆙",
+      "file": "tg_emoji_515.tgs",
+      "name": "Up! Button",
+      "sha256": "e9f13fa7f78375ce0dde27b136950ea9f55f9c4082b67a56b906776ee381d1cd"
+    },
+    {
+      "unicode": "🦓",
+      "file": "tg_emoji_516.tgs",
+      "name": "Zebra",
+      "sha256": "78e78c63d9c7eb145355a0bbeda587805810715272bf7b5b4a26e17217b8fd93"
+    },
+    {
+      "unicode": "🚺",
+      "file": "tg_emoji_517.tgs",
+      "name": "Women’S Room",
+      "sha256": "f9c50b7611efc6fcc6ec264c0961620de1564695900fbfc457d6ad41f132eb67"
+    },
+    {
+      "unicode": "🦢",
+      "file": "tg_emoji_518.tgs",
+      "name": "Swan",
+      "sha256": "f51657b9ef02336e6f944c7a11652b7d374f743fa9d288216d7c3161480a4962"
+    },
+    {
+      "unicode": "🆓",
+      "file": "tg_emoji_519.tgs",
+      "name": "Free Button",
+      "sha256": "081c2ccfa86b25c52aaaa117e6e4a549cebeecc89feffaaf0287ad495a5a328d"
+    },
+    {
+      "unicode": "🆗",
+      "file": "tg_emoji_520.tgs",
+      "name": "Ok Button",
+      "sha256": "c97a74c181fda57d44eb32bc0d251864d375ec5daa3d5b2db7ae405fe89c8778"
+    },
+    {
+      "unicode": "🪳",
+      "file": "tg_emoji_521.tgs",
+      "name": "Cockroach",
+      "sha256": "d73cb23f542d9d744ae31552c96b1161eb622d0ac309d2cd20f743985553772c"
+    },
+    {
+      "unicode": "🎫",
+      "file": "tg_emoji_522.tgs",
+      "name": "Ticket",
+      "sha256": "c18030eda11e612258ed880aef7a7e2df1e96d24d4f8d97b75395a7ea7b66c48"
+    },
+    {
+      "unicode": "🪲",
+      "file": "tg_emoji_523.tgs",
+      "name": "Beetle",
+      "sha256": "638fc541800f2bb46a5b24df5d1c92271d2fc130f4857eac49e2ca8f5f2a6d76"
+    },
+    {
+      "unicode": "🤷",
+      "file": "tg_emoji_524.tgs",
+      "name": "Person Shrugging",
+      "sha256": "8181c1278648936864d2b672bc57c2791c712b97716b4d33b6e86ee1993ce386"
+    },
+    {
+      "unicode": "🐰",
+      "file": "tg_emoji_525.tgs",
+      "name": "Rabbit Face",
+      "sha256": "a60c57ff3e968f09740c399707bd91ecaa2d6ae607363de2a91e374e175c2878"
+    },
+    {
+      "unicode": "🦘",
+      "file": "tg_emoji_526.tgs",
+      "name": "Kangaroo",
+      "sha256": "87099978726e15ae31748ed75af22477849eaa3566ec01e98f1a8cca47c26730"
+    },
+    {
+      "unicode": "🦟",
+      "file": "tg_emoji_527.tgs",
+      "name": "Mosquito",
+      "sha256": "68cc35f16ded18a5b70a37a06b2b5c30f7c824520ca188bcbf0daab1816be929"
+    },
+    {
+      "unicode": "🦌",
+      "file": "tg_emoji_528.tgs",
+      "name": "Deer",
+      "sha256": "16f9781b613c4b20e15fee4b0a061b6ec95a6edf14cb31bf1ded6619bf94efbf"
+    },
+    {
+      "unicode": "🍀",
+      "file": "tg_emoji_529.tgs",
+      "name": "Four Leaf Clover",
+      "sha256": "613fe54d25208358f6f5b811372bef18f80999fccd162ba9d3add06b05ff7c92"
+    },
+    {
+      "unicode": "🧉",
+      "file": "tg_emoji_530.tgs",
+      "name": "Mate",
+      "sha256": "60941f4b1fbc0a22521f012ec518a493d2dc47d6134475cd67b2bda0758a51eb"
+    },
+    {
+      "unicode": "🦍",
+      "file": "tg_emoji_531.tgs",
+      "name": "Gorilla",
+      "sha256": "d8ccef50b1e0ef8bc97a1852fabd04d05683d690a32c4ba3c8130a38d86e41fe"
+    },
+    {
+      "unicode": "🦜",
+      "file": "tg_emoji_532.tgs",
+      "name": "Parrot",
+      "sha256": "b908e3e11463100139ada15a8cc06440136cbec7317002e57418a7cc72f7a21c"
+    },
+    {
+      "unicode": "🐇",
+      "file": "tg_emoji_533.tgs",
+      "name": "Rabbit",
+      "sha256": "4d32ae2f6e4b91ef259335b80c2258ede824140aaacbefb4f99e39170067b4bd"
+    },
+    {
+      "unicode": "🚼",
+      "file": "tg_emoji_534.tgs",
+      "name": "Baby Symbol",
+      "sha256": "3bd8dd3cbbb807ae579c2e9ebbbc2b2434083421ece2a8849d122043dd0fb7a5"
+    },
+    {
+      "unicode": "⛎",
+      "file": "tg_emoji_535.tgs",
+      "name": "Ophiuchus",
+      "sha256": "30f84244a1e2a426101a27c6baee3151fc878562f6158cfed2eed9f56a043bc1"
+    },
+    {
+      "unicode": "🐆",
+      "file": "tg_emoji_536.tgs",
+      "name": "Leopard",
+      "sha256": "aaf58a35092223bdd548089355757c353a06d1de10b49e22f9afc9724307628f"
+    },
+    {
+      "unicode": "♒",
+      "file": "tg_emoji_537.tgs",
+      "name": "Aquarius",
+      "sha256": "965bca0ed56c08aaae1075f43a8eb64c8cd3e50624994264205b35d3d3dcc76a"
+    },
+    {
+      "unicode": "🐅",
+      "file": "tg_emoji_538.tgs",
+      "name": "Tiger",
+      "sha256": "1039a1a8f131fb3b3165f7d8dfbc9fa458ceb8ded676b8115f2ee63bd6b2d90b"
+    },
+    {
+      "unicode": "🦞",
+      "file": "tg_emoji_539.tgs",
+      "name": "Lobster",
+      "sha256": "1dda15c662b00de23f5ebb2abf9eb88dd30ec30e99eb0031525e9434d89ff37b"
+    },
+    {
+      "unicode": "🦭",
+      "file": "tg_emoji_540.tgs",
+      "name": "Seal",
+      "sha256": "95be20698ccfec132906faf14163cbd0cb213c8e590c8c53297f22b660a2257c"
+    },
+    {
+      "unicode": "🦝",
+      "file": "tg_emoji_541.tgs",
+      "name": "Raccoon",
+      "sha256": "69a4c6a6200d1e6b27dffe8f0014c6a0b5e60d953ea7ac3ccc9f2c8bc343150b"
+    },
+    {
+      "unicode": "♓",
+      "file": "tg_emoji_542.tgs",
+      "name": "Pisces",
+      "sha256": "9944fd870bf81c7357e69a51ca5c538367745c1a10d2b25b25fa29cc3a84c02f"
+    },
+    {
+      "unicode": "🐠",
+      "file": "tg_emoji_543.tgs",
+      "name": "Tropical Fish",
+      "sha256": "f9c0aabedaf33346fb91c32e2ee122ff75e33f6adff38bf71362403742ae87ea"
+    },
+    {
+      "unicode": "🐂",
+      "file": "tg_emoji_544.tgs",
+      "name": "Ox",
+      "sha256": "e3684d6ede1b2f4f9a3ceb358d274e639306d9b5994a84ae5bb492d74a418e26"
+    },
+    {
+      "unicode": "🐄",
+      "file": "tg_emoji_545.tgs",
+      "name": "Cow",
+      "sha256": "8aa7bf0c1fcea06ee698721174aea9662c25d012576882bc7a06445acf12b5b1"
+    },
+    {
+      "unicode": "♑",
+      "file": "tg_emoji_546.tgs",
+      "name": "Capricorn",
+      "sha256": "a9fdc7940bac58ce70f0f383f6e845d6b46bb8029c0ff63ca697cd6d676a934d"
+    },
+    {
+      "unicode": "🫗",
+      "file": "tg_emoji_547.tgs",
+      "name": "Pouring Liquid",
+      "sha256": "fd5db7e3c344bd6e40c67b4518bafd56f6e2b2a212e24e378d0186eeb3193a2c"
+    },
+    {
+      "unicode": "♐",
+      "file": "tg_emoji_548.tgs",
+      "name": "Sagittarius",
+      "sha256": "ba7190c758fbedcb726f1136678cd3dda3043c383725a6e6a2e25a16a02b569a"
+    },
+    {
+      "unicode": "🐍",
+      "file": "tg_emoji_549.tgs",
+      "name": "Snake",
+      "sha256": "d2b6fae0990e7e3e0532ca634ee078b3c231b11ad934dce1e6e20b18d263995f"
+    },
+    {
+      "unicode": "🎗",
+      "file": "tg_emoji_550.tgs",
+      "name": "Reminder Ribbon",
+      "sha256": "451507aaa3a93db048110e10372523c2b3eaad38243b083bc9f33dbbd5312034"
+    },
+    {
+      "unicode": "♌",
+      "file": "tg_emoji_551.tgs",
+      "name": "Leo",
+      "sha256": "b3c5804b8dba77fe43cd7587b6149b6b1d01569ca491fa6a4a3000b8197a215d"
+    },
+    {
+      "unicode": "🦩",
+      "file": "tg_emoji_552.tgs",
+      "name": "Flamingo",
+      "sha256": "0e8255097efca43dd0dae0667f5edf3ad431f9f6bd2f3bb052fa6bb8333a949b"
+    },
+    {
+      "unicode": "🐛",
+      "file": "tg_emoji_553.tgs",
+      "name": "Bug",
+      "sha256": "9745186bc4d78cdf19c409596b1fe4f3ec8254412298da09c5efbf8b394abf2e"
+    },
+    {
+      "unicode": "♊",
+      "file": "tg_emoji_554.tgs",
+      "name": "Gemini",
+      "sha256": "da0a3dda858ce993876e12b5eb3c7a3488c4bdb8d7403659a2732401e898e26b"
+    },
+    {
+      "unicode": "♏",
+      "file": "tg_emoji_555.tgs",
+      "name": "Scorpio",
+      "sha256": "49fef60ef0ffba2f5da9283d88aac04419761b2a37cfe2e57e55cd33d3a71c62"
+    },
+    {
+      "unicode": "🐈‍⬛",
+      "file": "tg_emoji_556.tgs",
+      "name": "Black Cat",
+      "sha256": "7101222404c6c9b9c0d396f7633eff36633d9a7c2f7b5eb993f7e60d322fd66b"
+    },
+    {
+      "unicode": "🛅",
+      "file": "tg_emoji_557.tgs",
+      "name": "Left Luggage",
+      "sha256": "7b2318cc637ed9ff314c58a71ba9fb056180eb6fab80295c51bb4af1d1982bfe"
+    },
+    {
+      "unicode": "♍",
+      "file": "tg_emoji_558.tgs",
+      "name": "Virgo",
+      "sha256": "b251a7bc9f80db7d70f7ba41fecf5013acf40b49668b78f8cdeb108a5ebeb081"
+    },
+    {
+      "unicode": "🛄",
+      "file": "tg_emoji_559.tgs",
+      "name": "Baggage Claim",
+      "sha256": "7166092d05d818508e24461576f8bd4f6c98fccd6c10a2effddd6501413f1cf7"
+    },
+    {
+      "unicode": "♉",
+      "file": "tg_emoji_560.tgs",
+      "name": "Taurus",
+      "sha256": "11d9f56a85ebf4a62bc496104b58dd50165c32bfdf0256982e0f80b5b52bfebe"
+    },
+    {
+      "unicode": "📲",
+      "file": "tg_emoji_561.tgs",
+      "name": "Mobile Phone With Arrow",
+      "sha256": "331a335f6d8e2f01c9add89ed2ffab8cafb899c026279c0b9f997c17314ac488"
+    },
+    {
+      "unicode": "🥛",
+      "file": "tg_emoji_562.tgs",
+      "name": "Glass Of Milk",
+      "sha256": "c5af681d1e984dbcbda686140ebb7fab62f0fb63f8ba01814e9f202c3f40b2dd"
+    },
+    {
+      "unicode": "♎",
+      "file": "tg_emoji_563.tgs",
+      "name": "Libra",
+      "sha256": "652c4b8ce624098739b80e075503c4dd4e3960befb6f0158b085042a76655e61"
+    },
+    {
+      "unicode": "🦑",
+      "file": "tg_emoji_564.tgs",
+      "name": "Squid",
+      "sha256": "6555c677fa3c2d8597677ef50257ac2b323511aac8342cdfa49fb83d417117bd"
+    },
+    {
+      "unicode": "🦒",
+      "file": "tg_emoji_565.tgs",
+      "name": "Giraffe",
+      "sha256": "d4e4a883441e55ddab3fe8f18bc0b30a393297ea71fefa55b0ff393a5229c930"
+    },
+    {
+      "unicode": "🛂",
+      "file": "tg_emoji_566.tgs",
+      "name": "Passport Control",
+      "sha256": "7117bb61b028b1735f9bd9dc22ef71b2ffbd594b1862a04e3500d325d76c8c17"
+    },
+    {
+      "unicode": "🐈",
+      "file": "tg_emoji_567.tgs",
+      "name": "Cat",
+      "sha256": "7f2882c07d9370a8f3792a14acc18685a4f446b848d088ecdffb49d2e8ee7e87"
+    },
+    {
+      "unicode": "🦗",
+      "file": "tg_emoji_568.tgs",
+      "name": "Cricket",
+      "sha256": "13a535118aea1e618d0d75c904e5729a22f8d4695adb9c1bb7bd7cf9711801ee"
+    },
+    {
+      "unicode": "🐜",
+      "file": "tg_emoji_569.tgs",
+      "name": "Ant",
+      "sha256": "60ae8aa81789bd577ae919ed64866bac4ca1227d69d10e746cb17a89f59c2d3a"
+    },
+    {
+      "unicode": "♋",
+      "file": "tg_emoji_570.tgs",
+      "name": "Cancer",
+      "sha256": "afcf74039d2f174b051b8139e29a5e0ce4f117348f4580cf232a77be228a44d4"
+    },
+    {
+      "unicode": "🍼",
+      "file": "tg_emoji_571.tgs",
+      "name": "Baby Bottle",
+      "sha256": "add35c48e76f4212a04ddd0eeb569f05888e88fac506674c7cedb1980c31bc26"
+    },
+    {
+      "unicode": "♈",
+      "file": "tg_emoji_572.tgs",
+      "name": "Aries",
+      "sha256": "6d1f8673a092f4339600b76d9acf2270236462d9ff04c972760ab5a3d6a02625"
+    },
+    {
+      "unicode": "🏵",
+      "file": "tg_emoji_573.tgs",
+      "name": "Rosette",
+      "sha256": "de0525f5d2f88ac80440f4beb590876efe3a3a6b068931b357f1553856412ee6"
+    },
+    {
+      "unicode": "🦕",
+      "file": "tg_emoji_574.tgs",
+      "name": "Sauropod",
+      "sha256": "04ff4bc03395270ddeb9b570543a726763b15e6f474eef96f0495ccee77c7fd0"
+    },
+    {
+      "unicode": "🦁",
+      "file": "tg_emoji_575.tgs",
+      "name": "Lion",
+      "sha256": "94c7f714e528670c793448a50b0441d380a96cd1071d9620b2fb58f1bdde1006"
+    },
+    {
+      "unicode": "🐝",
+      "file": "tg_emoji_576.tgs",
+      "name": "Honeybee",
+      "sha256": "9142f7772c5014db1827d4abbcfd8a793363758f81c629e7f1824de5aba373b6"
+    },
+    {
+      "unicode": "🦖",
+      "file": "tg_emoji_577.tgs",
+      "name": "T-Rex",
+      "sha256": "22937c1fdc9a5b81014a56b373202725765220ec1ba8dea03294efa2a6dd83e6"
+    },
+    {
+      "unicode": "💐",
+      "file": "tg_emoji_578.tgs",
+      "name": "Bouquet",
+      "sha256": "39bd4652c78fab67feb102bc0e22d70bcfcdcfc039a192389644effc48222d9a"
+    },
+    {
+      "unicode": "🐸",
+      "file": "tg_emoji_579.tgs",
+      "name": "Frog",
+      "sha256": "e672a6dc7a9f49e6f512082579616eb3bec60a35a9d37d33e6e8e64d1465eb4d"
+    },
+    {
+      "unicode": "🌈",
+      "file": "tg_emoji_580.tgs",
+      "name": "Rainbow",
+      "sha256": "0c64c15adef633798bb9c82be5bc83e75a7fe7867b62bb67aca005fb7d08869f"
+    },
+    {
+      "unicode": "🦔",
+      "file": "tg_emoji_581.tgs",
+      "name": "Hedgehog",
+      "sha256": "d5229d6633ec4df56adec17adb27b9ff62c77225b6d74602263b8a4a59f75dfe"
+    },
+    {
+      "unicode": "🦃",
+      "file": "tg_emoji_582.tgs",
+      "name": "Turkey",
+      "sha256": "5db1992e1e4f9d575e9fa38377e2b0f2a16ae5a48ef6e0dfaff25fb52a55ddd1"
+    },
+    {
+      "unicode": "🫨",
+      "file": "tg_emoji_583.tgs",
+      "name": "Shaking Face",
+      "sha256": "15d5f1d450932b099c8ab1db57d23ea58b4f5bc7374f93e9e1af7fad6361831e"
+    },
+    {
+      "unicode": "🩵",
+      "file": "tg_emoji_584.tgs",
+      "name": "Light Blue Heart",
+      "sha256": "63bb7483be489130f309dd412ee847e786628c97a5d7131329b87d380270a0dc"
+    },
+    {
+      "unicode": "🩶",
+      "file": "tg_emoji_585.tgs",
+      "name": "Grey Heart",
+      "sha256": "a538924ef1630151dd07a0c8f4bd69958c9014c84664d167756810675c3dbb4f"
+    },
+    {
+      "unicode": "🩷",
+      "file": "tg_emoji_586.tgs",
+      "name": "Pink Heart",
+      "sha256": "17d508d9defe4ec4a190297c35d48479b30690b183e04cfb5ebf013f644f9e0e"
+    },
+    {
+      "unicode": "🫷",
+      "file": "tg_emoji_587.tgs",
+      "name": "Leftwards Pushing Hand",
+      "sha256": "8fec3d36806b6dfe660ece5b9c43979748afe705bd8c59a554c5b91ebfe20227"
+    },
+    {
+      "unicode": "🫸",
+      "file": "tg_emoji_588.tgs",
+      "name": "Rightwards Pushing Hand",
+      "sha256": "30115f91a063a22f6f88ccf8393174907113c2691af31198031d4ea6ce9a4037"
+    },
+    {
+      "unicode": "✅",
+      "file": "tg_emoji_589.tgs",
+      "name": "Check Mark Button",
+      "sha256": "4234e829565d50114f2a228cf69afe8d1d5f5497768933393e4794b645136b0b"
+    },
+    {
+      "unicode": "✨",
+      "file": "tg_emoji_590.tgs",
+      "name": "Sparkles",
+      "sha256": "0a433a3c4cfb59d7a5b78f49065c957cb9b045d7aa7e0cf401d54e9846c78a08"
+    },
+    {
+      "unicode": "🏴‍☠",
+      "file": "tg_emoji_591.tgs",
+      "name": "Pirate Flag",
+      "sha256": "25653a72cece0c3e90838d3a4d65b82a2db25a41c21bdb5c5a6d466db0ddae20"
+    },
+    {
+      "unicode": "👑",
+      "file": "tg_emoji_592.tgs",
+      "name": "Crown",
+      "sha256": "72cda60cb25a08e412204c4a64f8434cac40c84c7e06763d4254a54e827d86aa"
+    },
+    {
+      "unicode": "🔝",
+      "file": "tg_emoji_593.tgs",
+      "name": "Top Arrow",
+      "sha256": "0764fc6eb1bec9dd87da36b6f19535ae5bece26b20fecbd03c2901e42f6c53f6"
+    },
+    {
+      "unicode": "🔞",
+      "file": "tg_emoji_594.tgs",
+      "name": "No One Under Eighteen",
+      "sha256": "5f22db879378980fc9007309f6c94fd816dfb02f3551477e249baa29125c8f4f"
+    },
+    {
+      "unicode": "🤕",
+      "file": "tg_emoji_595.tgs",
+      "name": "Face With Head-Bandage",
+      "sha256": "ca6aa50354d0a162bb9e217e528d45e3fcff536f612b9d0b832e1bac49446f77"
+    },
+    {
+      "unicode": "🤥",
+      "file": "tg_emoji_596.tgs",
+      "name": "Lying Face",
+      "sha256": "a976ebf9129c5d6a337ba8cc3011c28a2ce3f15520c020f05d58dd8b23eee977"
+    },
+    {
+      "unicode": "🥳",
+      "file": "tg_emoji_597.tgs",
+      "name": "Partying Face",
+      "sha256": "d869498e66ede2107118918f8c01e26bf5c7f4e8b3b47bc066df6e58139ae7bd"
+    },
+    {
+      "unicode": "🫨",
+      "file": "tg_emoji_598.tgs",
+      "name": "Shaking Face",
+      "sha256": "15d5f1d450932b099c8ab1db57d23ea58b4f5bc7374f93e9e1af7fad6361831e"
+    },
+    {
+      "unicode": "🍆",
+      "file": "tg_emoji_599.tgs",
+      "name": "Eggplant",
+      "sha256": "304fba222a4f783f9f7c6a315eef35ea66c64b3bf16b18997edf5fa65d2ec7c6"
+    }
+  ]
+}

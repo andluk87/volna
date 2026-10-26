@@ -51,3 +51,12 @@ Additional appearance icons from the same upstream commit and GPL-3.0 license:
 - `uploadWallpaper`: `assets/icons/cameraadd.svg`
 - `palette`: `assets/icons/colorize.svg`
 - `resetWallpaper`: `assets/icons/favourites.svg`
+
+`lottie-web` 5.13.0 renders animated emoji using its light SVG player (MIT,
+Copyright 2015 Bodymovin); see `Lottie-MIT.txt`.
+
+`public/site/animated-emoji/*.tgs` are the original Telegram animations distributed
+in `smmisha/telegram-animated-emojis-60fps`, pinned at
+`8b81dfed18dab9aace949d9e59d863e2fef1b063`. Its dataset card declares MIT;
+see `public/site/animated-emoji/SOURCE.md` for provenance and `manifest.json` for
+file hashes. The publisher supplies no separate license text for the artwork.
