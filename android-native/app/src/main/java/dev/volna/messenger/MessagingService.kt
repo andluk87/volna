@@ -214,7 +214,7 @@ class MessagingService : Service() {
         try {
             val event = JSONObject(raw)
             val type = event.optString("type")
-            if (type == "ready") { streams[userId]?.let { it.receiptSyncVersion++ }; return }
+            if (type == "ready") { streams[userId]?.let { it.receiptSyncVersion++ }; signals.tryEmit(NativeSessionSignal(userId, "connected", 0, 0)); return }
             if (type in listOf("read", "delivered")) { signals.tryEmit(NativeSessionSignal(userId, type, event.optLong("chat_id"), 0)); return }
             if (type in listOf("profile","topics","community","removed","chats","history-cleared")) { if(type=="profile" && event.optLong("user_id")==userId) runCatching { val user=api.me(token);NativeAccounts.remember(this,user,token);cache.saveMe(user) };signals.tryEmit(NativeSessionSignal(userId,type,event.optLong("chat_id"),event.optLong("user_id"),event.optBoolean("deleted")));return }
             if (type !in listOf("message", "message-update")) return
@@ -224,6 +224,7 @@ class MessagingService : Service() {
             runCatching { val existing = cache.messages(userId, chatId); cache.saveMessages(userId, chatId, (existing.filter { it.id != parsed.id } + parsed).sortedBy { it.id }) }
             if (type == "message" && parsed.senderId != userId) streams[userId]?.receipts?.received(chatId, parsed.id)
             events.tryEmit(NativeMessagingEvent(userId, type, parsed))
+            signals.tryEmit(NativeSessionSignal(userId, "topic-activity", message.optLong("group_id", chatId), 0))
             if (!event.optBoolean("notify", true) || !message.isNull("deleted_at")) return
             val settings = NativeNotificationPolicy.prefs(this, userId)
             if (chatId.toString() in settings.getStringSet("mutedChats", emptySet()).orEmpty()) return
@@ -257,7 +258,7 @@ class MessagingService : Service() {
             launch.putExtra("chat_id", chatId).putExtra("message_id", id).putExtra("account_id", userId)
             val notificationId = ((id xor (id ushr 32)).toInt() and 0x1fffffff) + if (isReaction) 0x20000000 else 0
             val pending = PendingIntent.getActivity(this, notificationId, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            val channel = NativeNotificationSounds.messageChannel(this, userId)
+            val channel = if (event.optBoolean("silent")) SILENT_CHANNEL else NativeNotificationSounds.messageChannel(this, userId)
             val notificationBuilder = builder(nativeNotificationBrandTitle(title, settings.getBoolean("watch_brand_label",false)), body, channel).setContentIntent(pending).setAutoCancel(true)
                 .setGroup("volna-messages-$userId").setOnlyAlertOnce(false)
             var wearableReply: Notification.Action? = null

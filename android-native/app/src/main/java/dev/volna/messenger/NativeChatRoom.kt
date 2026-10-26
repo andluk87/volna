@@ -192,10 +192,17 @@ internal fun ChatRoomScreen(
     LaunchedEffect(highlighted) { if (highlighted != null) { delay(1800); highlighted = null } }
     val currentGroups by rememberUpdatedState(timeline)
     val currentOffset by rememberUpdatedState(offset)
+    val topicPositions = remember(user?.id) { context.getSharedPreferences("volna-topic-position-${user?.id ?: 0}", android.content.Context.MODE_PRIVATE) }
+    LaunchedEffect(chat.id, listState, focusMessageId) {
+        if (chat.kind != "group" || focusMessageId != null) return@LaunchedEffect
+        snapshotFlow { val index=listState.firstVisibleItemIndex-currentOffset; currentGroups.getOrNull(index)?.messages?.firstOrNull()?.id }.distinctUntilChanged().collect { id ->
+            if (id != null && id > 0 && firstScroll) topicPositions.edit().putLong("message:${chat.id}",id).apply()
+        }
+    }
     val reportVisible by rememberUpdatedState(onVisibleMessage)
     val lifecycle = (context as? LifecycleOwner)?.lifecycle
-    LaunchedEffect(chat.id, listState, readVisible, lifecycle) {
-        if (!readVisible) return@LaunchedEffect
+    LaunchedEffect(chat.id, listState, readVisible, lifecycle, focusMessageId) {
+        if (!readVisible || focusMessageId != null) return@LaunchedEffect
         suspend fun report() {
             snapshotFlow { val index = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1; currentGroups.take((index - currentOffset + 1).coerceAtLeast(0)).lastOrNull { it.messages.isNotEmpty() }?.messages?.lastOrNull()?.id }.distinctUntilChanged().debounce(400).collect { id ->
                 if (!searchOpen && !showPins && MainActivity.isVisible) id?.takeIf { it > 0 }?.let(reportVisible)
@@ -243,8 +250,8 @@ internal fun ChatRoomScreen(
                 if (selected.isNotEmpty() && selected.all { !it.deleted && (it.senderId == user?.id || canModerate) }) IconButton(onClick = { deleteSelected = true }) { Icon(Icons.Outlined.DeleteOutline, "Удалить выбранные", tint = MaterialTheme.colorScheme.error) }
             } else {
                 Row(Modifier.weight(1f).padding(horizontal = 5.dp).clip(CircleShape).background(androidx.compose.ui.graphics.lerp(Panel, Outgoing, .55f).copy(alpha = .64f)).heightIn(min = 48.dp).padding(horizontal = 4.dp).clickable(enabled = !recorder.recording) { if (chat.kind in listOf("group", "channel")) onCommunity() else if (!chat.saved) onOpenProfile(chat.peerId) }, verticalAlignment = Alignment.CenterVertically) {
-                    if (chat.saved) Box(Modifier.size(40.dp).clip(CircleShape).background(Accent), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.BookmarkBorder, "Избранное", tint = Color.White, modifier = Modifier.size(27.dp)) } else Avatar(chat.name, chat.peerId, chat.avatarUrl, token, size = 40.dp)
-                    Column(Modifier.weight(1f).padding(start = 10.dp)) { NativeText(chat.name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); if (!chat.saved) NativeText(if (chat.parentId!=0L) "Подтема · ${chat.memberCount} участников" else if (chat.kind in listOf("group", "channel")) "${chat.memberCount} участников" else if (chat.peerOnline) "в сети" else if (chat.peerLastSeen > 0) "был(а) " + java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(chat.peerLastSeen)) else "Время посещения недоступно", color = if (chat.peerOnline) Accent else Muted, fontSize = 12.sp, maxLines = 1) }
+                    if (chat.saved) Box(Modifier.size(40.dp).clip(CircleShape).background(Accent), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.BookmarkBorder, "Избранное", tint = Color.White, modifier = Modifier.size(27.dp)) } else if (chat.parentId != 0L) Box(Modifier.size(40.dp).clip(CircleShape).background(Accent.copy(alpha=.2f)), contentAlignment = Alignment.Center) { NativeText(chat.topicIcon.ifBlank { "#" }, fontSize=26.sp) } else Avatar(chat.name, chat.peerId, chat.avatarUrl, token, size = 40.dp)
+                    Column(Modifier.weight(1f).padding(start = 10.dp)) { NativeText(if(chat.parentId!=0L)chat.topicTitle.ifBlank{chat.name} else chat.name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); if (!chat.saved) NativeText(if (chat.parentId!=0L) chat.parentName.ifBlank { "Тема · ${chat.memberCount} участников" } else if (chat.kind in listOf("group", "channel")) "${chat.memberCount} участников" else if (chat.peerOnline) "в сети" else if (chat.peerLastSeen > 0) "был(а) " + java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(chat.peerLastSeen)) else "Время посещения недоступно", color = if (chat.peerOnline) Accent else Muted, fontSize = 12.sp, maxLines = 1) }
                 }
                 if (chat.kind == "direct" && !chat.saved) IconButton(onClick = { onCall(chat) }, enabled = !recorder.recording) { Icon(Icons.Outlined.Call, "Позвонить", tint = Accent) }
                 Row(Modifier.clip(CircleShape).background(Panel.copy(alpha = .64f)), verticalAlignment = Alignment.CenterVertically) {
@@ -310,7 +317,7 @@ internal fun ChatRoomScreen(
             Column(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 8.dp)) { NativeText(if (editTarget != null) "Редактирование" else "Ответ ${replyTo?.senderName}", color = Accent, fontWeight = FontWeight.Medium, fontSize = 12.sp); NativeText((editTarget?.text ?: replyTo?.text).orEmpty().ifBlank { "Вложение" }, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp) }
             IconButton(onClick = { if (editTarget != null) { input = drafts.input(chat.id); entities = drafts.entities(chat.id) }; replyTo = null; editTarget = null }) { Icon(Icons.Outlined.Close, "Отменить ответ или редактирование", tint = Muted) }
         }
-        if (!chat.canSend) NativeText(if(chat.topicClosed) "Подтема закрыта. История доступна для чтения." else "Публиковать могут только администраторы", Modifier.fillMaxWidth().background(Panel).padding(16.dp), color = Muted, fontSize = 13.sp)
+        if (!chat.canSend) NativeText(if(chat.topicClosed) "Тема закрыта" else "Публиковать могут только администраторы", Modifier.fillMaxWidth().background(Panel).padding(16.dp), color = Muted, fontSize = 13.sp)
         else NativeGlassSurface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp).onSizeChanged { composerHeight = it.height / density.density }, radius = 28.dp, floating = true) { Row(Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { if (editTarget != null) panel.tab = "emoji"; togglePanel() }) { Icon(if (panel.open) Icons.Outlined.Keyboard else Icons.Outlined.EmojiEmotions, if (panel.open) "Переключиться на клавиатуру" else "Эмодзи, стикеры и GIF", tint = Muted) }
             if (recorder.recording) {

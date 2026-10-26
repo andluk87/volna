@@ -44,7 +44,7 @@ import java.util.UUID
 internal val LocalNativeScreenTopInset = staticCompositionLocalOf { 0.dp }
 
 @Composable
-internal fun NativeFullScreen(title: String, onDismiss: () -> Unit, overlayContent: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+internal fun NativeFullScreen(title: String, onDismiss: () -> Unit, overlayContent: Boolean = false, subtitle: String? = null, avatar: (@Composable () -> Unit)? = null, actions: (@Composable RowScope.() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         NativeDialogSystemBars()
         val backdrop = remember { HazeState() }
@@ -58,7 +58,16 @@ internal fun NativeFullScreen(title: String, onDismiss: () -> Unit, overlayConte
                     NativeGlassSurface(Modifier.align(Alignment.TopCenter).fillMaxWidth().onSizeChanged { headerHeight = with(density) { it.height.toDp() } }.padding(horizontal = 8.dp, vertical = 4.dp), radius = 28.dp, floating = true) {
                         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = onDismiss) { Icon(Icons.Outlined.ArrowBack, "Назад", tint = TextMain) }
-                            NativeText(title, Modifier.weight(1f).padding(end = 12.dp), color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                            if (subtitle == null && avatar == null && actions == null) {
+                                NativeText(title, Modifier.weight(1f).padding(end = 12.dp), color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                            } else {
+                            avatar?.invoke()
+                            Column(Modifier.weight(1f).padding(start = if (avatar != null) 8.dp else 0.dp, end = 8.dp)) {
+                                NativeText(title, color = TextMain, fontSize = if (subtitle != null) 17.sp else 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                subtitle?.let { NativeText(it, color = Muted, fontSize = 12.sp, maxLines = 1) }
+                            }
+                            actions?.invoke(this)
+                            }
                         }
                     }
                 }

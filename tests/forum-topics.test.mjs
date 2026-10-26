@@ -77,3 +77,52 @@ test('topic files, polls, replies, reactions and pins remain scoped while the co
  assert.equal((await call(`/chats/${a.id}/media`,member.token)).data[0].attachment.id,file.id);assert.equal((await call(`/chats/${b.id}/media`,member.token)).data.length,0);assert.equal((await call(`/chats/${a.id}/pins`,member.token)).data[0].id,message.id);assert.equal((await call(`/chats/${group}/pins`,member.token)).data.length,0);
  const feed=(await call(`/chats/${group}/messages?forum=1`,member.token)).data;assert.deepEqual(feed[0].poll.options[0].voters,[member.user.id]);assert.equal(feed[1].attachment.id,file.id);assert.equal(feed[1].reply.id,poll.id);assert.equal(feed[1].reactions[0].emoji,'👍');assert.equal(feed[1].message_thread_id,a.id);
 });
+test('Android topic contract: 64 code points, metadata, five pins and owner-controlled management policy',async t=>{
+ const f=await fixture(t),{call,owner,member,group}=f;
+ for(const name of ['', '   ', 'я'.repeat(65)])assert.equal((await call(`/groups/${group}/topics`,owner.token,{name,client_id:randomUUID()})).status,400);
+ const emojiName='😀'.repeat(64);assert.equal((await f.topic(emojiName)).name,emojiName);
+ const a=await f.topic('Одинаковая'),b=await f.topic('Одинаковая');assert.notEqual(a.id,b.id);
+ const message=await f.send(a.id,member,'Последнее сообщение');let info=(await call(`/groups/${group}/topics`,owner.token)).data;
+ assert.equal(info.member_count,2);assert.equal(info.topics[0].id,a.id);assert.equal(info.topics[0].last_id,message.data.id);assert.equal(info.topics[0].last_sender,'forum_member');
+ const more=[await f.topic('3'),await f.topic('4'),await f.topic('5'),await f.topic('6')];const pins=[a,b,...more];
+ for(const topic of pins.slice(0,5))assert.equal((await call(`/groups/${group}/topics/${topic.id}`,owner.token,{pinned:true},'PATCH')).status,200);
+ assert.equal((await call(`/groups/${group}/topics/${pins[5].id}`,owner.token,{pinned:true},'PATCH')).status,409);
+ await call(`/communities/${group}/role`,owner.token,{user_id:member.user.id,role:'admin'});
+ assert.equal((await call(`/groups/${group}/topics/settings`,member.token,{enabled:false})).status,403);
+ assert.equal((await call(`/groups/${group}/topics/settings`,owner.token,{manage_policy:'owner'})).status,200);
+ for(const body of [{name:'Нельзя'}, {pinned:false}, {closed:true}])assert.equal((await call(`/groups/${group}/topics/${a.id}`,member.token,body,'PATCH')).status,403);
+ assert.equal((await call(`/groups/${group}/topics`,member.token)).data.can_manage,false);
+ await call(`/groups/${group}/topics/settings`,owner.token,{manage_policy:'admins'});
+ assert.equal((await call(`/groups/${group}/topics/${a.id}`,member.token,{name:'Можно'},'PATCH')).status,200);
+});
+test('Android topic pages use a stable cursor and support 1000 topics without returning the entire catalog',async t=>{
+ const f=await fixture(t),{call,owner,group,app}=f;
+ app.db.exec('BEGIN');for(let i=0;i<1000;i++){const id=Number(app.db.prepare("INSERT INTO chats(pair,kind,title,parent_id,created_by) VALUES(?,'group',?,?,?)").run('bulk-'+i,'Тема '+i,group,owner.user.id).lastInsertRowid);app.db.prepare("INSERT INTO members(chat_id,user_id,role) VALUES(?,?,'owner')").run(id,owner.user.id);}app.db.exec('COMMIT');
+ let cursor='',seen=[];for(let page=0;page<20;page++){const response=await call(`/groups/${group}/topics?limit=50${cursor?'&cursor='+encodeURIComponent(cursor):''}`,owner.token);assert.equal(response.status,200);assert.equal(response.data.topics.length,50);seen.push(...response.data.topics.map(t=>t.id));cursor=response.data.next_cursor;}
+ assert.equal(cursor,null);assert.equal(new Set(seen).size,1000);
+ assert.equal((await call(`/groups/${group}/topics`,owner.token,{name:'1001',client_id:randomUUID()})).status,409);
+ assert.equal((await call(`/groups/${group}/topics?limit=50&cursor=bad`,owner.token)).status,400);
+ assert.equal((await call(`/groups/${group}/topics?limit=-1`,owner.token)).status,400);
+ assert.ok((await call(`/groups/${group}/topics?limit=50&q=999`,owner.token)).data.topics.every(t=>t.name.includes('999')));
+});
+test('topic revision conflicts preserve the newer name, audit entries and events; Cyrillic search ignores case',async t=>{
+ const f=await fixture(t),{call,owner,group,app}=f,a=await f.topic('Ёлка');
+ const changed=await call(`/groups/${group}/topics/${a.id}`,owner.token,{name:'Дизайн',revision:a.revision},'PATCH');assert.equal(changed.status,200);assert.equal(changed.data.revision,a.revision+1);
+ assert.equal((await call(`/groups/${group}/topics/${a.id}`,owner.token,{name:'Старое имя',revision:a.revision},'PATCH')).status,409);
+ assert.equal((await call(`/groups/${group}/topics?limit=50&q=${encodeURIComponent('ДИЗАЙН')}`,owner.token)).data.topics[0].name,'Дизайн');
+ assert.equal(app.db.prepare('SELECT COUNT(*) n FROM topic_audit WHERE topic_id=?').get(a.id).n,2);
+});
+test('silent topic notifications stay enabled and preserve unread state',async t=>{
+ const f=await fixture(t),{call,owner,member,group,app}=f,a=await f.topic('Тихая');await f.send(a.id,owner,'Непрочитанное');
+ await call(`/chats/${a.id}/preferences`,member.token,{muted:true});
+ assert.equal((await call(`/groups/${group}/topics/${a.id}/notifications`,member.token,{mode:'silent'})).status,200);
+ assert.equal(topicNotification(app.db,a.id,member.user.id,'Привет'),true);
+ const info=(await call(`/groups/${group}/topics`,member.token)).data;assert.equal(info.topics[0].notification_mode,'silent');assert.equal(info.topics[0].unread_count,1);
+});
+test('upgrading keeps legacy 80-character names manageable without allowing new overlong names',async t=>{
+ const f=await fixture(t),a=await f.topic('Старая'),{app,call,owner,group}=f;
+ app.db.prepare('UPDATE chats SET title=? WHERE id=?').run('я'.repeat(80),a.id);
+ assert.equal((await call(`/groups/${group}/topics/${a.id}`,owner.token,{closed:true},'PATCH')).status,200);
+ assert.equal((await call(`/groups/${group}/topics/${a.id}`,owner.token,{name:'я'.repeat(80)},'PATCH')).status,400);
+ assert.equal((await call(`/groups/${group}/topics/${a.id}`,owner.token,{name:'Новое имя'},'PATCH')).status,200);
+});

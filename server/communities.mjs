@@ -43,7 +43,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
  return async(req,res,url,uid)=>{
   const path=url.pathname,method=req.method;
   if(path==='/api/chats'&&method==='GET'){
-   const rows=db.prepare(`SELECT c.id,c.kind,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,c.topics_enabled,c.general_name,me.role,me.last_read,
+   const rows=db.prepare(`SELECT c.id,c.kind,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,c.topics_enabled,c.general_name,(SELECT title FROM chats WHERE id=c.parent_id) AS parent_name,me.role,me.last_read,
     COALESCE((SELECT MAX(last_read) FROM members WHERE chat_id=c.id AND user_id<>?),me.last_read) AS peer_read,
     COALESCE((SELECT MAX(MAX(last_read,last_delivered)) FROM members WHERE chat_id=c.id AND user_id<>me.user_id),me.last_read) AS peer_delivered,
     CASE WHEN c.kind IN ('group','channel') THEN c.id ELSE COALESCE(peer.id,?) END AS peer_id,

@@ -446,17 +446,21 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     LaunchedEffect(token) {
         MessagingService.signals.collect { event ->
             if(event.account!=me?.id)return@collect
-            if(event.type in listOf("read", "delivered")) {
+            if(event.type in listOf("read", "delivered", "topics", "community", "chats", "connected")) {
                 try {
                     val rows = withContext(Dispatchers.IO) { api.chats(token) }
                     chats.clear(); chats.addAll(rows)
-                    selectedChat?.let { selected -> selectedChat = rows.firstOrNull { it.id == selected.id } }
+                    selectedChat?.let { selected ->
+                        val found=rows.firstOrNull { it.id == selected.id }
+                        val parent=if(found==null&&selected.parentId!=0L)rows.firstOrNull{it.id==selected.parentId} else null
+                        selectedChat=found?:parent;if(parent!=null){topicsGroup=parent;messages.clear()}
+                    }
                     withContext(Dispatchers.IO) { cache.saveChats(event.account, rows) }
                 } catch(cancelled:kotlinx.coroutines.CancellationException) { throw cancelled } catch(_:Exception) {}
             }
             if(event.type=="history-cleared"&&selectedChat?.id==event.chatId){messages.clear();if(event.deleted)selectedChat=null}
             if(event.type=="removed"&&topicsGroup?.id==event.chatId)topicsGroup=null
-            if(event.type=="removed"&&(selectedChat?.id==event.chatId||selectedChat?.parentId==event.chatId)){selectedChat=null;messages.clear();topicsGroup=null}
+            if(event.type=="removed"&&(selectedChat?.id==event.chatId||selectedChat?.parentId==event.chatId)){val parent=selectedChat?.parentId?.takeIf{it!=0L&&it!=event.chatId}?.let{id->chats.firstOrNull{it.id==id}};selectedChat=parent;messages.clear();topicsGroup=parent}
             if(event.type=="profile") {
                 profileRevision++
                 if(event.userId==me?.id)try{val user=withContext(Dispatchers.IO){api.me(token)};me=user;NativeAccounts.remember(context,user,token);withContext(Dispatchers.IO){cache.saveMe(user)}}catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(_:Exception){}
@@ -528,7 +532,10 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                 val rows = withContext(Dispatchers.IO) { api.chats(token) }
                 if (chats.toList() != rows) { chats.clear(); chats.addAll(rows) }
                 withContext(Dispatchers.IO) { cache.saveChats(account, rows); NativeNotificationPolicy.muted(context, account, rows) }
-                selectedChat?.let { selectedChat = rows.firstOrNull { row -> row.id == it.id } }
+                selectedChat?.let { selected ->
+                    val found=rows.firstOrNull{it.id==selected.id};val parent=if(found==null&&selected.parentId!=0L)rows.firstOrNull{it.id==selected.parentId} else null
+                    selectedChat=found?:parent;if(parent!=null){topicsGroup=parent;messages.clear()}
+                }
                 val current = selectedChat
                 if (current != null) {
                     val fresh = withContext(Dispatchers.IO) { api.messages(token, current.id, if (earlierWindow) messages.lastOrNull()?.id?.plus(1) else null) }
@@ -699,12 +706,12 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                         val chatId = selectedChat!!.id
                         scope.launch {
                             try { val page = withContext(Dispatchers.IO) { api.messagesAround(token, chatId, id) }; if (selectedChat?.id == chatId) { earlierWindow = true; messages.clear(); messages.addAll(page); focusMessageId = id } }
-                            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Сообщение недоступно" }
+                            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { if(selectedChat?.id==chatId)focusMessageId=null; error = problem.message ?: "Сообщение недоступно" }
                         }
                     },
                     startSearch = profileSearchRequested, onSearchStarted = { profileSearchRequested = false },
                     earlierWindow = earlierWindow, onNewest = { earlierWindow = false; messages.clear(); focusMessageId = selectedChat?.lastId?.takeIf { it > 0 }; retryGeneration++ },
-                    token = token, callActive = callState.call != null, readVisible = callState.call == null || callState.minimized,
+                    token = token, callActive = callState.call != null, readVisible = (callState.call == null || callState.minimized) && topicsGroup == null,
                     transcribingMessages = transcribingMessages.toSet(),
                     moreHistory = moreHistory, loadingHistory = loadingHistory, onLoadOlder = {
                         val chatId = selectedChat?.id
@@ -725,11 +732,11 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                         else { pendingCall = chat; callPermission.launch(Manifest.permission.RECORD_AUDIO) }
                     },
                     onCommunity = { if(selectedChat?.parentId != 0L && selectedChat?.parentId != null) topicsGroup=chats.firstOrNull { it.id==selectedChat?.parentId } else manageCommunity = selectedChat },
-                    topicNavigation = { selectedChat?.takeIf { it.kind == "group" }?.let { chat -> NativeTopicTabs(chat,token,api) { id -> selectedChat=chats.firstOrNull{it.id==id};messages.clear() } } },
+                    topicNavigation = { selectedChat?.takeIf { it.kind == "group" }?.let { chat -> NativeTopicTabs(chat,token,api) { id -> selectedChat=chats.firstOrNull{it.id==id};messages.clear();focusMessageId=context.getSharedPreferences("volna-topic-position-${me?.id ?: 0}",android.content.Context.MODE_PRIVATE).getLong("message:$id",0).takeIf{it>0} } } },
                     onTopics = { topicsGroup=chats.firstOrNull { it.id==(selectedChat?.parentId?.takeIf { id -> id != 0L } ?: selectedChat?.id) } }, onGallery = { galleryChat = selectedChat },
                     onOpenAttachment = { attachmentPreview = it },
                     error = error,
-                    onBack = { selectedChat = selectedChat?.parentId?.takeIf { it != 0L }?.let { parent -> chats.firstOrNull { it.id==parent } }; messages.clear(); messageQuery = "" },
+                    onBack = { val parent = nativeTopicParent(selectedChat,chats); selectedChat = parent; topicsGroup = parent; messages.clear(); messageQuery = "" },
                     api = api,
                     onAppearance = { appearanceChat = selectedChat?.id; appearanceOpen = true },
                     onSendExpression = { item, replyId, onSent ->
@@ -853,9 +860,9 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                 scope.launch { try { chats.clear(); chats.addAll(withContext(Dispatchers.IO) { api.chats(token) }); selectedChat = chats.firstOrNull { it.id == id }; messages.clear() }
                     catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось открыть чат" } }
             } }
-            topicsGroup?.let { group -> NativeTopicsDialog(group,token,api,{topicsGroup=null},{
+            topicsGroup?.let { group -> NativeTopicsDialog(group,token,api,{topicsGroup=null;selectedChat=null;messages.clear()},{
                 scope.launch { try { val current=selectedChat?.id;val rows=withContext(Dispatchers.IO){api.chats(token)};chats.clear();chats.addAll(rows);selectedChat=rows.firstOrNull{it.id==current} } catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(problem:Exception){error=problem.message.orEmpty()} }
-            }) { id, messageId -> topicsGroup=null;scope.launch {try {val rows=withContext(Dispatchers.IO){api.chats(token)};chats.clear();chats.addAll(rows);selectedChat=rows.firstOrNull{it.id==id};messages.clear();focusMessageId=messageId}catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(problem:Exception){error=problem.message.orEmpty()}} } }
+            }) { id, messageId -> topicsGroup=null;scope.launch {try {val rows=withContext(Dispatchers.IO){api.chats(token)};chats.clear();chats.addAll(rows);selectedChat=rows.firstOrNull{it.id==id};messages.clear();focusMessageId=messageId?:context.getSharedPreferences("volna-topic-position-${me?.id ?: 0}",android.content.Context.MODE_PRIVATE).getLong("message:$id",0).takeIf{it>0}}catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(problem:Exception){error=problem.message.orEmpty()}} } }
             manageCommunity?.let { chat -> CommunityManageDialog(chat, me, token, api, { manageCommunity = null }, {
                 scope.launch { try { chats.clear(); chats.addAll(withContext(Dispatchers.IO) { api.chats(token) }); selectedChat = chats.firstOrNull { it.id == selectedChat?.id } }
                     catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось обновить чаты" } }

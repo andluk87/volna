@@ -36,7 +36,7 @@ data class VolnaChat(
     val muted: Boolean = false,
     val pinned: Boolean = false,
     val role: String = "member", val canSend: Boolean = true, val memberCount: Int = 0,
-    val avatarUrl: String? = null, val lastId: Long = 0, val lastSenderId: Long = 0, val peerOnline: Boolean = false, val parentId: Long = 0, val topicClosed: Boolean = false, val isContact: Boolean = false, val manualUnread: Boolean = false, val peerLastSeen: Long = 0, val topicsEnabled: Boolean = false
+    val avatarUrl: String? = null, val lastId: Long = 0, val lastSenderId: Long = 0, val peerOnline: Boolean = false, val parentId: Long = 0, val topicClosed: Boolean = false, val isContact: Boolean = false, val manualUnread: Boolean = false, val peerLastSeen: Long = 0, val topicsEnabled: Boolean = false, val topicTitle: String = "", val topicIcon: String = "", val parentName: String = ""
 )
 data class VolnaReaction(val emoji: String, val userId: Long, val name: String, val avatarUrl: String? = null)
 data class VolnaReply(val id: Long, val name: String, val text: String, val deleted: Boolean)
@@ -212,7 +212,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
     fun completeInitialProfile(token: String, first: String, last: String, username: String): VolnaUser = parseUser(call("/users/me/onboarding", "POST", token, JSONObject().put("first_name", first).put("last_name", last).put("username", username)).getJSONObject("user"))
     fun changeUsername(token: String, username: String): VolnaUser = parseUser(call("/users/me/username", "PATCH", token, JSONObject().put("username", username)).getJSONObject("user"))
     fun publicProfile(username: String): VolnaUser = parseUser(call("/public/users/" + android.net.Uri.encode(username)))
-    fun topics(token: String, group: Long): JSONObject = call("/groups/$group/topics", token = token)
+    fun topics(token: String, group: Long, cursor: String? = null, query: String = "", paged: Boolean = false): JSONObject = call("/groups/$group/topics" + if (paged) "?limit=50&q=${java.net.URLEncoder.encode(query, "UTF-8")}" + (cursor?.let { "&cursor=${java.net.URLEncoder.encode(it, "UTF-8")}" } ?: "") else "", token = token)
     fun topicAction(token: String, group: Long, path: String, data: JSONObject = JSONObject(), method: String = "POST"): JSONObject = call("/groups/$group/topics$path", method, token, data)
 
     fun logout(token: String) { call("/logout", "POST", token) }
@@ -231,7 +231,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
                     (if (row.isNull("last_text")) "" else row.optString("last_text")), (if (row.isNull("last_at")) "" else row.optString("last_at")), row.optInt("unread"),
                     row.optInt("saved") == 1, row.optLong("peer_id"), row.optLong("peer_read"), row.optLong("peer_delivered", row.optLong("peer_read")),
                     row.optString("kind", "direct"), row.optInt("archived") == 1, row.optInt("muted") == 1, row.optInt("pinned") == 1,
-                    row.optString("role", "member"), row.optInt("can_send", 1) == 1, row.optInt("member_count"), nullableText(row, "avatar_url"), row.optLong("last_id"), row.optLong("last_sender_id"), row.optBoolean("peer_online"), row.optLong("parent_id"), row.optInt("topic_closed")==1, row.optBoolean("is_contact"), row.optInt("manual_unread") == 1, row.optLong("peer_last_seen"), row.optInt("topics_enabled")==1)
+                    row.optString("role", "member"), row.optInt("can_send", 1) == 1, row.optInt("member_count"), nullableText(row, "avatar_url"), row.optLong("last_id"), row.optLong("last_sender_id"), row.optBoolean("peer_online"), row.optLong("parent_id"), row.optInt("topic_closed")==1, row.optBoolean("is_contact"), row.optInt("manual_unread") == 1, row.optLong("peer_last_seen"), row.optInt("topics_enabled")==1, row.optString("topic_name"),row.optString("topic_icon"),nullableText(row,"parent_name").orEmpty())
             }
         }
     }
