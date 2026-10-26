@@ -340,6 +340,35 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         } catch (error: Exception) { partial.delete(); throw error }
     }
 
+    internal fun mediaPage(token: String, chatId: Long, anchor: Long?, direction: String = "around", cursor: String? = null, type: String = "photo_video"): NativeMediaPage {
+        val query = "type=$type&limit=40&direction=$direction&" + if (cursor != null) "cursor=" + java.net.URLEncoder.encode(cursor, "UTF-8") else if(anchor!=null) "anchorMediaId=m$anchor" else ""
+        val data = call("/chats/$chatId/media?$query", "GET", token)
+        val rows = data.getJSONArray("items")
+        return NativeMediaPage((0 until rows.length()).map { parseMessage(rows.getJSONObject(it).getJSONObject("message")) }, nullableText(data, "beforeCursor"), nullableText(data, "afterCursor"), data.optBoolean("hasMoreBefore"), data.optBoolean("hasMoreAfter"))
+    }
+    internal suspend fun downloadMedia(token: String, message: VolnaMessage, destination: File): Unit = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+        val id = message.attachmentId ?: run { continuation.resumeWith(Result.failure(IllegalStateException("Нет вложения"))); return@suspendCancellableCoroutine }
+        val call = http.newCall(Request.Builder().url(attachmentUrl(id) + "?message_id=${message.id}").header("Authorization", "Bearer $token").build())
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) { if (continuation.isActive) continuation.resumeWith(Result.failure(e)) }
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                val partial = File(destination.parentFile, destination.name + ".part")
+                try {
+                    response.use {
+                        if (!response.isSuccessful) throw NativeApiException(response.code, "Медиа недоступно (${response.code})")
+                        val body = response.body ?: error("Пустое вложение")
+                        require(body.contentLength() <= 20L*1024*1024) { "Вложение превышает 20 МБ" }
+                        destination.parentFile?.mkdirs(); var size = 0L
+                        body.byteStream().use { input -> FileOutputStream(partial).use { output -> val buffer = ByteArray(32768); while (true) { if (!continuation.isActive) throw java.io.IOException("Загрузка отменена"); val n = input.read(buffer); if (n < 0) break; size += n; require(size <= 20L*1024*1024) { "Вложение превышает 20 МБ" }; output.write(buffer,0,n) }; output.fd.sync() } }
+                        check(size > 0 && partial.renameTo(destination)) { "Не удалось сохранить вложение" }
+                    }
+                    if (continuation.isActive) continuation.resumeWith(Result.success(Unit))
+                } catch (e: Exception) { partial.delete(); if (continuation.isActive) continuation.resumeWith(Result.failure(e)) }
+            }
+        })
+    }
+
     fun gallery(token: String, chatId: Long, before: Long? = null, type: String = "all"): List<VolnaMessage> = messageList(token, "/chats/$chatId/media?type=$type" + if (before != null) "&before=$before" else "")
     fun contacts(token: String): List<VolnaUser> = arrayCall("/contacts", token).let { rows -> (0 until rows.length()).map { parseUser(rows.getJSONObject(it)) } }
     fun callHistory(token: String, before: Long? = null, chatId: Long? = null): List<VolnaCallRecord> = arrayCall("/calls/history?" + listOfNotNull(before?.let { "before=$it" }, chatId?.let { "chat_id=$it" }).joinToString("&"), token).let { rows ->

@@ -1,3 +1,4 @@
+import {chatMedia} from './chat-media.mjs';
 import {interactivePayload} from '../shared/interactive.mjs';
 import {readAdminSettings} from './admin-config.mjs';
 import {isEmoji} from '../shared/emoji-text.mjs';
@@ -44,6 +45,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       reactions:db.prepare('SELECT r.emoji,r.user_id,u.name FROM reactions r JOIN users u ON u.id=r.user_id WHERE r.message_id=? ORDER BY r.emoji,r.rowid').all(row.id).map(reaction=>({...reaction,avatar_url:userById(reaction.user_id)?.avatar_url||null})),
       pinned:!!db.prepare('SELECT 1 FROM pins WHERE message_id=?').get(row.id)};
   };
+  const mediaPage=chatMedia({db,hydrate:visibleHydrate,member,cutoff});
   const changed=(row,extra={})=>broadcast(row.chat_id,{type:'message-update',message:hydrate(row),...extra});
   const authorized=(id,uid)=>{const row=get(id);if(!row)throw error(404,'Сообщение не найдено');member(row.chat_id,uid);if(row.id<=cutoff(row.chat_id,uid))throw error(404,'Сообщение не найдено');return row;};
   const clientId=value=>{if(typeof value!=='string'||!/^[a-zA-Z0-9-]{16,64}$/.test(value))throw error(400,'Некорректный идентификатор сообщения');return value;};
@@ -144,12 +146,13 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(fileMatch&&method==='GET'){
       const id=fileMatch[1],file=db.prepare('SELECT * FROM attachments WHERE id=?').get(id);
       const attached=db.prepare('SELECT 1 FROM messages WHERE attachment_id=?').get(id);
-      const accessible=db.prepare('SELECT 1 FROM messages m JOIN members c ON c.chat_id=m.chat_id WHERE m.attachment_id=? AND m.deleted_at IS NULL AND c.user_id=? LIMIT 1').get(id,uid);
+      const accessible=db.prepare('SELECT 1 FROM messages m JOIN members c ON c.chat_id=m.chat_id JOIN chats ch ON ch.id=m.chat_id LEFT JOIN chat_visibility v ON v.chat_id=m.chat_id AND v.user_id=c.user_id WHERE m.attachment_id=? AND m.deleted_at IS NULL AND c.user_id=? AND m.id>COALESCE(v.hidden_before,0) AND ch.admin_deleted=0 AND ch.topic_deleted=0 LIMIT 1').get(id,uid);
+      if(url.searchParams.has('message_id')){const mid=Number(url.searchParams.get('message_id'));if(!Number.isSafeInteger(mid)||mid<1)throw error(400,'Некорректное сообщение');const message=authorized(mid,uid);if(message.deleted_at||message.attachment_id!==id)throw error(404,'Медиа недоступно');}
       const avatar=db.prepare('SELECT 1 FROM users WHERE avatar_id=? AND avatar_hidden=0').get(id);
       if(expressions()?.blockedFile(id))throw error(404,'Эмодзи заблокирован');
-      if(!file||(!accessible&&!avatar&&!expressions()?.fileAccessible(id,uid)&&!(file.owner_id===uid&&!attached)))throw error(404,'Файл недоступен');
+      if(!file||file.admin_blocked||(!accessible&&!avatar&&!expressions()?.fileAccessible(id,uid)&&!(file.owner_id===uid&&!attached)))throw error(404,'Файл недоступен');
       let bytes;try{bytes=readFileSync(join(uploads,id));}catch{throw error(404,'Файл отсутствует в хранилище');}
-      res.writeHead(200,{'Content-Type':file.mime,'Content-Length':bytes.length,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,'Content-Security-Policy':"default-src 'none'; sandbox"});res.end(bytes);return true;
+      res.writeHead(200,{'Content-Type':file.mime,'Content-Length':bytes.length,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,'Cache-Control':'private, no-store','Content-Security-Policy':"default-src 'none'; sandbox"});res.end(bytes);return true;
     }
     if(path==='/api/saved'&&method==='POST'){
       const pair='saved:'+uid;db.prepare('INSERT OR IGNORE INTO chats(pair) VALUES(?)').run(pair);const chat=db.prepare('SELECT id FROM chats WHERE pair=?').get(pair);
@@ -196,6 +199,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       const chat=Number(messages[1]),action=messages[2];member(chat,uid);
       if(method==='GET'){
         const hidden=cutoff(chat,uid);
+        if(action==='media'&&(url.searchParams.has('direction')||url.searchParams.has('anchorMediaId')||url.searchParams.has('cursor')||['photo','video','photo_video'].includes(url.searchParams.get('type')))){json(res,200,mediaPage(chat,uid,url.searchParams));return true;}
         if(action==='messages'&&url.searchParams.get('forum')==='1'){
           const group=db.prepare('SELECT kind,parent_id FROM chats WHERE id=?').get(chat);if(group.kind!=='group'||group.parent_id)throw error(400,'Общая лента доступна только для основной группы');
           const before=Number(url.searchParams.get('before')||Number.MAX_SAFE_INTEGER);if(!Number.isSafeInteger(before)||before<1)throw error(400,'Некорректный курсор');

@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
@@ -168,19 +170,28 @@ fun AttachmentGallery(chat: VolnaChat, token: String, api: NativeApi, onOpen: (V
     var busy by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(true) }
     var filter by remember { mutableStateOf("all") }
+    var cursor by remember { mutableStateOf<String?>(null) }
+    var columns by rememberSaveable { mutableStateOf(3) }
+    var generation by remember { mutableStateOf(0) }
+    var loadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var error by remember { mutableStateOf("") }
     fun load() {
         if (busy || !more) return
         busy = true
-        scope.launch {
+        val version=generation
+        loadJob=scope.launch {
             try {
-                val page = withContext(Dispatchers.IO) { api.gallery(token, chat.id, media.lastOrNull()?.id) }
-                media.addAll(page.filter { row -> media.none { it.id == row.id } }); more = page.size == 50
-            } catch (problem: Exception) { error = problem.message ?: "Не удалось открыть галерею" }
-            finally { busy = false }
+                if(filter=="file") {
+                    val page=withContext(Dispatchers.IO){api.gallery(token,chat.id,media.lastOrNull()?.id,"files")};if(version!=generation)return@launch;media.addAll(page.filter{row->media.none{it.id==row.id}});more=page.size==50
+                }else {
+                    val page=withContext(Dispatchers.IO){api.mediaPage(token,chat.id,null,if(cursor==null)"around" else "before",cursor,when(filter){"image"->"photo";"video"->"video";else->"photo_video"})};if(version!=generation)return@launch;media.addAll(page.items.reversed().filter{row->media.none{it.id==row.id}});cursor=page.before;more=page.hasBefore
+                }
+            } catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch (problem: Exception) { if(version==generation)error = problem.message ?: "Не удалось открыть галерею" }
+            finally { if(version==generation)busy = false }
         }
     }
-    LaunchedEffect(chat.id) { load() }
+    LaunchedEffect(chat.id,filter) { generation++;loadJob?.cancel();busy=false;media.clear();cursor=null;more=true;error="";load() }
+    DisposableEffect(chat.id) { onDispose { loadJob?.cancel() } }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), color = Ink) {
             Column {
@@ -193,12 +204,15 @@ fun AttachmentGallery(chat: VolnaChat, token: String, api: NativeApi, onOpen: (V
                 }
                 if (error.isNotBlank()) ErrorBanner(error, Modifier.padding(12.dp))
                 val visible = media.filter { message -> when (filter) { "image" -> message.attachmentMime?.startsWith("image/") == true; "video" -> message.attachmentMime?.startsWith("video/") == true; "file" -> message.attachmentMime?.startsWith("image/") != true && message.attachmentMime?.startsWith("video/") != true; else -> true } }
-                LazyVerticalGrid(GridCells.Adaptive(135.dp), modifier = Modifier.weight(1f).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(visible, key = { it.id }) { message -> Column(Modifier.clickable { onOpen(message, media.toList()) }) {
+                TextButton(onClick={columns=if(columns==3)4 else 3}){NativeText("$columns в ряд")}
+                LazyVerticalGrid(GridCells.Fixed(columns), modifier = Modifier.weight(1f).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    visible.forEachIndexed { index,message ->
+                        if(index==0||visible[index-1].createdAt.take(7)!=message.createdAt.take(7))item(key="month-${message.createdAt.take(7)}",span={GridItemSpan(maxLineSpan)}){NativeText(try{java.time.YearMonth.parse(message.createdAt.take(7)).format(java.time.format.DateTimeFormatter.ofPattern("LLLL yyyy",java.util.Locale("ru")))}catch(_:Exception){message.createdAt.take(7)},Modifier.padding(vertical=8.dp))}
+                        item(key=message.id) { Column(Modifier.clickable { onOpen(message, media.toList()) }) {
                         AttachmentThumbnail(message, token, { onOpen(message, media.toList()) }, Modifier.fillMaxWidth().height(120.dp))
                         NativeText(message.attachmentName ?: "Вложение", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         NativeText("${(message.attachmentSize / 1024).coerceAtLeast(1)} КБ", color = Muted, fontSize = 10.sp)
-                    } }
+                    } } }
                 }
                 if (media.isEmpty() && !busy && error.isBlank()) NativeText("Вложений пока нет", Modifier.padding(16.dp), color = Muted)
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())

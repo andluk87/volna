@@ -77,9 +77,8 @@ internal fun NativeFullScreen(title: String, onDismiss: () -> Unit, overlayConte
 }
 
 @Composable
-internal fun NativeDialogSystemBars() {
+internal fun NativeDialogSystemBars(color: androidx.compose.ui.graphics.Color = Ink) {
     val window = (LocalView.current.parent as? DialogWindowProvider)?.window
-    val color = Ink
     SideEffect { window?.let { target ->
         target.statusBarColor = android.graphics.Color.TRANSPARENT; target.navigationBarColor = android.graphics.Color.TRANSPARENT
         if (android.os.Build.VERSION.SDK_INT >= 29) target.isNavigationBarContrastEnforced = false

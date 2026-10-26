@@ -895,14 +895,14 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             }, { manageCommunity = null; selectedChat = null; messages.clear() }, onOpenAttachment = { photoGallery = messages.toList(); attachmentPreview = it }) }
             galleryChat?.let { chat -> AttachmentGallery(chat, token, api, { photo, gallery -> photoGallery = gallery; attachmentPreview = photo }, { galleryChat = null }) }
             attachmentPreview?.let { message ->
-                if (message.attachmentMime?.startsWith("image/") == true) NativePhotoViewer(message, photoGallery, token, api,
+                if (isTimelineMedia(message)) NativePhotoViewer(message, photoGallery, token, api,
                     onEditedReady = { file -> photoShare = NativeIncomingShare(UUID.randomUUID().toString(), "", listOf(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))); attachmentPreview = null },
                     canReply = { photo -> chats.firstOrNull { it.id == photo.chatId }?.canSend == true },
                     canDelete = { it.senderId == me?.id || chats.firstOrNull { chat -> chat.id == it.chatId }?.role in listOf("owner", "admin") },
                     onAction = { photo, action -> when (action) {
                         "forward" -> { forwardTargetMessage = photo; forwardBatch = emptyList(); forwardNonce = UUID.randomUUID().toString() }
                         "reply", "show" -> { selectedChat = chats.firstOrNull { it.id == photo.chatId } ?: selectedChat; galleryChat = null; profileTargetId = null; manageCommunity = null; focusMessageId = photo.id; if (action == "reply") photoReply = photo }
-                        "delete" -> scope.launch { try { val updated = withContext(Dispatchers.IO) { api.deleteMessage(token, photo.id) }; listOf(messages, messageSearchResults, pinnedMessages).forEach { rows -> val pos = rows.indexOfFirst { it.id == photo.id }; if (pos >= 0) { if (rows === pinnedMessages) rows.removeAt(pos) else rows[pos] = updated } } } catch (problem: Exception) { error = problem.message ?: "Не удалось удалить фото" } }
+                        "deleted" -> { val updated=photo; listOf(messages, messageSearchResults, pinnedMessages).forEach { rows -> val pos = rows.indexOfFirst { it.id == photo.id }; if (pos >= 0) { if (rows === pinnedMessages) rows.removeAt(pos) else rows[pos] = updated } } }
                     } }, onDismiss = { attachmentPreview = null })
                 else AttachmentViewer(message, token, api, { attachmentPreview = null })
             }
