@@ -1,0 +1,3 @@
+Telegram Desktop emoji artwork: https://github.com/telegramdesktop/tdesktop/tree/a7f453612f4896ac04d0007a36ab0d377e5bcbcf/Telegram/Resources/emoji
+Unicode shaping tables derived from Google Noto Color Emoji (8998f5dd683424a73e2314a8c1f1e359c19e8742), SIL Open Font License 1.1; reserved family name changed. All bitmap artwork has been replaced by Telegram atlas cells.
+See TELEGRAM-LICENSE.txt, SHAPING-LICENSE.txt and manifest.json for pinned source provenance.

@@ -6,6 +6,8 @@ RUN if [ -L /root/.gradle ]; then rm /root/.gradle; fi && mkdir -p /root/.gradle
 ENV PATH=$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools
 WORKDIR /app
 COPY android-native/ ./
+COPY client/public/site/emoji/ /emoji/
+ENV VOLNA_EMOJI_ARTWORK=/emoji
 COPY client/scripts/docker-android-build.sh ./scripts/docker-android-build.sh
 ARG ANDROID_API_URL
 ENV ANDROID_API_URL=$ANDROID_API_URL

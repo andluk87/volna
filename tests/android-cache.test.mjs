@@ -45,7 +45,7 @@ esac
 `,0o755);
   file(join(dir,'scripts/prepare-expressions.py'),'# Asset bundling is tested by expressions_assets_test.py.\n');
   file(join(bin,'unzip'),`#!/bin/sh
-if [ "$TEST_RESULT" = no-emoji ]; then echo AndroidManifest.xml; else printf 'assets/emoji/NotoColorEmoji.ttf\\nassets/emoji/catalog.json\\n'; fi
+if [ "$TEST_RESULT" = no-emoji ]; then echo AndroidManifest.xml; else printf 'assets/emoji/TelegramEmoji.ttf\\nassets/emoji/catalog.json\\n'; fi
 `,0o755);
   file(join(bin,'curl'),'#!/bin/sh\necho forbidden-download >&2\nexit 99\n',0o755);
   file(join(bin,'gradle'),`#!/bin/sh

@@ -65,7 +65,7 @@ for permission in android.permission.INTERNET android.permission.ACCESS_NETWORK_
 done
 echo 'Verified Android network permissions in compiled APK.'
 python3 scripts/check-apk-version.py "$ANDROID_HOME/build-tools/36.0.0/aapt2" "$apk" app/build.gradle.kts
-unzip -l "$apk" | grep -Fq 'assets/emoji/NotoColorEmoji.ttf' || { echo 'APK is missing bundled emoji graphics.' >&2; exit 1; }
+unzip -l "$apk" | grep -Fq 'assets/emoji/TelegramEmoji.ttf' || { echo 'APK is missing bundled emoji graphics.' >&2; exit 1; }
 unzip -l "$apk" | grep -Fq 'assets/emoji/catalog.json' || { echo 'APK is missing the emoji catalog.' >&2; exit 1; }
 
 # Derive the Retriever hash from the signature of the APK we actually export.

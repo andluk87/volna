@@ -1,0 +1,141 @@
+{
+  "artwork": "Telegram Desktop",
+  "tdesktop_commit": "a7f453612f4896ac04d0007a36ab0d377e5bcbcf",
+  "lib_ui_commit": "79c846fdf0327ff99d3efdc1cc4e11ef50bedc6d",
+  "shaping_metadata_noto_commit": "8998f5dd683424a73e2314a8c1f1e359c19e8742",
+  "sprites": 3900,
+  "supported_sequences": 3941,
+  "font_sha256": "a5d1faf248150b28c8097a0bf45646cd4bdd2cc3a1aea8d7ded54592f31b1abf",
+  "sources": {
+    "emoji.txt": {
+      "url": "https://raw.githubusercontent.com/desktop-app/lib_ui/79c846fdf0327ff99d3efdc1cc4e11ef50bedc6d/emoji.txt",
+      "sha256": "bb5fa4b87d0bb499dc1e1a7c2c87f2e8ad05b06e5cab79ac882825fcad1ecb62"
+    },
+    "emoji_1.webp": {
+      "url": "https://raw.githubusercontent.com/telegramdesktop/tdesktop/a7f453612f4896ac04d0007a36ab0d377e5bcbcf/Telegram/Resources/emoji/emoji_1.webp",
+      "sha256": "4fdc6288fa0bae49d33f5e22bd2c9c5fca0068a8d6a45eea4e6964c7e5e4b587"
+    },
+    "emoji_2.webp": {
+      "url": "https://raw.githubusercontent.com/telegramdesktop/tdesktop/a7f453612f4896ac04d0007a36ab0d377e5bcbcf/Telegram/Resources/emoji/emoji_2.webp",
+      "sha256": "514ac69f6ec47f1f76b29cc7d4ef6773a3947fb136137275ea2f5ce914bc506c"
+    },
+    "emoji_3.webp": {
+      "url": "https://raw.githubusercontent.com/telegramdesktop/tdesktop/a7f453612f4896ac04d0007a36ab0d377e5bcbcf/Telegram/Resources/emoji/emoji_3.webp",
+      "sha256": "5497f55a124f294dcac29afa67b01bee79a00e4f2a42d3122d4e708077212ab4"
+    },
+    "emoji_4.webp": {
+      "url": "https://raw.githubusercontent.com/telegramdesktop/tdesktop/a7f453612f4896ac04d0007a36ab0d377e5bcbcf/Telegram/Resources/emoji/emoji_4.webp",
+      "sha256": "afc6004cddb86b4a42f36b00b796233a13de672af70f272be30e632979026486"
+    },
+    "emoji_5.webp": {
+      "url": "https://raw.githubusercontent.com/telegramdesktop/tdesktop/a7f453612f4896ac04d0007a36ab0d377e5bcbcf/Telegram/Resources/emoji/emoji_5.webp",
+      "sha256": "30244f93022238009ccbbf25b4b4216279a8137fbac9e37444048eea72dda422"
+    },
+    "emoji_6.webp": {
+      "url": "https://raw.githubusercontent.com/telegramdesktop/tdesktop/a7f453612f4896ac04d0007a36ab0d377e5bcbcf/Telegram/Resources/emoji/emoji_6.webp",
+      "sha256": "5efccb2328e320c7c3e6f02f6b7f5dee7d11361a0ef5cccfad6a2776a9dc68ef"
+    },
+    "emoji_7.webp": {
+      "url": "https://raw.githubusercontent.com/telegramdesktop/tdesktop/a7f453612f4896ac04d0007a36ab0d377e5bcbcf/Telegram/Resources/emoji/emoji_7.webp",
+      "sha256": "cc59c1e9db9c72fcee9e7d200eb971f59e856558755289adca31c18433323a26"
+    },
+    "emoji_8.webp": {
+      "url": "https://raw.githubusercontent.com/telegramdesktop/tdesktop/a7f453612f4896ac04d0007a36ab0d377e5bcbcf/Telegram/Resources/emoji/emoji_8.webp",
+      "sha256": "9b8217e33c41102fdec2ee5d97274f4a6b6a2b9bef949802a431ed2098bf1866"
+    },
+    "NotoColorEmoji.ttf": {
+      "url": "https://raw.githubusercontent.com/googlefonts/noto-emoji/8998f5dd683424a73e2314a8c1f1e359c19e8742/fonts/NotoColorEmoji.ttf",
+      "sha256": "72a635cb3d2f3524c51620cdde406b217204e8a6a06c6a096ff8ed4b5fd6e27b"
+    },
+    "FONT-LICENSE.txt": {
+      "url": "https://raw.githubusercontent.com/googlefonts/noto-emoji/8998f5dd683424a73e2314a8c1f1e359c19e8742/fonts/LICENSE",
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+    },
+    "TELEGRAM-LICENSE.txt": {
+      "url": "https://raw.githubusercontent.com/telegramdesktop/tdesktop/a7f453612f4896ac04d0007a36ab0d377e5bcbcf/LICENSE",
+      "sha256": "a728b65d02eeaf6b50c075a33b76107c652c3e5a12ff67f53682c83d47a23e1e"
+    },
+    "emoji-test.txt": {
+      "url": "https://unicode.org/Public/17.0.0/emoji/emoji-test.txt",
+      "sha256": "1d8a944f88d7952f7ef7c5167fef3c67995bcae24543949710231b03a201acda"
+    }
+  },
+  "compatibility": {
+    "🏂🏻": "🏂",
+    "🏂🏼": "🏂",
+    "🏂🏽": "🏂",
+    "🏂🏾": "🏂",
+    "🏂🏿": "🏂",
+    "🛌🏻": "🛌",
+    "🛌🏼": "🛌",
+    "🛌🏽": "🛌",
+    "🛌🏾": "🛌",
+    "🛌🏿": "🛌",
+    "🧑‍🤝‍🧑": "👫",
+    "🧑🏻‍🤝‍🧑🏻": "👫🏻",
+    "🧑🏻‍🤝‍🧑🏼": "👩🏻‍🤝‍👨🏼",
+    "🧑🏻‍🤝‍🧑🏽": "👩🏻‍🤝‍👨🏽",
+    "🧑🏻‍🤝‍🧑🏾": "👩🏻‍🤝‍👨🏾",
+    "🧑🏻‍🤝‍🧑🏿": "👩🏻‍🤝‍👨🏿",
+    "🧑🏼‍🤝‍🧑🏻": "👩🏼‍🤝‍👨🏻",
+    "🧑🏼‍🤝‍🧑🏼": "👫🏼",
+    "🧑🏼‍🤝‍🧑🏽": "👩🏼‍🤝‍👨🏽",
+    "🧑🏼‍🤝‍🧑🏾": "👩🏼‍🤝‍👨🏾",
+    "🧑🏼‍🤝‍🧑🏿": "👩🏼‍🤝‍👨🏿",
+    "🧑🏽‍🤝‍🧑🏻": "👩🏽‍🤝‍👨🏻",
+    "🧑🏽‍🤝‍🧑🏼": "👩🏽‍🤝‍👨🏼",
+    "🧑🏽‍🤝‍🧑🏽": "👫🏽",
+    "🧑🏽‍🤝‍🧑🏾": "👩🏽‍🤝‍👨🏾",
+    "🧑🏽‍🤝‍🧑🏿": "👩🏽‍🤝‍👨🏿",
+    "🧑🏾‍🤝‍🧑🏻": "👩🏾‍🤝‍👨🏻",
+    "🧑🏾‍🤝‍🧑🏼": "👩🏾‍🤝‍👨🏼",
+    "🧑🏾‍🤝‍🧑🏽": "👩🏾‍🤝‍👨🏽",
+    "🧑🏾‍🤝‍🧑🏾": "👫🏾",
+    "🧑🏾‍🤝‍🧑🏿": "👩🏾‍🤝‍👨🏿",
+    "🧑🏿‍🤝‍🧑🏻": "👩🏿‍🤝‍👨🏻",
+    "🧑🏿‍🤝‍🧑🏼": "👩🏿‍🤝‍👨🏼",
+    "🧑🏿‍🤝‍🧑🏽": "👩🏿‍🤝‍👨🏽",
+    "🧑🏿‍🤝‍🧑🏾": "👩🏿‍🤝‍👨🏾",
+    "🧑🏿‍🤝‍🧑🏿": "👫🏿",
+    "💏🏻": "🧑🏻‍❤️‍💋‍🧑🏻",
+    "💏🏼": "🧑🏼‍❤️‍💋‍🧑🏼",
+    "💏🏽": "🧑🏽‍❤️‍💋‍🧑🏽",
+    "💏🏾": "🧑🏾‍❤️‍💋‍🧑🏾",
+    "💏🏿": "🧑🏿‍❤️‍💋‍🧑🏿",
+    "💑🏻": "🧑🏻‍❤️‍🧑🏻",
+    "💑🏼": "🧑🏼‍❤️‍🧑🏼",
+    "💑🏽": "🧑🏽‍❤️‍🧑🏽",
+    "💑🏾": "🧑🏾‍❤️‍🧑🏾",
+    "💑🏿": "🧑🏿‍❤️‍🧑🏿",
+    "🧑‍🧑‍🧒": "👪",
+    "🧑‍🧑‍🧒‍🧒": "👨‍👩‍👧‍👦",
+    "🧑‍🧒": "👩‍👦",
+    "🧑‍🧒‍🧒": "👩‍👧‍👦"
+  },
+  "text_components": [
+    "🏻",
+    "🏼",
+    "🏽",
+    "🏾",
+    "🏿",
+    "🦰",
+    "🦱",
+    "🦳",
+    "🦲",
+    "♀️",
+    "♂️",
+    "⚕️"
+  ],
+  "aliases": {
+    "🧑🏻‍❤️‍🧑🏻": "💑🏻",
+    "🧑🏼‍❤️‍🧑🏼": "💑🏼",
+    "🧑🏽‍❤️‍🧑🏽": "💑🏽",
+    "🧑🏾‍❤️‍🧑🏾": "💑🏾",
+    "🧑🏿‍❤️‍🧑🏿": "💑🏿",
+    "🧑🏻‍❤️‍💋‍🧑🏻": "💏🏻",
+    "🧑🏼‍❤️‍💋‍🧑🏼": "💏🏼",
+    "🧑🏽‍❤️‍💋‍🧑🏽": "💏🏽",
+    "🧑🏾‍❤️‍💋‍🧑🏾": "💏🏾",
+    "🧑🏿‍❤️‍💋‍🧑🏿": "💏🏿"
+  }
+}

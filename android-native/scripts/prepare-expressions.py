@@ -13,11 +13,7 @@ import re
 import subprocess
 import xml.etree.ElementTree as ET
 
-NOTO_COMMIT = "8998f5dd683424a73e2314a8c1f1e359c19e8742"
-BASE = f"https://raw.githubusercontent.com/googlefonts/noto-emoji/{NOTO_COMMIT}"
 SOURCES = {
-    "NotoColorEmoji.ttf": BASE + "/fonts/NotoColorEmoji.ttf",
-    "FONT-LICENSE.txt": BASE + "/fonts/LICENSE",
     "emoji-test.txt": "https://unicode.org/Public/17.0.0/emoji/emoji-test.txt",
     "ru.xml": "https://raw.githubusercontent.com/unicode-org/cldr/release-48/common/annotations/ru.xml",
     "ru-derived.xml": "https://raw.githubusercontent.com/unicode-org/cldr/release-48/common/annotationsDerived/ru.xml",
@@ -68,9 +64,9 @@ def catalog(test_text, annotation_texts):
         base = "".join(c for c in value if not 0x1F3FB <= ord(c) <= 0x1F3FF)
         entries.append({"text": value, "name": label, "group": group,
                         "keywords": " ".join(sorted(tags)).lower(), "base": base})
-    return {"version": 17, "font": "Noto Color Emoji 2.051", "entries": entries, "aliases": aliases}
+    return {"version": 17, "font": "Telegram Desktop / Volna Telegram Emoji", "entries": entries, "aliases": aliases}
 
-def prepare(root, cache, offline):
+def prepare(root, cache, offline, artwork=None):
     cache.mkdir(parents=True, exist_ok=True)
     pinned = cache / "noto-2.051-unicode-17-cldr-48"
     pinned.mkdir(exist_ok=True)
@@ -84,21 +80,32 @@ def prepare(root, cache, offline):
         subprocess.run(["curl", "--fail", "--location", "--retry", "3", "--connect-timeout", "20",
                         "--max-time", "180", url, "-o", str(partial)], check=True)
         partial.replace(target)
-    font = (pinned / "NotoColorEmoji.ttf").read_bytes()
-    if len(font) < 5_000_000 or font[:4] not in (b"\x00\x01\x00\x00", b"OTTO"):
-        raise RuntimeError("Invalid Noto colour font; remove the cached file and retry.")
+    artwork = Path(artwork or os.environ.get("VOLNA_EMOJI_ARTWORK", Path(__file__).resolve().parents[2] / "client/public/site/emoji"))
+    metadata = json.loads((artwork / "manifest.json").read_text())
+    font = (artwork / "TelegramEmoji.ttf").read_bytes()
+    if len(font) < 5_000_000 or font[:4] != b"\x00\x01\x00\x00" or hashlib.sha256(font).hexdigest() != metadata["font_sha256"]:
+        raise RuntimeError("Invalid Telegram emoji font; restore the pinned repository artwork.")
     data = catalog((pinned / "emoji-test.txt").read_text(), [(pinned / n).read_text() for n in ("ru.xml", "ru-derived.xml")])
     if len(data["entries"]) < 3500:
         raise RuntimeError("Emoji catalog is incomplete; APK publication stopped.")
+    supported = set(json.loads((artwork / "supported.json").read_text()))
+    data["entries"] = [entry for entry in data["entries"] if entry["text"] in supported]
+    if len(data["entries"]) < 3500:
+        raise RuntimeError("Telegram emoji catalog is incomplete; APK publication stopped.")
+    data["font"] = "Telegram Desktop / Volna Telegram Emoji"
+    data["aliases"].update(metadata.get("aliases", {}))
     destination = root / "app/src/main/assets/emoji"
     destination.mkdir(parents=True, exist_ok=True)
-    for name in ("NotoColorEmoji.ttf", "FONT-LICENSE.txt", "UNICODE-LICENSE.txt"):
-        (destination / name).write_bytes((pinned / name).read_bytes())
+    for name in ("TelegramEmoji.ttf", "TELEGRAM-LICENSE.txt", "SHAPING-LICENSE.txt", "NOTICE.txt"):
+        (destination / name).write_bytes((artwork / name).read_bytes())
+    (destination / "UNICODE-LICENSE.txt").write_bytes((pinned / "UNICODE-LICENSE.txt").read_bytes())
+    for stale in ("NotoColorEmoji.ttf", "FONT-LICENSE.txt"):
+        (destination / stale).unlink(missing_ok=True)
     (destination / "catalog.json").write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
-    manifest = {"noto_commit": NOTO_COMMIT, "unicode": 17, "cldr": 48,
+    manifest = {"artwork": "Telegram Desktop", "tdesktop_commit": metadata["tdesktop_commit"], "unicode": 17, "cldr": 48,
                 "emoji_count": len(data["entries"]), "font_sha256": hashlib.sha256(font).hexdigest()}
     (destination / "manifest.json").write_text(json.dumps(manifest) + "\n")
-    print(f"Emoji: bundled {len(data['entries'])} Unicode 17 sequences and Noto 2.051; cache: {pinned}")
+    print(f"Emoji: bundled {len(data['entries'])} Unicode 17 sequences and Telegram Desktop artwork; cache: {pinned}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

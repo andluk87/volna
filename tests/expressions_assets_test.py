@@ -1,3 +1,5 @@
+import json
+import hashlib
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -41,18 +43,26 @@ class EmojiAssetsTest(unittest.TestCase):
             pinned = cache / "noto-2.051-unicode-17-cldr-48"; pinned.mkdir(parents=True)
             for name in assets.SOURCES:
                 (pinned / name).write_text("fixture " * 30)
-            (pinned / "NotoColorEmoji.ttf").write_bytes(b"\x00\x01\x00\x00" + bytes(5_000_000))
-            rows = [f"{0x1F600+i:X} ; fully-qualified # 😀 E1.0 fixture-{i}" for i in range(3600)]
+            artwork = Path(directory) / "artwork"; artwork.mkdir()
+            font = b"\x00\x01\x00\x00" + bytes(5_000_000)
+            (artwork / "TelegramEmoji.ttf").write_bytes(font)
+            source = Path(__file__).resolve().parents[1] / "client/public/site/emoji"
+            supported = json.loads((source / "supported.json").read_text())[:3600]
+            (artwork / "supported.json").write_text(json.dumps(supported))
+            (artwork / "manifest.json").write_text(json.dumps({"font_sha256":hashlib.sha256(font).hexdigest(),"tdesktop_commit":"fixture","aliases":{}}))
+            for name in ("TELEGRAM-LICENSE.txt", "SHAPING-LICENSE.txt", "NOTICE.txt"):
+                (artwork / name).write_text("fixture license")
+            rows = [f"{' '.join(f'{ord(c):X}' for c in text)} ; fully-qualified # {text} E1.0 fixture-{i}" for i,text in enumerate(supported)]
             (pinned / "emoji-test.txt").write_text("# group: Smileys & Emotion\n" + "\n".join(rows))
             for name in ("ru.xml", "ru-derived.xml"):
                 (pinned / name).write_text("<ldml>" + " " * 150 + "</ldml>")
-            assets.prepare(root, cache, True)
+            assets.prepare(root, cache, True, artwork)
             download.assert_not_called()
             self.assertTrue((root / "app/src/main/assets/emoji/catalog.json").is_file())
-            self.assertTrue((root / "app/src/main/assets/emoji/FONT-LICENSE.txt").is_file())
-            (pinned / "NotoColorEmoji.ttf").write_bytes(b"invalid" * 30)
-            with self.assertRaisesRegex(RuntimeError, "Invalid Noto"):
-                assets.prepare(root, cache, True)
+            self.assertTrue((root / "app/src/main/assets/emoji/TELEGRAM-LICENSE.txt").is_file())
+            (artwork / "TelegramEmoji.ttf").write_bytes(b"invalid" * 30)
+            with self.assertRaisesRegex(RuntimeError, "Invalid Telegram"):
+                assets.prepare(root, cache, True, artwork)
 
 if __name__ == "__main__":
     unittest.main()

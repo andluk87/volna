@@ -63,7 +63,7 @@ internal fun nativeEmojiTextStyle(style: TextStyle): TextStyle = style.copy(
 internal fun NativeEmojiProvider(content: @Composable () -> Unit) {
     val context = LocalContext.current.applicationContext
     val catalog = remember(context) { NativeEmojiCatalog(context) }
-    val family = remember(context) { FontFamily(Typeface.createFromAsset(context.assets, "emoji/NotoColorEmoji.ttf")) }
+    val family = remember(context) { FontFamily(Typeface.createFromAsset(context.assets, "emoji/TelegramEmoji.ttf")) }
     CompositionLocalProvider(LocalEmojiCatalog provides catalog, LocalEmojiFont provides family, content = content)
 }
 

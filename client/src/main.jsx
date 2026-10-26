@@ -76,6 +76,7 @@ import './windows-desktop.css';
 import './column-layout.css';
 import './message-layout.css';
 import './windows-polish.css';
+import './telegram-emoji.css';
 if(window.volnaDesktop)document.documentElement.dataset.desktop='true';
 if(window.volnaDesktop?.windowFrame==='overlay')document.documentElement.dataset.windowFrame='overlay';
 import {formatTime} from './appearance.mjs';
