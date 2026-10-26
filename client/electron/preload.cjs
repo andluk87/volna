@@ -1,6 +1,7 @@
 const {contextBridge,ipcRenderer}=require('electron');
 const listen=(channel,callback)=>{const fn=(_event,value)=>callback(value);ipcRenderer.on(channel,fn);return()=>ipcRenderer.removeListener(channel,fn);};
 contextBridge.exposeInMainWorld('volnaDesktop',{
+ windowFrame:process.platform==='win32'?'overlay':'native',setWindowTheme:theme=>ipcRenderer.invoke('desktop:window-theme',theme),
  setNotificationPreferences:value=>ipcRenderer.invoke('desktop:notification-preferences',value),testNotificationSound:volume=>ipcRenderer.invoke('desktop:notification-sound',volume),
  secondary:process.argv.includes('--volna-chat-window'),openChatWindow:value=>ipcRenderer.invoke('desktop:open-window',value),startCall:value=>ipcRenderer.invoke('desktop:start-call',value),onStartCall:callback=>listen('desktop:start-call',callback),soundSettings:()=>ipcRenderer.invoke('desktop:sound-settings'),notificationStatus:()=>ipcRenderer.invoke('desktop:notification-status'),notificationSettings:()=>ipcRenderer.invoke('desktop:notification-settings'),
  editorFocus:value=>ipcRenderer.invoke('desktop:editor-focus',value),onEditorCommand:callback=>listen('desktop:editor-command',callback),onFormat:callback=>listen('desktop:format',callback),platform:process.platform,unreadCount:value=>ipcRenderer.invoke('desktop:unread',value),onShortcut:callback=>listen('desktop:shortcut',callback),

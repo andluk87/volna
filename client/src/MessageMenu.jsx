@@ -31,7 +31,7 @@ export default function MessageMenu({message,quickReactions,meId,canSend,canMana
   const root=popup.current,details=owner.current;
   const position=()=>{
    const viewport=window.visualViewport;
-   const size={x:point.x,y:point.y,width:expanded?320:268,height:0,viewportWidth:viewport?.width||innerWidth,viewportHeight:viewport?.height||innerHeight,bounds:details.closest('.conversation')?.getBoundingClientRect()};
+   const size={viewportTop:document.querySelector('.desktop-titlebar')?.getBoundingClientRect().bottom||0,x:point.x,y:point.y,width:expanded?320:268,height:0,viewportWidth:viewport?.width||innerWidth,viewportHeight:viewport?.height||innerHeight,bounds:details.closest('.conversation')?.getBoundingClientRect()};
    const initial=fitMessagePopup(size);root.style.width=initial.width+'px';root.style.maxHeight=initial.maxHeight+'px';
    const fitted=fitMessagePopup({...size,height:root.getBoundingClientRect().height});
    root.style.left=fitted.left+'px';root.style.top=fitted.top+'px';root.dataset.positioned='true';

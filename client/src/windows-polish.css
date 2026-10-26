@@ -1,0 +1,41 @@
+/* Windows navigation and composer follow the compact Desktop layout. */
+[data-desktop=true] .desktop-folder-sidebar,[data-desktop=true] .desktop-folder-rail{background:var(--bg)}
+[data-desktop=true] .desktop-folder-rail{padding:0}
+[data-desktop=true] .desktop-folder-rail>button{min-height:64px;gap:4px;color:var(--muted);font-size:11px;font-weight:400;line-height:14px;padding:8px 3px}
+[data-desktop=true] .desktop-folder-rail>button:hover{background:var(--hover)}
+[data-desktop=true] .desktop-folder-rail>button.selected{background:var(--input);color:var(--accent)}
+[data-desktop=true] .folder-rail-icon{width:32px;height:30px;font-size:25px}
+[data-desktop=true] .folder-rail-icon>svg,[data-desktop=true] .desktop-folder-rail>.folder-rail-edit>svg{width:32px;height:30px}
+[data-desktop=true] .folder-rail-icon .folder-unread:not(:empty){left:auto;right:-8px;top:-3px;min-width:17px;height:17px;line-height:17px;padding:0 4px;font-size:11px;border-radius:9px;background:var(--muted);color:#fff;box-shadow:0 0 0 1px var(--bg)}
+[data-desktop=true] .desktop-folder-rail>button.selected .folder-unread:not(:empty),[data-desktop=true] .desktop-folder-rail>button:first-child .folder-unread:not(:empty){background:var(--accent)}
+[data-desktop=true] .desktop-folder-rail>.folder-rail-edit{min-height:64px;gap:4px}
+[data-desktop=true] .composer{min-height:48px;padding:0 4px 0 0;gap:0;border-top:0;align-items:flex-end;background:var(--panel)}
+[data-desktop=true] .composer-surface{min-height:48px;padding:0;gap:0;align-items:flex-end;border-radius:0;background:transparent;box-shadow:none}
+[data-desktop=true] .composer .attach-menu{order:0;height:48px;flex:0 0 44px}
+[data-desktop=true] .composer .attach-menu>summary{display:grid;place-items:center;width:44px;min-width:44px;height:48px;padding:0;color:var(--muted)}
+[data-desktop=true] .composer .attach-menu>summary>svg{width:24px;height:24px}
+[data-desktop=true] .composer .emoji-editor{order:1;min-height:48px;padding:13px 8px 13px 4px;line-height:22px;font-size:max(13px,calc(var(--message-size) - 2px))}
+[data-desktop=true] .composer-surface>.recording-bar{order:1;flex:1}
+[data-desktop=true] .composer .composer-emoji-control{order:2;flex:0 0 44px}
+[data-desktop=true] .composer .composer-emoji-control>.composer-emoji{display:grid;place-items:center;width:44px;min-width:44px;height:48px;padding:0;border-radius:0}
+[data-desktop=true] .composer>.mic-button,[data-desktop=true] .composer>.send-button{display:grid;place-items:center;width:44px;min-width:44px;height:48px;padding:0;background:transparent;border-radius:0;box-shadow:none}
+[data-desktop=true] .composer>.mic-button>svg{width:28px;height:28px}
+[data-desktop=true] .composer>.send-button>svg{width:26px;height:26px}
+[data-desktop=true] .composer :is(.composer-emoji,.attach-menu>summary,.mic-button):hover{color:var(--accent)}
+
+/* The native caption buttons remain Windows controls; the strip is draggable. */
+:root[data-window-frame=overlay]{--window-titlebar-height:28px;--window-titlebar-color:#242f3d}
+:root[data-window-frame=overlay][data-theme=light]{--window-titlebar-color:#f1f1f1}
+[data-window-frame=overlay] body{padding-top:var(--window-titlebar-height);overflow:hidden}
+.desktop-titlebar{position:fixed;inset:0 0 auto;height:var(--window-titlebar-height);background:var(--window-titlebar-color);z-index:20000;-webkit-app-region:drag;app-region:drag;user-select:none}
+[data-window-frame=overlay] .app{height:calc(100dvh - var(--window-titlebar-height))}
+[data-window-frame=overlay] .modal-backdrop,[data-window-frame=overlay] .desktop-menu-backdrop{top:var(--window-titlebar-height);height:calc(100dvh - var(--window-titlebar-height))}
+[data-window-frame=overlay] .main-menu .app-menu-content{top:var(--window-titlebar-height);max-height:calc(100dvh - var(--window-titlebar-height))}
+[data-window-frame=overlay] .app[data-info-docked=false]>.info-panel{top:var(--window-titlebar-height);height:calc(100dvh - var(--window-titlebar-height))}
+[data-window-frame=overlay] .composer>.emoji-panel.emoji-docked{top:var(--window-titlebar-height);height:calc(100dvh - var(--window-titlebar-height));max-height:calc(100dvh - var(--window-titlebar-height))}
+[data-window-frame=overlay] body:has(.call-panel.call-minimized) .composer>.emoji-panel.emoji-docked{top:calc(var(--window-titlebar-height) + 44px);height:calc(100dvh - var(--window-titlebar-height) - 44px)}
+[data-window-frame=overlay] .call-panel{top:var(--window-titlebar-height);max-height:calc(100dvh - var(--window-titlebar-height))}
+[data-window-frame=overlay] .app[data-info-docked=false]>.info-panel{position:fixed;bottom:0}
+[data-window-frame=overlay] .auth{min-height:calc(100dvh - var(--window-titlebar-height))}
+[data-window-frame=overlay] .call-panel:not(.call-minimized){height:calc(100dvh - var(--window-titlebar-height))}
+[data-window-frame=overlay] .auth{height:calc(100dvh - var(--window-titlebar-height));min-height:0;overflow-y:auto}

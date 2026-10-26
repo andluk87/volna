@@ -27,3 +27,7 @@ test('reaction catalog offers thousands of unique, server-compatible emoji and i
  assert.ok(data.entries.some(([emoji])=>emoji==='👀'));
  assert.ok(existsSync(new URL('../client/public'+data.license,import.meta.url)));
 });
+test('Windows overlay titlebar stays clear of a tall message menu',()=>{
+ const result=fitMessagePopup({x:10,y:5,width:268,height:900,viewportWidth:1000,viewportHeight:500,viewportTop:28});
+ assert.ok(result.top>=36);assert.ok(result.top+result.maxHeight<=492);
+});
