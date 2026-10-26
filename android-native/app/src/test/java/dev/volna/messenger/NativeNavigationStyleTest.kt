@@ -16,7 +16,7 @@ class NativeNavigationStyleTest {
         prefs.edit().clear().commit()
         val value = NativeAppearance(theme = "dark", radius = 22,
             foldersStyle = NativeNavigationStyle.Folders.copy(height = 56, selected = 0xFF7755AAL, labels = false),
-            navigationStyle = NativeNavigationStyle.Bottom.copy(radius = 8, textSize = 16, badges = false))
+            navigationStyle = NativeNavigationStyle.Bottom.copy(thirdTab = "calls", radius = 8, textSize = 16, badges = false))
         value.save(prefs)
         assertEquals(value, NativeAppearance.load(prefs))
         assertEquals(value.foldersStyle, NativeNavigationStyle.parse(prefs.getString("foldersStyle", null), NativeNavigationStyle.Folders))

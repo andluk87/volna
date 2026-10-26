@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NativeNavigationSerializationTest {
+    @Test fun callsCanReplaceSettingsWithoutLosingSavedStyleOrLegacyDefaults() {
+        val calls = NativeNavigationStyle.Bottom.copy(thirdTab = "calls", radius = 12, labels = false)
+        assertEquals(calls, NativeNavigationStyle.parse(calls.json(), NativeNavigationStyle.Bottom))
+        assertEquals("profile", NativeNavigationStyle.parse("{}", NativeNavigationStyle.Bottom).thirdTab)
+        assertEquals("profile", NativeNavigationStyle.parse("""{"thirdTab":"unknown"}""", NativeNavigationStyle.Bottom).thirdTab)
+    }
     @Test fun railPreferencesReturnToHorizontalDefaultsWithoutLosingCustomColors() {
         val style = NativeNavigationStyle.parse("""{"vertical":true,"labels":false,"height":72,"sideInset":4,"iconSize":46,"selected":4281558681,"textSize":16}""", NativeNavigationStyle.Folders)
         assertTrue(style.labels)

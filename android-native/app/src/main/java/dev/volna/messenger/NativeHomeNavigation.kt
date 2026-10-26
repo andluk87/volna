@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -29,7 +30,7 @@ internal fun NativeHomeNavigation(selected: String, user: VolnaUser?, token: Str
     Box(modifier.clip(RoundedCornerShape(style.radius.dp)).background(colors.surface).padding(3.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = style.height.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf(Triple("chats", "Чаты", Icons.Outlined.ChatBubbleOutline), Triple("contacts", "Контакты", Icons.Outlined.AccountCircle),
-                Triple("profile", "Настройки", Icons.Outlined.Settings), Triple("account", "Профиль", Icons.Outlined.PersonOutline)).forEach { (key, label, icon) ->
+                if (style.thirdTab == "calls") Triple("calls", "Звонки", Icons.Outlined.Call) else Triple("profile", "Настройки", Icons.Outlined.Settings), Triple("account", "Профиль", Icons.Outlined.PersonOutline)).forEach { (key, label, icon) ->
                 val active = selected == key
                 val tint = if (active) colors.selectedText else colors.text
                 Column(Modifier.weight(1f).heightIn(min = style.height.dp).clip(RoundedCornerShape(style.radius.dp)).background(if (active) colors.selected else Color.Transparent)

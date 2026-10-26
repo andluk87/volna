@@ -92,6 +92,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -139,6 +140,7 @@ private suspend fun startApkInstaller(context: Context, file: File) { installVol
 private val QuickEmoji = listOf("👍", "❤️", "😂", "🔥", "🎉", "😮", "😢", "🙏", "👏", "😍", "🤔", "💯", "🥰", "👎", "✨", "💙", "😎", "🤝", "👋", "💪", "😭", "😡", "🤗", "🤣")
 
 class MainActivity : ComponentActivity() {
+    private val incomingShare = mutableStateOf<NativeIncomingShare?>(null)
     private val authReturn = mutableStateOf<String?>(null)
     private val openChatRequest = mutableStateOf<Long?>(null)
     private val openMessageRequest = mutableStateOf<Long?>(null)
@@ -147,6 +149,10 @@ class MainActivity : ComponentActivity() {
     override fun onStop() { isVisible = false; super.onStop() }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState?.getBoolean("share_handled", false) != true) {
+            val source = savedInstanceState?.getParcelable<Intent>("share_intent") ?: intent
+            incomingShare.value = NativeIncomingShare.parse(source, savedInstanceState?.getString("share_id") ?: UUID.randomUUID().toString())
+        }
         enableEdgeToEdge()
         configureCallPip()
         authReturn.value = intent?.dataString
@@ -158,10 +164,17 @@ class MainActivity : ComponentActivity() {
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
         setContent { NativeEmojiProvider {
             Box(Modifier.fillMaxSize()) {
-                VolnaNativeApp(authReturn.value, openChatRequest.value, openMessageRequest.value, openAccountRequest.value) { openChatRequest.value = null; openMessageRequest.value = null; openAccountRequest.value = null }
+                VolnaNativeApp(authReturn.value, openChatRequest.value, openMessageRequest.value, openAccountRequest.value,
+                    incomingShare.value, { incomingShare.value = null; setIntent(Intent(this@MainActivity, MainActivity::class.java)) }) { openChatRequest.value = null; openMessageRequest.value = null; openAccountRequest.value = null }
                 if (NativeCallLayout.inPip) { val state by NativeCalls.state.collectAsState(); val account = getSharedPreferences("volna-native", MODE_PRIVATE).getLong("user_id", 0); VolnaTheme(rememberNativeCallAppearance(account)) { NativeCallScreen(state, NativeCredentials.access(account), standalone = true, pip = true) } }
             }
         } }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        incomingShare.value?.let { outState.putString("share_id", it.id); outState.putParcelable("share_intent", intent) }
+        outState.putBoolean("share_handled", incomingShare.value == null)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onUserLeaveHint() { super.onUserLeaveHint(); enterCallPip() }
@@ -169,6 +182,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        NativeIncomingShare.parse(intent)?.let { incomingShare.value = it }
         authReturn.value = intent.dataString
         if (intent.getBooleanExtra("open_call", false)) NativeCalls.minimize(false)
         openChatRequest.value = intent.getLongExtra("chat_id", 0L).takeIf { it > 0 } ?: nativeLinkedTopicChat(intent.dataString, BuildConfig.API_BASE_URL)
@@ -180,7 +194,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessageId: Long?, openAccountId: Long?, onIntentConsumed: () -> Unit) {
+private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessageId: Long?, openAccountId: Long?, incomingShare: NativeIncomingShare?, onShareConsumed: () -> Unit, onIntentConsumed: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val api = remember { NativeApi(BuildConfig.API_BASE_URL) }
     val cache = remember { NativeCache(context) }
@@ -262,7 +276,11 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     val voicePlayback = remember { NativeVoicePlayback(context) { error = it } }
     var attachmentBatch by remember { mutableStateOf<NativeAttachmentBatch?>(null) }
     var attachmentSending by remember { mutableStateOf(false) }
-    DisposableEffect(attachmentSending){NativeIdleUpdater.transferBusy=attachmentSending;onDispose{NativeIdleUpdater.transferBusy=false}}
+    DisposableEffect(attachmentBatch?.clientId) {
+        val directory = attachmentBatch?.ownedDirectory
+        onDispose { directory?.deleteRecursively() }
+    }
+    DisposableEffect(attachmentSending, incomingShare?.id, attachmentBatch?.clientId){NativeIdleUpdater.transferBusy=attachmentSending || incomingShare != null || attachmentBatch != null;onDispose{NativeIdleUpdater.transferBusy=false}}
     var attachmentStatus by remember { mutableStateOf("") }
     var attachmentError by remember { mutableStateOf("") }
     var pickedChat by remember { mutableStateOf<Long?>(null) }
@@ -323,9 +341,9 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         finally { updateBusy = false }
     }
 
-    LaunchedEffect(pendingUpdateFile, updateBusy, callState.call?.id, attachmentSending) {
+    LaunchedEffect(pendingUpdateFile, updateBusy, callState.call?.id, attachmentSending, incomingShare?.id, attachmentBatch?.clientId) {
         val release = updateAvailable
-        if (release != null && updateOnLaunch == release.versionCode && prefs.getLong("update_on_restart", 0) == release.versionCode && pendingUpdateFile?.isFile == true && !updateBusy && callState.call == null && !attachmentSending) {
+        if (release != null && updateOnLaunch == release.versionCode && prefs.getLong("update_on_restart", 0) == release.versionCode && pendingUpdateFile?.isFile == true && !updateBusy && callState.call == null && !attachmentSending && incomingShare == null && attachmentBatch == null) {
             prefs.edit().remove("update_on_restart").apply()
             dismissedUpdate = release.versionCode
             installUpdate(release)
@@ -362,7 +380,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     }
     fun discardBatch(batch: NativeAttachmentBatch) {
         val session = token
-        scope.launch(Dispatchers.IO) { NativeVoiceOutbox.remove(batch); batch.uploads.values.forEach { id -> runCatching { api.discardAttachment(session, id) } } }
+        scope.launch(Dispatchers.IO) { NativeVoiceOutbox.remove(batch); batch.ownedDirectory?.deleteRecursively(); batch.uploads.values.forEach { id -> runCatching { api.discardAttachment(session, id) } } }
         attachmentBatch = null; attachmentError = ""
     }
     fun sendBatch(batch: NativeAttachmentBatch, caption: String) {
@@ -396,7 +414,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     created.forEach { message -> if (messages.none { it.id == message.id }) messages.add(message) }
                     batch.onSent()
                 }
-                withContext(Dispatchers.IO) { NativeVoiceOutbox.remove(batch) }
+                withContext(Dispatchers.IO) { NativeVoiceOutbox.remove(batch); batch.ownedDirectory?.deleteRecursively() }
                 if (token == session) attachmentBatch = null
             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (problem: Exception) { attachmentError = problem.message ?: "Не удалось отправить вложения. Повторите отправку." }
             finally { attachmentSending = false; busy = false }
@@ -424,7 +442,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         if (openChatId == null) return@LaunchedEffect
         if (openAccountId != null && openAccountId != me?.id) {
             val account = NativeAccounts.list(context).firstOrNull { it.user.id == openAccountId }
-            if (account != null && account.token != token && callState.call == null && !attachmentSending) {
+            if (account != null && account.token != token && callState.call == null && !attachmentSending && incomingShare == null && attachmentBatch == null) {
                 MessagingService.stop(context); messages.clear(); chats.clear(); selectedChat = null
                 attachmentBatch = null; attachmentError = ""
                 prefs.edit().remove("token").putLong("user_id", account.user.id).apply(); me = account.user; token = account.token
@@ -591,7 +609,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     VolnaTheme(appearance) {
         NativeBackgroundCallHost(api)
         val readyUpdate=updateAvailable?.takeIf{it.versionCode!=dismissedUpdate&&pendingUpdateFile?.name=="volna-${it.versionCode}.apk"&&!updateBusy}
-        if(readyUpdate!=null&&callState.call==null&&incomingAccountCalls.isEmpty()&&!attachmentSending) androidx.compose.ui.window.Popup(alignment=Alignment.BottomCenter){
+        if(readyUpdate!=null&&callState.call==null&&incomingAccountCalls.isEmpty()&&!attachmentSending&&incomingShare==null&&attachmentBatch==null) androidx.compose.ui.window.Popup(alignment=Alignment.BottomCenter){
             Surface(color=Panel,shape=RoundedCornerShape(16.dp),modifier=Modifier.padding(12.dp).fillMaxWidth()){
                 Column(Modifier.padding(12.dp)){NativeText("VLN ${readyUpdate.versionName} скачана и готова к установке",fontSize=13.sp)
                     if(updateStatus.isNotBlank())NativeText(updateStatus,color=Muted,fontSize=12.sp)
@@ -869,6 +887,20 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             }, { manageCommunity = null; selectedChat = null; messages.clear() }, onOpenAttachment = { attachmentPreview = it }) }
             galleryChat?.let { chat -> AttachmentGallery(chat, token, api, { attachmentPreview = it }, { galleryChat = null }) }
             attachmentPreview?.let { message -> AttachmentViewer(message, token, api, { attachmentPreview = null }) }
+            if (incomingShare != null && token.isNotBlank() && me?.profileSetupRequired != true) key(incomingShare.id, me?.id) {
+                NativeIncomingShareDialog(incomingShare, chats, token, me?.name.orEmpty(), api,
+                    attachmentSending || attachmentBatch != null, onShareConsumed,
+                    onFiles = { target, text, data ->
+                        selectedChat = target; messages.clear(); focusMessageId = null
+                        attachmentBatch = NativeAttachmentBatch(target.id, data.files, text, null, {}, ownedDirectory = data.directory)
+                        attachmentError = ""; attachmentStatus = ""; onShareConsumed()
+                    }, onTextSent = { target, sent ->
+                        if (selectedChat?.id != target.id) messages.clear()
+                        selectedChat = target; focusMessageId = null
+                        if (messages.none { it.id == sent.id }) messages.add(sent)
+                        onShareConsumed()
+                    })
+            }
             attachmentBatch?.takeIf { it.voiceFile == null || attachmentError.isNotBlank() }?.let { batch -> NativeAttachmentComposer(batch, attachmentSending, attachmentStatus, attachmentError,
                 onDismiss = { discardBatch(batch) }, onSend = { sendBatch(batch, it) }) }
             if (callDiagnosticsOpen) {

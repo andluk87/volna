@@ -6,11 +6,12 @@ data class NativeNavigationStyle(
     val height: Int = 40, val radius: Int = 24, val sideInset: Int = 10,
     val textSize: Int = 14, val iconSize: Int = 23,
     val labels: Boolean = true, val icons: Boolean = true, val badges: Boolean = true,
+    val thirdTab: String = "profile",
     val surface: Long = 0, val selected: Long = 0, val text: Long = 0, val selectedText: Long = 0
 ) {
     fun json(): String = JSONObject().put("height", height).put("radius", radius).put("sideInset", sideInset)
         .put("textSize", textSize).put("iconSize", iconSize).put("labels", labels).put("icons", icons).put("badges", badges)
-        .put("surface", surface).put("selected", selected).put("text", text).put("selectedText", selectedText).toString()
+        .put("thirdTab", thirdTab).put("surface", surface).put("selected", selected).put("text", text).put("selectedText", selectedText).toString()
     companion object {
         val HeightRange = 24..160
         val RadiusRange = 0..80
@@ -33,6 +34,7 @@ data class NativeNavigationStyle(
             defaults.copy(height = size("height", defaults.height, 72).coerceIn(HeightRange), radius = o.optInt("radius", defaults.radius).coerceIn(RadiusRange),
                 sideInset = size("sideInset", defaults.sideInset, 4).coerceIn(SideInsetRange), textSize = o.optInt("textSize", defaults.textSize).coerceIn(TextSizeRange),
                 iconSize = size("iconSize", defaults.iconSize, 46).coerceIn(IconSizeRange), labels = labels, icons = !labels || o.optBoolean("icons", true),
+                thirdTab = o.optString("thirdTab", defaults.thirdTab).takeIf { it in setOf("profile", "calls") } ?: defaults.thirdTab,
                 badges = o.optBoolean("badges", true), surface = color("surface"), selected = color("selected"), text = color("text"), selectedText = color("selectedText"))
         }.getOrDefault(defaults)
     }

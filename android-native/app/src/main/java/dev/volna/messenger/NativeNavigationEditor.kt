@@ -27,7 +27,7 @@ internal fun NativeNavigationCustomization(value: NativeAppearance, onChange: (N
     var page by remember { mutableStateOf<String?>(null) }
     NativeSettingsCard { Column {
         NativeSettingRow(Icons.Outlined.Folder, "Оформление папок", "Размер, цвета, подписи и счётчики") { page = "folders" }
-        NativeSettingRow(Icons.Outlined.Tune, "Нижняя навигация", "Размер, цвета, иконки и подписи") { page = "bottom" }
+        NativeSettingRow(Icons.Outlined.Tune, "Нижняя навигация", "Разделы, размер, цвета и подписи") { page = "bottom" }
         NativeSettingRow(Icons.Outlined.RestartAlt, "Сбросить папки и навигацию", "Стандартное оформление VLN") { onChange(value.copy(foldersStyle = NativeNavigationStyle.Folders, navigationStyle = NativeNavigationStyle.Bottom)) }
     } }
     page?.let { key -> NativeNavigationStyleEditor(value, key == "folders", onChange) { page = null } }
@@ -54,6 +54,16 @@ internal fun NativeNavigationStyleEditor(value: NativeAppearance, folders: Boole
             }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             NativeText("Изменения применяются сразу и сохраняются для этого аккаунта. Автоматические цвета следуют выбранной теме.", color = Muted, fontSize = 12.sp)
+            if (!folders) NativeSettingsCard { Column(Modifier.padding(14.dp)) {
+                NativeText("Третий раздел", fontSize = 16.sp)
+                listOf("profile" to "Настройки", "calls" to "Звонки").forEach { (key, title) ->
+                    Row(Modifier.fillMaxWidth().clickable { change(style.copy(thirdTab = key)) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = style.thirdTab == key, onClick = { change(style.copy(thirdTab = key)) })
+                        NativeText(title)
+                    }
+                }
+                NativeText("Настройки всегда доступны в верхнем меню.", color = Muted, fontSize = 12.sp)
+            } }
             NativeSettingsCard { Column(Modifier.padding(14.dp)) {
                 NativeText("Высота может увеличиваться, чтобы вместить текст, значки и счётчики.", color = Muted, fontSize = 12.sp)
                 NavigationSlider("Высота элементов", style.height, NativeNavigationStyle.HeightRange, "dp") { change(style.copy(height = it)) }
