@@ -400,12 +400,15 @@ internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isM
     var reactionPeople by remember(message.id) { mutableStateOf(false) }
     val target = group.firstOrNull { it.id == targetId } ?: message
     val appearance = LocalNativeAppearance.current
+    val emojiText = message.text.trim()
+    val emojiCatalog = LocalEmojiCatalog.current
+    val standaloneEmoji = !message.deleted && message.attachmentId == null && message.expressionKind == null && message.emojiEntities.isEmpty() && message.reply == null && message.forwardedName == null && emojiCatalog?.spans(emojiText)?.let { spans -> spans.size == 1 && spans[0].first == emojiText.indices } == true
     val sticker = message.expressionKind == "sticker" || message.attachmentMime == "image/webp" && message.attachmentName.orEmpty().startsWith("Стикер-")
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val screenWidth = maxWidth
     val available = screenWidth - 20.dp - (if (selectionMode) 44.dp else 0.dp) - (if (appearance.avatars && showAuthor && !isMine) 36.dp else 0.dp)
     val maxWidth = (screenWidth * .75f).coerceAtMost(available).coerceAtMost(560.dp).coerceAtLeast(80.dp)
-    val compactText = message.text.isNotBlank() && message.attachmentId == null && message.reply == null && message.forwardedName == null && !message.deleted && !message.edited && message.reactions.isEmpty() && message.emojiEntities.isEmpty() && group.size == 1 && !(showAuthor && !isMine)
+    val compactText = !standaloneEmoji && message.text.isNotBlank() && message.attachmentId == null && message.reply == null && message.forwardedName == null && !message.deleted && !message.edited && message.reactions.isEmpty() && message.emojiEntities.isEmpty() && group.size == 1 && !(showAuthor && !isMine)
     val minWidth = when {
         message.deleted -> 0.dp
         group.size > 1 -> maxWidth
@@ -418,7 +421,7 @@ internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isM
         if (appearance.avatars && showAuthor && !isMine) Box(Modifier.width(36.dp).heightIn(min = 32.dp), contentAlignment = Alignment.BottomCenter) { if (!joined) Box(Modifier.clickable { onProfile(message.senderId) }) { Avatar(message.senderName, message.senderId, size = 28.dp) } }
         val shape = RoundedCornerShape(topStart = if (joined && !isMine) 6.dp else appearance.radius.dp, topEnd = if (joined && isMine) 6.dp else appearance.radius.dp, bottomEnd = appearance.radius.dp, bottomStart = appearance.radius.dp)
         // Measure body and footer separately; no intrinsic sizing of the whole bubble.
-        NativeBubbleContent(Modifier.testTag("message-bubble-${message.id}").widthIn(min = minWidth, max = maxWidth).clip(shape).background(if (sticker && !message.deleted) androidx.compose.ui.graphics.SolidColor(Color.Transparent) else nativeMessageBrush(isMine))
+        NativeBubbleContent(Modifier.testTag("message-bubble-${message.id}").widthIn(min = minWidth, max = maxWidth).clip(shape).background(if ((sticker || standaloneEmoji) && !message.deleted) androidx.compose.ui.graphics.SolidColor(Color.Transparent) else nativeMessageBrush(isMine))
             .combinedClickable(enabled = message.id > 0, onClick = { if (selectionMode) onSelectGroup() else detail = !detail }, onLongClick = { if (selectionMode) onSelectGroup() else { targetId = message.id; menu = true } })
             .padding(horizontal = if (group.size > 1) 0.dp else if (appearance.density == "minimal") 7.dp else 10.dp, vertical = if (group.size > 1) 0.dp else appearance.padding.coerceAtMost(4).dp), body = {
             if (showAuthor && !isMine && !joined && !message.deleted) NativeText(message.senderName, Modifier.clickable { onProfile(message.senderId) }, color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
@@ -444,7 +447,8 @@ internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isM
                     else -> Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { if (selectionMode) onSelect(message) else onOpenAttachment(message) }, verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Description, null, tint = Accent); Column(Modifier.padding(start = 8.dp)) { NativeText(message.attachmentName.orEmpty(), color = TextMain, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis); NativeText("%.1f МБ".format(message.attachmentSize / 1048576.0), color = Muted, fontSize = 11.sp) } }
                 }
                 if (message.text.isNotBlank()) {
-                    if (compactText) NativeMessagePair(content = {
+                    if (standaloneEmoji) NativeText(emojiText, fontSize = 88.sp, lineHeight = 96.sp)
+                    else if (compactText) NativeMessagePair(content = {
                         NativeLinkedText(message.text, entities = message.emojiEntities, token = token, account = me ?: 0)
                     }, stamp = { NativeMessageStamp(message, isMine, peerDelivered, peerRead, !appearance.timeOnTap || detail) })
                     else NativeLinkedText(message.text, Modifier.padding(top = if (message.attachmentId == null) 0.dp else 5.dp), message.emojiEntities, token, me ?: 0)
@@ -455,7 +459,7 @@ internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isM
             Box(Modifier.padding(horizontal = if (group.size > 1) 10.dp else 0.dp, vertical = if (group.size > 1) 4.dp else 0.dp), propagateMinConstraints = true) {
                 if (!compactText) NativeMessagePair(wrapReactions = true, content = {
                     if (group.size == 1 && message.reactions.isNotEmpty()) NativeMessageReactions(message, me, { onAction(message, "react", it) }, { reactionPicker = true }, token)
-                }, stamp = { NativeMessageStamp(group.last(), isMine, peerDelivered, peerRead, !appearance.timeOnTap || detail, edited = group.any { it.edited }) })
+                }, stamp = { Box(if (standaloneEmoji) Modifier.clip(RoundedCornerShape(6.dp)).background(Panel.copy(alpha = .85f)).padding(horizontal = 6.dp, vertical = 2.dp) else Modifier) { NativeMessageStamp(group.last(), isMine, peerDelivered, peerRead, !appearance.timeOnTap || detail, edited = group.any { it.edited }) } })
                 DropdownMenu(menu, { menu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = false)) {
                     if (!target.deleted) Row(Modifier.padding(horizontal = 4.dp)) { NativeEmoji.take(5).forEach { emoji -> NativeText(emoji, Modifier.size(44.dp).clickable { menu = false; onAction(target, "react", emoji) }.padding(8.dp), fontSize = 22.sp) }; IconButton(onClick = { menu = false; reactionPicker = true }) { Icon(Icons.Outlined.Add, "Другие реакции") } }
                     if (!target.deleted && canReply) DropdownMenuItem(text = { NativeText("Ответить") }, leadingIcon = { Icon(Icons.Outlined.Reply, null) }, onClick = { menu = false; onReply(target) })

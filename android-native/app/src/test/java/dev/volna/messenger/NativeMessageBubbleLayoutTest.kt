@@ -61,6 +61,18 @@ class NativeMessageBubbleLayoutTest {
                 false, false, {}, {}, {}, false, {}, true)
         } } }
     }
+    @Test fun standaloneEmojiIsLargeAndStampStaysVisible() {
+        content("😁")
+        val body = compose.onNodeWithText("😁", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue("large emoji: $body", body.height >= 80.dp)
+        compose.onNodeWithContentDescription("Доставлено").assertIsDisplayed()
+        screenshot("standalone-emoji")
+    }
+    @Test fun mixedTextKeepsNormalSize() {
+        content("Привет 😁")
+        val body = compose.onNodeWithText("Привет 😁", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue("inline emoji must stay small: $body", body.height < 40.dp)
+    }
     @Test fun longTextUsesAvailableWidthAndDeliveredTickIsVisible() {
         val text = "Длинное сообщение во время голосового звонка должно занимать нормальную ширину, а галочки должны быть видны."
         content(text)

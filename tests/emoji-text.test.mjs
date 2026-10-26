@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {segments,boundaries,isEmoji,replaceText,reconcileEntities,deleteGrapheme,snapSelection} from '../shared/emoji-text.mjs';
+import {isStandaloneEmojiMessage,segments,boundaries,isEmoji,replaceText,reconcileEntities,deleteGrapheme,snapSelection} from '../shared/emoji-text.mjs';
 import {readDrafts,writeDrafts} from '../client/src/drafts.mjs';
 test('emoji editor: whole UTF16 graphemes, flags, family, skin, keycap and VS are preserved',()=>{
  for(const value of ['👨‍👩‍👧‍👦','👍🏽','🇷🇺','1️⃣','❤️','🏳️‍🌈']){assert.equal(isEmoji(value),true,value);assert.equal(segments(value).length,1);assert.deepEqual([...boundaries(value)],[0,value.length]);assert.equal(deleteGrapheme('a'+value+'b',[],1+value.length,1+value.length,'backward').text,'ab');assert.equal(deleteGrapheme(value+'b',[],0,0,'forward').text,'b');assert.deepEqual(snapSelection(value,1,1),[0,value.length]);}
@@ -22,3 +22,9 @@ test('emoji drafts: minimal entity identities survive tab reload without media o
 });
 import {demoRequest,resetDemo,DEMO_TOKEN} from '../client/src/demo-api.mjs';
 test('emoji demo: catalog, installation and message entities remain isolated from live accounts',async()=>{resetDemo();const pack=(await demoRequest('/v1/emoji/packs')).packs[0];assert.equal(pack.items.length,24);const item=pack.items[0];await demoRequest('/v1/emoji/packs/'+pack.id+'/install',undefined,'DELETE');assert.equal((await demoRequest('/v1/emoji/packs')).packs[0].installed,false);const message=await demoRequest('/chats/1/messages',{text:item.fallback,emoji_entities:[{id:item.id,start:0,length:item.fallback.length}],client_id:'emoji-demo-message-01'},'POST');assert.equal(message.emoji_entities[0].attachment_id,item.attachment_id);assert.ok(DEMO_TOKEN.includes('demo'));resetDemo();});
+
+test('standalone emoji layout keeps mixed text, captions, replies and custom entities in normal bubbles',()=>{
+ for(const text of ['😁','💯','👩🏽‍💻','🇷🇺','1️⃣'])assert.equal(isStandaloneEmojiMessage({text}),true,text);
+ for(const text of ['Привет 😁','123','😁😁',''])assert.equal(isStandaloneEmojiMessage({text}),false,text);
+ for(const extra of [{attachment:{}},{reply:{}},{forwarded_name:'Иван'},{deleted_at:'now'},{emoji_entities:[{}]}])assert.equal(isStandaloneEmojiMessage({text:'😁',...extra}),false);
+});

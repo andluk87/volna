@@ -11,3 +11,8 @@
 [data-desktop=true] .composer>.emoji-panel.emoji-docked{position:fixed;left:auto;right:0;top:0;bottom:0;width:min(300px,calc(100vw - 40px));height:100dvh;max-height:100dvh;border-radius:0;border-left:1px solid var(--border);box-shadow:-3px 0 15px #0002;z-index:100}
 [data-desktop=true] body:has(.call-panel.call-minimized) .composer>.emoji-panel.emoji-docked{top:44px;height:calc(100dvh - 44px)}
 @media(max-width:600px){.composer-emoji-control{flex-basis:36px}.composer-emoji-control>.composer-emoji{width:36px;min-width:36px;padding:6px}}
+
+[data-desktop=true] .quick-emoji-popup:has(>.emoji-panel){width:min(346px,calc(100vw - 32px));padding:0;border:0;border-radius:8px}
+[data-desktop=true] .quick-emoji-popup>.emoji-panel{position:static!important;width:100%;height:min(560px,calc(100dvh - 140px));max-height:min(560px,calc(100dvh - 140px));margin:0;border-radius:8px;box-shadow:0 5px 24px #0004}
+[data-desktop=true] .quick-emoji-popup .emoji-grid{grid-template-columns:repeat(9,minmax(0,1fr))}
+[data-desktop=true] .quick-emoji-popup>.emoji-panel:not(.emoji-editing) .emoji-tone{display:none}
