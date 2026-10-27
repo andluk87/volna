@@ -650,6 +650,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     api = api, cache = cache,
                     onRetry = { retryGeneration++ },
                     onAppearanceChange = { appearance = it; it.save(appearancePrefs) },
+                    onOpenAttachment = { photoGallery=messages.toList();attachmentPreview=it },
                     onSearchMessage = { message -> selectedChat = chats.firstOrNull { it.id == message.chatId }; messages.clear(); focusMessageId = message.id },
                     onSwitchAccount = { account ->
                         if (callState.call != null || attachmentSending) error = "Завершите звонок или дождитесь отправки перед переключением аккаунта"

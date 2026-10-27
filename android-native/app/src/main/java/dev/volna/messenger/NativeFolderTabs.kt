@@ -1,5 +1,10 @@
 package dev.volna.messenger
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.runtime.*
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -66,7 +71,7 @@ internal fun nativeFolderTabWidths(viewportWidth: Int, naturalWidths: List<Int>)
 
 @Composable
 internal fun NativeFolderTabs(
-    folders: List<NativeFolder>, chats: List<VolnaChat>, selected: String, onSelect: (String) -> Unit
+    folders: List<NativeFolder>, chats: List<VolnaChat>, selected: String, pagePosition: (() -> Float)? = null, onSelect: (String) -> Unit
 ) {
     val tabs = nativeNavigationFolders(folders, chats)
     if (tabs.isEmpty()) return
@@ -74,8 +79,17 @@ internal fun NativeFolderTabs(
     val density = LocalDensity.current
     val style = LocalNativeAppearance.current.foldersStyle
     val colors = nativePillColors(style)
+    var widths by remember { mutableStateOf(emptyList<Int>()) }
+    val motion=LocalMotionEnabled.current
     BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = style.sideInset.dp, vertical = 3.dp).clip(RoundedCornerShape(style.radius.dp)).background(colors.surface).padding(3.dp)) {
         val viewportWidth = with(density) { maxWidth.roundToPx() }
+        val selectedIndex=tabs.indexOfFirst { nativeFolderKey(it)==selected }
+        LaunchedEffect(selectedIndex,widths,viewportWidth) { if(widths.size==tabs.size&&selectedIndex in widths.indices){val offset=(widths.take(selectedIndex).sum()+widths[selectedIndex]/2-viewportWidth/2).coerceIn(0,(widths.sum()-viewportWidth).coerceAtLeast(0));if(motion)scroll.animateScrollTo(offset)else scroll.scrollTo(offset)} }
+        Canvas(Modifier.matchParentSize()) {
+            if(widths.isNotEmpty()&&(pagePosition!=null||selectedIndex>=0)) { val position=(pagePosition?.invoke()?:selectedIndex.toFloat()).coerceIn(0f,(widths.size-1).toFloat());val index=position.toInt();val fraction=position-index;val x=widths.take(index).sum()+widths[index]*fraction-scroll.value;val width=widths[index]+((widths.getOrNull(index+1)?:widths[index])-widths[index])*fraction
+                drawRoundRect(colors.selected,Offset(x,0f),Size(width.toFloat(),size.height),CornerRadius(style.radius.dp.toPx()))
+            }
+        }
         Layout(
             modifier = Modifier.fillMaxWidth().horizontalScroll(scroll),
             content = {
@@ -85,7 +99,7 @@ internal fun NativeFolderTabs(
                     val unread = chats.count { (it.unread > 0 || it.manualUnread) && (if (folder.rule == "all") nativeUnassignedChat(it, tabs) && nativeChatFilter(it, "all") else nativeFolderMatches(folder, it)) }
                     Row(
                         Modifier.heightIn(min = style.height.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(style.radius.dp))
-                            .background(if (active) colors.selected else Color.Transparent)
+                            .background(if(pagePosition==null&&active) colors.selected else Color.Transparent)
                             .semantics { contentDescription = folder.name }.selectable(selected = active, role = Role.Tab, onClick = { onSelect(folderKey) })
                             .padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -110,7 +124,8 @@ internal fun NativeFolderTabs(
             val naturalWidths = measurables.map {
                 it.maxIntrinsicWidth(Constraints.Infinity).coerceAtMost(viewportWidth)
             }
-            val widths = nativeFolderTabWidths(viewportWidth, naturalWidths)
+            val measuredWidths = nativeFolderTabWidths(viewportWidth, naturalWidths)
+            if(widths!=measuredWidths)widths=measuredWidths
             val tabs = measurables.mapIndexed { index, tab ->
                 tab.measure(Constraints(minWidth = widths[index], maxWidth = widths[index], maxHeight = constraints.maxHeight))
             }

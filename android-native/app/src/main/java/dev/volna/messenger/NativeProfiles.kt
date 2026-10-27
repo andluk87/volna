@@ -37,7 +37,7 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
     onDismiss: () -> Unit, onSaved: (VolnaUser) -> Unit, chats: List<VolnaChat>,
     onStartChat: (VolnaUser, Boolean) -> Unit, onOpenChat: (VolnaChat, Boolean) -> Unit,
     onCall: (VolnaChat) -> Unit, onVideo: (VolnaChat) -> Unit, onMute: (VolnaChat) -> Unit, onOpenAttachment: (VolnaMessage) -> Unit, cache: NativeCache,
-    onAppearance: ((VolnaChat) -> Unit)? = null, refresh: Int = 0
+    onAppearance: ((VolnaChat) -> Unit)? = null, refresh: Int = 0, embedded: Boolean = false, bottomInset: androidx.compose.ui.unit.Dp = 0.dp, onSettings: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var profile by remember(userId) { mutableStateOf(if (userId == currentUser?.id) currentUser else null) }
@@ -54,7 +54,8 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
         try { val fresh = withContext(Dispatchers.IO) { api.userProfile(token, userId) }; profile = fresh; withContext(Dispatchers.IO) { cache.saveProfile(account, fresh) }; error = "" }
         catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось загрузить профиль" }
     }
-    NativeFullScreen(if (own) "Мой профиль" else "Профиль", onDismiss) {
+    @Composable fun Frame(content: @Composable ColumnScope.()->Unit) { if(embedded)Column(Modifier.fillMaxSize().padding(bottom=bottomInset),content=content)else NativeFullScreen(if(own)"Мой профиль" else "Профиль",onDismiss,content=content) }
+    Frame {
         val loaded = profile
         if (error.isNotBlank()) NativeConnectionNotice(error) { retry++ }
         if (loaded == null) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { if (error.isBlank()) CircularProgressIndicator() }
@@ -65,6 +66,7 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
                 NativeText("@${loaded.username}", Modifier.clickable { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(nativeProfileUrl(loaded.username)))) }, color = Accent, fontSize = 14.sp)
                 if(own && loaded.phone.isNotBlank() && loaded.username.startsWith(loaded.phone.filter { it.isDigit() })) NativeText("Ник содержит ваш номер. Измените username в профиле.",Modifier.clickable { editing=true },color=Muted,fontSize=12.sp)
                 if (!own && loaded.online) NativeText("в сети", color = Accent, fontSize = 12.sp)
+                if(own&&onSettings!=null)TextButton(onClick=onSettings){Icon(Icons.Outlined.Settings,null);NativeText("Настройки",Modifier.padding(start=8.dp))}
                 if (own) TextButton(onClick = { editing = true }) { Icon(Icons.Outlined.Edit, null); NativeText("Редактировать профиль", Modifier.padding(start = 8.dp)) }
                 else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     ProfileAction(Icons.Outlined.ChatBubbleOutline, "Написать", Modifier.weight(1f)) { if (chat != null) onOpenChat(chat, false) else onStartChat(loaded, false) }

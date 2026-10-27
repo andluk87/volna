@@ -160,7 +160,7 @@ internal fun NativeContactSyncHost(account: Long, token: String, api: NativeApi)
 }
 
 @Composable
-internal fun NativeAccountContactsScreen(account: Long, token: String, api: NativeApi, onPerson: (VolnaUser) -> Unit, onProfile: (Long) -> Unit, onCall: (VolnaChat) -> Unit, onVideo: (VolnaChat) -> Unit) {
+internal fun NativeAccountContactsScreen(account: Long, token: String, api: NativeApi, onPerson: (VolnaUser) -> Unit, onProfile: (Long) -> Unit, onCall: (VolnaChat) -> Unit, onVideo: (VolnaChat) -> Unit,onRecentCalls: (() -> Unit)?=null,bottomInset: androidx.compose.ui.unit.Dp=80.dp) {
     val context = LocalContext.current; val store = remember(account) { NativeContactBook(context, account) }; val scope = rememberCoroutineScope()
     var book by remember(account) { mutableStateOf(store.cached()) }; var query by remember { mutableStateOf("") }
     var config by remember { mutableStateOf(false) }; var manual by remember { mutableStateOf(false) }; var name by remember { mutableStateOf("") }; var number by remember { mutableStateOf("") }
@@ -177,12 +177,15 @@ internal fun NativeAccountContactsScreen(account: Long, token: String, api: Nati
     val visible = active.filter { needle.isBlank() || (it.optString("display_name") + " " + it.optJSONArray("phone_numbers") + " " + it.optJSONObject("user")?.optString("username")).lowercase().contains(needle) }
     fun title(row: JSONObject) = row.optString("custom_name").ifBlank { row.optString("phonebook_name") }.ifBlank { row.optJSONObject("user")?.optString("name").orEmpty() }.ifBlank { row.optJSONArray("phone_numbers")?.optString(0).orEmpty() }
     fun call(person: VolnaUser, video: Boolean) { scope.launch { try { val id = withContext(Dispatchers.IO) { api.startChat(token, person.id) }; val chat = VolnaChat(id, person.name, person.username, "", "", 0, false, person.id); if (video) onVideo(chat) else onCall(chat) } catch (problem: Exception) { error = problem.message.orEmpty() } } }
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         NativeSearchField(query, { query = it }, "Имя, номер или @username", compact = true)
+        TextButton(onClick={try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,"Присоединяйся к VLN: ${BuildConfig.API_BASE_URL}/download/volna-android.apk"),"Пригласить друзей"))}catch(problem:Exception){error=problem.message.orEmpty()}},modifier=Modifier.fillMaxWidth()){Icon(Icons.Outlined.PersonAdd,null);NativeText("Пригласить друзей",Modifier.weight(1f).padding(start=12.dp))}
+        if(onRecentCalls!=null)TextButton(onClick=onRecentCalls,modifier=Modifier.fillMaxWidth()){Icon(Icons.Outlined.History,null);NativeText("Недавние звонки",Modifier.weight(1f).padding(start=12.dp))}
         Row { TextButton(onClick = { config = true }) { NativeText("Контакты и синхронизация") }; TextButton(onClick = { name = ""; number = ""; manual = true }) { Icon(Icons.Outlined.Add, null) } }
         if (error.isNotBlank()) NativeConnectionNotice(error) { load(true) }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 90.dp)) {
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = bottomInset+20.dp)) {
             for ((registered, label) in listOf(true to "Пользователи VLN", false to "Пригласить в VLN")) {
             val section = visible.filter { (it.optJSONObject("user") != null) == registered }
             if (section.isNotEmpty()) item { NativeText(label, Modifier.padding(12.dp), color = Muted) }
@@ -198,6 +201,8 @@ internal fun NativeAccountContactsScreen(account: Long, token: String, api: Nati
             items(found.filter { person -> active.none { it.optLong("linked_user_id") == person.id } }, key = { "found-${it.id}" }) { person -> NativeSettingRow(Icons.Outlined.Person, person.name, "@${person.username}") { onProfile(person.id) } }
             if (visible.isEmpty() && found.isEmpty()) item { NativeEmptyState(Icons.Outlined.Contacts, "Контактов пока нет", "Включите синхронизацию или добавьте номер вручную") }
         }
+    }
+    FloatingActionButton(onClick={name="";number="";manual=true},shape=androidx.compose.foundation.shape.CircleShape,containerColor=Accent,contentColor=AccentText,modifier=Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(end=16.dp,bottom=bottomInset+16.dp)){Icon(Icons.Outlined.PersonAdd,"Добавить контакт")}
     }
     if (config) ModalBottomSheet(onDismissRequest = { config = false }, containerColor = Panel) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
