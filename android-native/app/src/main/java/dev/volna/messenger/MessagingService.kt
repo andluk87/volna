@@ -18,6 +18,9 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
+import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 internal data class NativeSessionSignal(val account: Long,val type: String,val chatId: Long,val userId: Long,val deleted: Boolean = false)
@@ -38,6 +41,9 @@ class MessagingService : Service() {
         @Volatile var receiptSyncVersion = 0
         fun stop() { stopped = true; call?.cancel(); worker?.interrupt(); callsWorker?.interrupt(); receiptsWorker?.interrupt() }
     }
+    private val notificationScope=CoroutineScope(SupervisorJob()+Dispatchers.IO)
+    private val avatarLoads=Semaphore(2)
+    private val artworkGeneration=java.util.concurrent.atomic.AtomicLong()
     private val streams = ConcurrentHashMap<Long, AccountStream>()
     private val priorityRingtones = ConcurrentHashMap<Long, android.media.Ringtone>()
     private val main = Handler(Looper.getMainLooper())
@@ -270,12 +276,58 @@ class MessagingService : Service() {
                 notificationBuilder.addAction(action)
                 wearableReply = action
             }
-            if (!isReaction) NativeNotificationConversation.attach(this, notificationBuilder, userId, chatId,
-                chat?.name?.ifBlank { title } ?: title, senderName, body, System.currentTimeMillis(), launch,
-                group = chat?.kind in listOf("group", "channel") || !message.isNull("topic_id"), senderId = sender)
-            notificationBuilder.extend(nativeNotificationWearable(userId, chatId, id, if (isReaction) "reaction" else "message", wearableReply))
-            val notification=notificationBuilder.build()
-            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify("volna-account-$userId", notificationId, notification)
+            val group=chat?.kind in listOf("group","channel")||!message.isNull("topic_id")
+            val conversationLabel=chat?.name?.ifBlank{title}?:title
+            val artworkSender=if(isReaction)reaction?.optLong("user_id")?:sender else sender
+            val artworkName=if(isReaction)cache.profile(userId,artworkSender)?.name?:"Реакция" else senderName
+            val senderFallback=NativeNotificationAvatar.initials(artworkName,artworkSender)
+            val conversationFallback=if(group)NativeNotificationAvatar.initials(conversationLabel,chatId)else senderFallback
+            val notificationTime=System.currentTimeMillis()
+            val postedElapsed=android.os.SystemClock.elapsedRealtime()
+            val generation=artworkGeneration.incrementAndGet()
+            notificationBuilder.addExtras(android.os.Bundle().apply{putLong("volna.artwork.generation",generation)})
+            fun artwork(senderBitmap: android.graphics.Bitmap?,conversationBitmap: android.graphics.Bitmap?,key:String){
+                if(!isReaction)NativeNotificationConversation.attach(this,notificationBuilder,userId,chatId,conversationLabel,senderName,body,notificationTime,launch,group=group,senderId=sender,senderAvatar=senderBitmap?:senderFallback,conversationAvatar=conversationBitmap?:conversationFallback,artworkKey=key)
+                else notificationBuilder.setLargeIcon(senderBitmap?:senderFallback)
+            }
+            val avatarPerson=cache.profile(userId,artworkSender)?:cache.contacts(userId).firstOrNull{it.id==artworkSender}
+            val initialSenderUrl=chat?.takeIf{it.kind=="direct"&&it.peerId==artworkSender}?.avatarUrl?:avatarPerson?.avatarUrl
+            val initialConversationUrl=if(group){if((chat?.parentId?:0L)>0)cache.chats(userId).firstOrNull{it.id==chat?.parentId}?.avatarUrl else chat?.avatarUrl}else initialSenderUrl
+            val cachedSender=NativeNotificationAvatar.cached(token,initialSenderUrl)
+            val cachedConversation=if(!group||initialConversationUrl==initialSenderUrl)cachedSender else NativeNotificationAvatar.cached(token,initialConversationUrl)
+            artwork(cachedSender,cachedConversation,if(cachedSender!=null||cachedConversation!=null)"photo:$initialSenderUrl:$initialConversationUrl" else "initials:$conversationLabel:$artworkName")
+            notificationBuilder.extend(nativeNotificationWearable(userId,chatId,id,if(isReaction)"reaction" else "message",wearableReply))
+            val manager=getSystemService(NotificationManager::class.java)
+            val tag="volna-account-$userId"
+            manager.notify(tag,notificationId,notificationBuilder.build())
+            notificationScope.launch {
+                avatarLoads.withPermit {
+                    fun stillActive()=manager.activeNotifications.any{it.tag==tag&&it.id==notificationId&&it.notification.extras.getLong("volna.artwork.generation")==generation}
+                    try {
+                        // NMS can enqueue the initial notification asynchronously. Wait briefly
+                        // for registration; never repost artwork after the card was dismissed.
+                        while(!stillActive()){
+                            if(android.os.SystemClock.elapsedRealtime()-postedElapsed>=750)return@withPermit
+                            delay(50)
+                        }
+                        var senderUrl=initialSenderUrl
+                        if(senderUrl==null&&avatarPerson==null){val fresh=api.userProfile(token,artworkSender);cache.saveProfile(userId,fresh);senderUrl=fresh.avatarUrl}
+                        val senderBitmap=NativeNotificationAvatar.load(this@MessagingService,token,senderUrl)
+                        var conversationUrl=if(group)initialConversationUrl else senderUrl
+                        if(group&&chat==null){val fresh=api.chats(token);cache.saveChats(userId,fresh);conversationUrl=fresh.firstOrNull{it.id==chatId}?.avatarUrl}
+                        val conversationBitmap=if(!group||conversationUrl==senderUrl)senderBitmap else NativeNotificationAvatar.load(this@MessagingService,token,conversationUrl)
+                        if(senderBitmap==null&&conversationBitmap==null)return@withPermit
+                        main.post {
+                          try {
+                            if(stopped||!manager.areNotificationsEnabled()||!stillActive()||nativeNotificationChatVisible(MainActivity.isVisible,MainActivity.visibleAccountId,MainActivity.visibleChatId,userId,chatId)||NativeAccounts.list(this@MessagingService).none{it.user.id==userId})return@post
+                            artwork(senderBitmap,conversationBitmap,"photo:$senderUrl:$conversationUrl")
+                            manager.notify(tag,notificationId,notificationBuilder.setOnlyAlertOnce(true).build())
+                          }catch(_:Exception){/* Permission changes must not crash the service. */}
+                        }
+                    }catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){/* Keep the initials; delivery never depends on the avatar. */}
+                }
+            }
+
         } catch (_: Exception) { }
     }
 
@@ -317,6 +369,7 @@ class MessagingService : Service() {
     }
 
     override fun onDestroy() {
+        notificationScope.cancel()
         NativeIdleUpdater.stop()
         stopped = true
         priorityRingtones.keys.toList().forEach { clearBackgroundCall(it) }
