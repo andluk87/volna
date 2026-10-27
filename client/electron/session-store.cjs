@@ -19,18 +19,19 @@ function createSessionStore({file,legacyFile,secure}){
  const loadLegacy=()=>{const bytes=read(legacyFile);if(!bytes)return null;available();try{const value=secure.decryptString(bytes);if(!token(value))throw Error('Invalid legacy session');return value;}catch{throw Error('Не удалось прочитать сохранённый сеанс. Повторите подключение.');}};
  return {load,save,loadLegacy};
 }
-function createSessionRefresh({store,request,now=Date.now}){
+function createSessionRefresh({store,request,now=Date.now,log=()=>{}}){
  const running=new Map(),unsaved=new Map();
  async function refresh(value){
   if(!Number.isSafeInteger(value?.accountId)||value.accountId<1||!token(value.token))throw Error('Invalid refresh request');
   const id=value.accountId;if(running.has(id))return running.get(id);
   const task=(async()=>{
+   const started=now();log('refresh-start',{accountId:id});
    const saved=store.load()?.accounts.find(a=>a.user.id===id);if(!saved){unsaved.delete(id);return {status:401};}
    let next=unsaved.get(id);
    if(!next){
-    if(saved.token!==value.token&&saved.expires>now())return {status:200,session:saved};
+    if(saved.token!==value.token&&saved.expires>now()){log('refresh-reuse',{accountId:id});return {status:200,session:saved};}
     const result=await request(saved.refresh_token,id);
-    if(result.status!==200)return {status:result.status};
+    if(result.status!==200){log('refresh-rejected',{accountId:id,status:result.status});return {status:result.status};}
     if(!account(result.session)||result.session.user.id!==id)throw Error('Invalid refreshed account');
     next=result.session;unsaved.set(id,next);
    }
@@ -38,9 +39,9 @@ function createSessionRefresh({store,request,now=Date.now}){
    // Keep a rotated token in memory if secure storage briefly fails; retry the
    // write rather than submitting the obsolete refresh token a second time.
    store.save({selected:null,accounts:[next]},{secondary:true,fresh:true});unsaved.delete(id);
-   return {status:200,session:next};
+   log('refresh-ok',{accountId:id,status:200,elapsedMs:Math.max(0,now()-started)});return {status:200,session:next};
   })();running.set(id,task);
-  try{return await task;}finally{running.delete(id);}
+  try{return await task;}catch(error){log(unsaved.has(id)?'refresh-write-pending':'refresh-error',{accountId:id});throw error;}finally{running.delete(id);}
  }
  return {refresh,forget:id=>unsaved.delete(id),pending:()=>running.size>0||unsaved.size>0};
 }

@@ -1,6 +1,7 @@
 const {contextBridge,ipcRenderer}=require('electron');
 const listen=(channel,callback)=>{const fn=(_event,value)=>callback(value);ipcRenderer.on(channel,fn);return()=>ipcRenderer.removeListener(channel,fn);};
 contextBridge.exposeInMainWorld('volnaDesktop',{
+ sessionDiagnostic:value=>ipcRenderer.invoke('desktop:session-diagnostic',value),openSessionLog:()=>ipcRenderer.invoke('desktop:session-log'),
  savePhoto:value=>ipcRenderer.invoke('desktop:save-photo',value),
  windowFrame:process.platform==='win32'?'overlay':'native',setWindowTheme:theme=>ipcRenderer.invoke('desktop:window-theme',theme),
  setNotificationPreferences:value=>ipcRenderer.invoke('desktop:notification-preferences',value),testNotificationSound:volume=>ipcRenderer.invoke('desktop:notification-sound',volume),

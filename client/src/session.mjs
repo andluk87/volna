@@ -5,6 +5,7 @@ const sessions=new Map(),aliases=new Map(),refreshing=new Map(),listeners=new Se
 export const onSessionChange=callback=>{listeners.add(callback);return()=>listeners.delete(callback);};
 export const onAccountsChange=callback=>{accountListeners.add(callback);return()=>accountListeners.delete(callback);};
 export const accountSessions=()=>[...sessions.values()];
+const diagnostic=(event,accountId)=>{try{window.volnaDesktop?.sessionDiagnostic?.({event,accountId})?.catch(()=>{});}catch{}};
 const accountsChanged=()=>{for(const notify of accountListeners)notify(accountSessions());};
 const legacyCleanup=()=>{sessionStorage.removeItem('volna.token');localStorage.removeItem('volna.token');};
 async function persist(removed=[]){if(window.volnaDesktop?.saveAccounts)await window.volnaDesktop.saveAccounts({selected:sessions.has(current?.user?.id)?current.user.id:null,accounts:accountSessions(),removed});else if(current?.refresh_token&&window.volnaDesktop)await window.volnaDesktop.saveSession(current.refresh_token);}
@@ -17,19 +18,26 @@ export async function saveSession(result,select=true,announce=true){
 }
 export async function selectAccount(id){const result=sessions.get(id);if(!result)throw Error('Аккаунт недоступен');const value=window.volnaDesktop&&result.expires>Date.now()?result:await refreshAccount(id,true,true);if(!value)throw Error('Войдите в этот аккаунт заново');await saveSession(value);return value;}
 export function clearStoredSession(){
- const id=current?.user?.id;current=null;legacyCleanup();if(id){sessions.delete(id);sessionChannel?.postMessage({type:'removed',id});for(const [token,owner] of aliases)if(owner===id)aliases.delete(token);}
+ const id=current?.user?.id;diagnostic('renderer-logout',id);current=null;legacyCleanup();if(id){sessions.delete(id);sessionChannel?.postMessage({type:'removed',id});for(const [token,owner] of aliases)if(owner===id)aliases.delete(token);}
  if(window.volnaDesktop?.saveAccounts)persist(id?[id]:[]).catch(()=>{});else window.volnaDesktop?.clearSession().catch(()=>{});
  fetch(API+'/api/auth/clear',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(id?{account_id:id}:{})}).catch(()=>{});accountsChanged();
 }
-export async function refreshAccount(id,throwNetwork=false,select=false){
- if(refreshing.has(id))return refreshing.get(id);
- const task=(async()=>{try{
+export async function refreshAccount(id,throwNetwork=false,select=false,failedToken=null){
+ let task=refreshing.get(id);
+ if(!task){task=(async()=>{
   const existing=sessions.get(id),refresh=existing?.refresh_token;
-  const native=window.volnaDesktop?.refreshSession&&existing?.token?await window.volnaDesktop.refreshSession({accountId:id,token:existing.token}):null;
+  // A delayed 401 belongs to the credential that was sent, not whichever token
+  // happened to become current while that request was in flight.
+  if(failedToken&&existing?.token&&existing.token!==failedToken)return existing;
+  const native=window.volnaDesktop?.refreshSession&&existing?.token?await window.volnaDesktop.refreshSession({accountId:id,token:failedToken||existing.token}):null;
   const response=native?{status:native.status,ok:native.status===200,json:async()=>native.session}:await fetch(API+'/api/auth/refresh',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({... (refresh?{refresh_token:refresh}:{}),...(id?{account_id:id}:{}),select:select||current?.user?.id===id||!current})});
-  if(response.status===401){if(id){sessions.delete(id);await persist([id]);accountsChanged();}return null;}if(!response.ok)throw Error('Не удалось обновить сеанс. Повторите подключение.');
-  const result=await response.json();await saveSession(result,!current&&!id);return result;
- }catch(error){if(throwNetwork)throw error;return null;}finally{refreshing.delete(id);}})();refreshing.set(id,task);return task;
+  if(response.status===401){const latest=sessions.get(id);if(latest?.token&&latest.token!==existing?.token)return latest;if(id){diagnostic('renderer-removed',id);sessions.delete(id);await persist([id]);accountsChanged();}return null;}if(!response.ok)throw Error('Не удалось обновить сеанс. Повторите подключение.');
+  const result=await response.json(),latest=sessions.get(id);
+  if(id&&existing&&!latest)return null; // Explicit logout must win over a late refresh.
+  if(latest&&latest!==existing&&latest.expires>=result.expires)return latest;
+  await saveSession(result,!current&&!id);return sessions.get(result.user.id)||result;
+ })();refreshing.set(id,task);}
+ try{return await task;}catch(error){if(throwNetwork)throw error;return null;}finally{if(refreshing.get(id)===task)refreshing.delete(id);}
 }
 export async function restoreSession(throwNetwork=true){
  legacyCleanup();if(current)return refreshAccount(current.user.id,throwNetwork);if(restoring)return restoring;
@@ -44,11 +52,26 @@ export async function restoreSession(throwNetwork=true){
 }
 export async function sessionFetch(url,options={}){
  const headers=new Headers(options.headers),provided=headers.get('Authorization')?.replace(/^Bearer /,''),id=provided?aliases.get(provided):null;
- if(id&&sessions.get(id)?.token)headers.set('Authorization','Bearer '+sessions.get(id).token);
- const response=await fetch(url,{...options,credentials:'include',headers});
- if(response.status!==401||!id)return response;
- const result=await refreshAccount(id,true);if(!result)return response;
- headers.set('Authorization','Bearer '+result.token);return fetch(url,{...options,credentials:'include',headers});
+ const discard=response=>response.body?.cancel().catch(()=>{});
+ for(let attempt=0;attempt<4;attempt++){
+  options.signal?.throwIfAborted();
+  const sentToken=id?sessions.get(id)?.token||provided:provided;
+  if(sentToken)headers.set('Authorization','Bearer '+sentToken);
+  const response=await fetch(url,{...options,credentials:'include',headers});
+  if(response.status!==401||!id)return response;
+  options.signal?.throwIfAborted();
+  diagnostic('renderer-401',id);
+  const latest=sessions.get(id);
+  if(!latest)return response;
+  if(latest.token!==sentToken)diagnostic('renderer-reuse',id);
+  if(latest.token===sentToken){const result=await refreshAccount(id,true,false,sentToken);options.signal?.throwIfAborted();if(!result)return response;}
+  // Reuse the latest credential for a stale response. Never rotate a valid
+  // replacement just because an earlier request completed out of order.
+  await discard(response);
+ }
+ // Repeated rotation is retryable; it does not prove the device was revoked.
+ diagnostic('renderer-retry-limit',id);
+ throw Object.assign(Error('Сеанс обновляется. Повторите запрос через несколько секунд.'),{status:503,code:'SESSION_RETRY_REQUIRED'});
 }
 
 sessionChannel?.addEventListener('message',event=>{if(event.data?.type==='removed'&&Number.isSafeInteger(event.data.id)){const id=event.data.id;sessions.delete(id);for(const [token,owner] of aliases)if(owner===id)aliases.delete(token);if(current?.user?.id===id){current=null;window.dispatchEvent(new CustomEvent('volna-account-removed',{detail:id}));}accountsChanged();return;}const result=event.data?.result;if(event.data?.type!=='session'||!Number.isSafeInteger(result?.user?.id)||!/^[A-Za-z0-9_-]{43}$/.test(result?.token)||!Number.isSafeInteger(result.expires))return;const existing=sessions.get(result.user.id);if(existing?.expires>result.expires)return;saveSession(result,false,false).catch(()=>{});});

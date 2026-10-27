@@ -1,3 +1,4 @@
+const {createSessionLog}=require('./session-log.cjs');
 const {photoPayload}=require('./photo-files.cjs');
 const {windowChromeOptions,applyWindowChrome}=require('./window-chrome.cjs');
 const {mediaPermissions}=require('./media-permissions.cjs');
@@ -47,6 +48,7 @@ if(!app.requestSingleInstanceLock())app.quit();else{
  app.on('second-instance',(_event,argv)=>{show();});
 
  app.whenReady().then(async()=>{
+  const sessionLog=createSessionLog({directory:path.join(app.getPath('userData'),'logs'),version:app.getVersion()});sessionLog.write('app-start');
   config=validateConfig(JSON.parse(fs.readFileSync(path.join(__dirname,'config.json'),'utf8')));app.setAppUserModelId('dev.volna.messenger');
   const root=path.join(app.getAppPath(),'dist');protocol.handle('app',request=>{const file=rendererFile(root,request.url);return file?net.fetch(pathToFileURL(file).toString()):new Response('Not found',{status:404});});
   const mediaConsent=mediaPermissions(path.join(app.getPath('userData'),'media-permissions.json'));
@@ -63,7 +65,7 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   });
   spellingDictionary=ignoredSpelling(session.defaultSession,path.join(app.getPath('userData'),'ignored-spelling.json'));
   Menu.setApplicationMenu(null);createWindow();tray=new Tray(path.join(root,'icons/icon-192.png'));tray.setToolTip('VLN');
-  tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть VLN',click:show},{label:'Проверить обновления',click:()=>{show();updates.check(true);}},{type:'separator'},{label:'Выйти',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',show);
+  tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть VLN',click:show},{label:'Проверить обновления',click:()=>{show();updates.check(true);}},{label:'Журнал авторизации',click:()=>{sessionLog.write('log-open');shell.showItemInFolder(sessionLog.file);}},{type:'separator'},{label:'Выйти',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',show);
   const idleFile=path.join(app.getPath('userData'),'update-settings.json');let idleInstall=false;try{idleInstall=JSON.parse(fs.readFileSync(idleFile,'utf8')).idleInstall===true;}catch{}
   const {autoUpdater}=require('electron-updater');updates=createUpdates({idleInstall,idleSeconds:()=>powerMonitor.getSystemIdleTime(),saveIdleInstall:value=>{const temp=idleFile+'.tmp';fs.writeFileSync(temp,JSON.stringify({idleInstall:value}),{mode:0o600});fs.renameSync(temp,idleFile);},updater:autoUpdater,version:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',publish:state=>{if(!win.isDestroyed())win.webContents.send('desktop:update-state',state);},inCall:()=>activeCall||transfers.size>0,isSessionBusy:()=>sessionRefresh?.pending()===true,install:()=>{quitting=true;autoUpdater.quitAndInstall(true,true);}});
   ipc('desktop:save-photo',async(value,event)=>{const photo=photoPayload(value);const result=await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender),{title:'Сохранить фото',defaultPath:path.join(app.getPath('pictures'),photo.name)});if(result.canceled||!result.filePath)return {saved:false};await fs.promises.writeFile(result.filePath,photo.bytes);if(photo.reveal)shell.showItemInFolder(result.filePath);return {saved:true};});
@@ -76,12 +78,14 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   const sessionFile=path.join(app.getPath('userData'),'phone-session.dat');
   const accountsFile=path.join(app.getPath('userData'),'accounts.dat');
   const sessionStore=createSessionStore({file:accountsFile,legacyFile:sessionFile,secure:safeStorage});
-  sessionRefresh=createSessionRefresh({store:sessionStore,request:async(refresh,accountId)=>{
+  sessionRefresh=createSessionRefresh({store:sessionStore,log:sessionLog.write,request:async(refresh,accountId)=>{
    const response=await net.fetch(config.apiBase+'/api/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:refresh,account_id:accountId,select:false}),signal:AbortSignal.timeout(30000)});
    return {status:response.status,...(response.ok?{session:await response.json()}:{})};
   }});
   ipc('desktop:save-accounts',(value,event)=>{const saved=sessionStore.save(value,{secondary:event.sender!==win.webContents});for(const id of value.removed||[])sessionRefresh.forget(id);if(event.sender===win.webContents)selectedAccountId=saved.selected;return true;});
   ipc('desktop:load-accounts',()=>sessionStore.load());
+  ipc('desktop:session-diagnostic',value=>{if(!['renderer-401','renderer-reuse','renderer-removed','renderer-retry-limit','renderer-logout'].includes(value?.event)||!Number.isSafeInteger(value.accountId)||value.accountId<1)return false;return sessionLog.write(value.event,{accountId:value.accountId});});
+  ipc('desktop:session-log',()=>{sessionLog.write('log-open');shell.showItemInFolder(sessionLog.file);return true;});
   ipc('desktop:refresh-session',value=>sessionRefresh.refresh(value));
   ipc('desktop:save-session',refresh=>{if(typeof refresh!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(refresh))throw Error('Invalid session');if(!safeStorage.isEncryptionAvailable())throw Error('Secure storage unavailable');const temp=sessionFile+'.tmp';fs.writeFileSync(temp,safeStorage.encryptString(refresh),{mode:0o600});fs.renameSync(temp,sessionFile);return true;});
   ipc('desktop:load-session',()=>sessionStore.loadLegacy());
