@@ -670,15 +670,16 @@ object NativeCalls {
     private fun ring(call: VolnaCall) {
         val app = context ?: return
         runCatching { CallAlerts.show(app, call, accountId(), NativeAccounts.list(app).firstOrNull{it.user.id==accountId()}?.user?.name.orEmpty()) }
-        NativeCallVibration.start(app)
+        if (!NativePriorityCalls.enabled(app, accountId(), call.peer?.id ?: 0)) NativeCallVibration.start(app)
         val uri = NativeNotificationSounds.callUri(app)
-        ringtone = NativePriorityCalls.play(app, accountId(), call) ?: if (NativeNotificationSounds.callSoundAllowed(app) && uri != null) runCatching { RingtoneManager.getRingtone(app, uri) }.getOrNull()?.also {
+        ringtone = NativePriorityCalls.play(app, accountId(), call, foreground = true) ?: if (NativeNotificationSounds.callSoundAllowed(app) && uri != null) runCatching { RingtoneManager.getRingtone(app, uri) }.getOrNull()?.also {
             if (Build.VERSION.SDK_INT >= 28) it.isLooping = true
             runCatching { it.play() }
         } else null
     }
     private fun stopRinging() {
         NativeCallVibration.stop()
+        NativePriorityCalls.stop(accountId(), foreground = true)
         stopRingback()
         val old = ringtone; ringtone = null; runCatching { old?.stop() }
         runCatching { context?.getSystemService(NotificationManager::class.java)?.cancel(CALL_NOTIFICATION) }

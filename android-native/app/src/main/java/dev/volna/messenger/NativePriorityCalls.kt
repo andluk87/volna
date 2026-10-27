@@ -18,11 +18,14 @@ internal object NativePriorityCalls {
     fun enabled(context: Context, account: Long, peer: Long): Boolean = account > 0 && peer > 0 &&
         NativeNotificationPolicy.prefs(context, account).getBoolean("priority_call_$peer", false)
 
-    fun play(context: Context, account: Long, call: VolnaCall): Ringtone? {
+    fun stop(account: Long, foreground: Boolean = false) { NativeCallVibration.stop(if (foreground) "priority-active" else "priority-$account") }
+
+    fun play(context: Context, account: Long, call: VolnaCall, foreground: Boolean = false): Ringtone? {
         if (!enabled(context, account, call.peer?.id ?: 0)) return null
         val manager = context.getSystemService(NotificationManager::class.java)
         if (!manager.areNotificationsEnabled() || manager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL ||
             manager.getNotificationChannel(NativeCalls.CALL_CHANNEL)?.importance == NotificationManager.IMPORTANCE_NONE) return null
+        NativeCallVibration.start(context, if (foreground) "priority-active" else "priority-$account", priority = true)
         // Alarm audio remains audible in silent/vibrate mode. DND and alarm volume
         // remain under Android/user control; do not alter either globally.
         return runCatching {
@@ -44,7 +47,7 @@ internal fun NativePriorityCallSetting(account: Long, peer: Long) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             NativeText("Приоритетные звонки")
-            NativeText("Звонить даже без звука. Громкость — как у будильника. Режим «Не беспокоить» сохраняется.", color = Muted)
+            NativeText("Звонить и вибрировать даже без звука. Громкость — как у будильника. Режим «Не беспокоить» сохраняется.", color = Muted)
         }
         Switch(checked = enabled, enabled = account > 0, onCheckedChange = {
             enabled = it

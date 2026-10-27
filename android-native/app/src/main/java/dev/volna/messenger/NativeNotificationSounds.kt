@@ -57,13 +57,22 @@ internal object NativeNotificationSounds {
 
 internal object NativeCallVibration {
     private var vibrator: Vibrator? = null
-    fun start(context: Context) {
-        stop()
-        if (!NativeNotificationSounds.callVibrationAllowed(context)) return
+    private val owners = mutableMapOf<String, Boolean>()
+
+    @Synchronized fun start(context: Context, owner: String = "active", priority: Boolean = false) {
+        if (!priority && !NativeNotificationSounds.callVibrationAllowed(context)) return
+        owners[owner] = priority
         val device = if (Build.VERSION.SDK_INT >= 31) context.getSystemService(VibratorManager::class.java).defaultVibrator else context.getSystemService(Vibrator::class.java)
         if (!device.hasVibrator()) return
         vibrator = device
-        runCatching { device.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 700, 700), 0), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build()) }
+        val usage = if (owners.values.any { it }) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_NOTIFICATION_RINGTONE
+        runCatching { device.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 700, 700), 0), AudioAttributes.Builder().setUsage(usage).build()) }
     }
-    fun stop() { val old = vibrator; vibrator = null; runCatching { old?.cancel() } }
+
+    @Synchronized fun stop(owner: String = "active") {
+        owners.remove(owner)
+        if (owners.isNotEmpty()) return
+        val old = vibrator; vibrator = null
+        runCatching { old?.cancel() }
+    }
 }

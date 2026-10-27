@@ -66,7 +66,7 @@ class MessagingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             NativeCalls.configure(this, ""); stopped = true
-            priorityRingtones.keys.toList().forEach { clearBackgroundCall(it) }
+            (priorityRingtones.keys.toSet() + streams.keys.toSet()).forEach { clearBackgroundCall(it) }
             streams.values.forEach { it.stop() }; streams.clear()
             main.removeCallbacks(reconcile); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
             return START_NOT_STICKY
@@ -183,7 +183,7 @@ class MessagingService : Service() {
         }
     }
 
-    private fun clearBackgroundCall(account: Long) { priorityRingtones.remove(account)?.let { runCatching { it.stop() } }; getSystemService(NotificationManager::class.java).cancel("volna-call-account-$account", NativeCalls.CALL_NOTIFICATION); NativeBackgroundCalls.remove(account) }
+    private fun clearBackgroundCall(account: Long) { NativePriorityCalls.stop(account); priorityRingtones.remove(account)?.let { runCatching { it.stop() } }; getSystemService(NotificationManager::class.java).cancel("volna-call-account-$account", NativeCalls.CALL_NOTIFICATION); NativeBackgroundCalls.remove(account) }
     private fun watchCalls(stream: AccountStream) {
         var alerted: String? = null
         val device = prefs.getString("call_device",null)?.takeIf { it.matches(Regex("[a-f0-9]{32}")) } ?: "0".repeat(32)
@@ -372,7 +372,7 @@ class MessagingService : Service() {
         notificationScope.cancel()
         NativeIdleUpdater.stop()
         stopped = true
-        priorityRingtones.keys.toList().forEach { clearBackgroundCall(it) }
+        (priorityRingtones.keys.toSet() + streams.keys.toSet()).forEach { clearBackgroundCall(it) }
         main.removeCallbacks(reconcile)
         streams.values.forEach { it.stop() }; streams.clear()
         client.dispatcher.cancelAll()
