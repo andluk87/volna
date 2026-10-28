@@ -1,6 +1,6 @@
 import {randomBytes,createHmac} from 'node:crypto';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
-export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SECRET||'',turnHost=process.env.TURN_HOST||'',clock=Date.now,onRing=()=>{},onEnd=()=>{}}){
+export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SECRET||'',turnHost=process.env.TURN_HOST||'',clock=Date.now,onRing=()=>{},onEnd=()=>{},onChange=()=>{}}){
  const active=new Map(), attempts=new Map();
  db.exec(`CREATE TABLE IF NOT EXISTS call_history(id TEXT PRIMARY KEY,chat_id INTEGER NOT NULL REFERENCES chats(id),
   caller INTEGER NOT NULL REFERENCES users(id),callee INTEGER NOT NULL REFERENCES users(id),created INTEGER NOT NULL,
@@ -10,8 +10,10 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
  db.exec('CREATE TABLE IF NOT EXISTS call_history_hidden(user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,call_id TEXT NOT NULL REFERENCES call_history(id) ON DELETE CASCADE,PRIMARY KEY(user_id,call_id))');
  if(!db.prepare('PRAGMA table_info(call_history)').all().some(column=>column.name==='video'))db.exec('ALTER TABLE call_history ADD COLUMN video INTEGER NOT NULL DEFAULT 0');
  if(!db.prepare('PRAGMA table_info(call_history)').all().some(column=>column.name==='ringed'))db.exec('ALTER TABLE call_history ADD COLUMN ringed INTEGER NOT NULL DEFAULT 1');
- db.prepare("UPDATE call_history SET ended=?,status='interrupted' WHERE ended IS NULL").run(clock());
- const finish=(c,status)=>{active.delete(c.id);db.prepare('UPDATE call_history SET ended=?,status=? WHERE id=?').run(clock(),status,c.id);onEnd(c.id);};
+ if(!db.prepare('PRAGMA table_info(call_history)').all().some(column=>column.name==='callee_read'))db.exec('ALTER TABLE call_history ADD COLUMN callee_read INTEGER NOT NULL DEFAULT 1');
+ db.exec('CREATE INDEX IF NOT EXISTS call_history_chat_created ON call_history(chat_id,created)');
+ db.prepare("UPDATE call_history SET ended=?,status='interrupted',callee_read=CASE WHEN ringed=1 AND answered IS NULL THEN 0 ELSE 1 END WHERE ended IS NULL").run(clock());
+ const finish=(c,status)=>{active.delete(c.id);db.prepare('UPDATE call_history SET ended=?,status=?,callee_read=? WHERE id=?').run(clock(),status,c.status==='ringing'&&status!=='declined'?0:1,c.id);onEnd(c.id);onChange(c.chat,[c.caller,c.callee]);};
  const device=value=>{if(typeof value!=='string'||!/^[a-f0-9]{32}$/.test(value))throw fail(400,'Некорректное устройство');return value;};
  const sweep=()=>{const now=clock();for(const [uid,item] of attempts)if(now-item.start>60000)attempts.delete(uid);for(const c of active.values())if(now-c.created>4*3600000||now-c.callerSeen>50000||(c.status==='active'?now-c.calleeSeen>50000:c.status==='connecting'?now-c.acceptedAt>60000:now-c.created>60000))finish(c,c.status==='ringing'?'missed':'interrupted');};
  const view=(c,uid,d)=>{
@@ -25,6 +27,15 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
  const timer=setInterval(sweep,5000);timer.unref();
  async function handle(req,res,url,uid){
   if(!url.pathname.startsWith('/api/calls'))return false;sweep();
+  if(url.pathname==='/api/calls/read'&&req.method==='POST'){
+   const data=await body(req);auth(req);
+   if(!Number.isSafeInteger(data.chat_id)||!Array.isArray(data.call_ids)||data.call_ids.length>1000||data.call_ids.some(id=>typeof id!=='string'||!/^[a-f0-9]{32}$/.test(id)))throw fail(400,'Некорректные звонки');
+   if(!db.prepare("SELECT 1 FROM members m JOIN chats c ON c.id=m.chat_id WHERE m.chat_id=? AND m.user_id=? AND c.admin_deleted=0").get(data.chat_id,uid))throw fail(404,'Чат не найден');
+   const mark=db.prepare('UPDATE call_history SET callee_read=1 WHERE id=? AND chat_id=? AND callee=? AND callee_read=0 AND ended IS NOT NULL');
+   let changed=0;for(const id of data.call_ids)changed+=mark.run(id,data.chat_id,uid).changes;
+   if(changed)onChange(data.chat_id,[uid]);
+   json(res,200,{ok:true});return true;
+  }
   if(url.pathname==='/api/calls/history'&&req.method==='GET'){
    const before=Number(url.searchParams.get('before')||Number.MAX_SAFE_INTEGER);
    if(!Number.isSafeInteger(before)||before<1)throw fail(400,'Некорректный курсор');
@@ -39,7 +50,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
    const data=await body(req);auth(req);const before=data.before;
    if(!Number.isSafeInteger(before)||before<1||before>clock())throw fail(400,'Некорректный момент очистки');
    db.prepare('INSERT OR IGNORE INTO call_history_hidden(user_id,call_id) SELECT ?,id FROM call_history WHERE (caller=? OR (callee=? AND ringed=1)) AND ended IS NOT NULL AND created<=?').run(uid,uid,uid,before);
-   json(res,200,{ok:true});return true;
+   onChange(null,[uid]);json(res,200,{ok:true});return true;
   }
   if(url.pathname==='/api/calls/config'&&req.method==='GET'){
    const iceServers=[];

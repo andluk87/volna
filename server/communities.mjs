@@ -1,3 +1,4 @@
+import {applyCallPreviews} from './call-chat-events.mjs';
 import {randomBytes,createHash} from 'node:crypto';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -43,7 +44,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
  return async(req,res,url,uid)=>{
   const path=url.pathname,method=req.method;
   if(path==='/api/chats'&&method==='GET'){
-   const rows=db.prepare(`SELECT c.id,c.kind,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,c.topics_enabled,c.general_name,(SELECT title FROM chats WHERE id=c.parent_id) AS parent_name,me.role,me.last_read,
+   let rows=db.prepare(`SELECT c.id,c.kind,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,c.topics_enabled,c.general_name,(SELECT title FROM chats WHERE id=c.parent_id) AS parent_name,me.role,me.last_read,
     COALESCE((SELECT MAX(last_read) FROM members WHERE chat_id=c.id AND user_id<>?),me.last_read) AS peer_read,
     COALESCE((SELECT MAX(MAX(last_read,last_delivered)) FROM members WHERE chat_id=c.id AND user_id<>me.user_id),me.last_read) AS peer_delivered,
     CASE WHEN c.kind IN ('group','channel') THEN c.id ELSE COALESCE(peer.id,?) END AS peer_id,
@@ -63,8 +64,9 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
     LEFT JOIN chat_visibility vis ON vis.chat_id=c.id AND vis.user_id=me.user_id
     LEFT JOIN chat_preferences pref ON pref.chat_id=c.id AND pref.user_id=me.user_id
     LEFT JOIN users peer ON c.kind='direct' AND peer.id=(SELECT user_id FROM members WHERE chat_id=c.id AND user_id<>? LIMIT 1)
-    WHERE c.topic_deleted=0 AND c.admin_deleted=0 AND (c.parent_id IS NOT NULL OR COALESCE(vis.deleted,0)=0 OR EXISTS(SELECT 1 FROM messages WHERE chat_id=c.id AND id>vis.hidden_before))
+    WHERE c.topic_deleted=0 AND c.admin_deleted=0 AND (c.parent_id IS NOT NULL OR COALESCE(vis.deleted,0)=0 OR EXISTS(SELECT 1 FROM messages WHERE chat_id=c.id AND id>vis.hidden_before) OR EXISTS(SELECT 1 FROM call_history h WHERE h.chat_id=c.id AND h.ended IS NOT NULL AND (h.caller=me.user_id OR (h.callee=me.user_id AND h.ringed=1)) AND NOT EXISTS(SELECT 1 FROM call_history_hidden x WHERE x.call_id=h.id AND x.user_id=me.user_id)))
     ORDER BY saved DESC,pinned DESC,COALESCE(last_at,'') DESC,c.id DESC`).all(uid,uid,uid,uid,uid);
+   rows=applyCallPreviews(db,uid,rows);
    const topicUnread=new Map(),latestTopic=new Map();for(const row of rows)if(row.parent_id){topicUnread.set(row.parent_id,(topicUnread.get(row.parent_id)||0)+row.unread);if(row.last_at&&row.last_at>(latestTopic.get(row.parent_id)?.last_at||''))latestTopic.set(row.parent_id,row);}
    const contactIds=new Set(db.prepare("SELECT linked FROM account_contacts WHERE owner=? AND deleted=0 AND linked IS NOT NULL").all(uid).map(c=>c.linked));
    const result=rows.map(row=>{const topic=latestTopic.get(row.id);return {...row,is_contact:contactIds.has(row.peer_id),...(topic&&topic.last_at>(row.last_at||'')?{last_at:topic.last_at,last_id:topic.last_id,last_sender_id:topic.last_sender_id,last_text:topic.topic_name+': '+(topic.last_text||'Вложение'),peer_read:topic.peer_read,peer_delivered:topic.peer_delivered}:{}),unread:row.unread+(topicUnread.get(row.id)||0),peer_online:row.kind==='direct'&&online(row.peer_id),peer_last_seen:row.kind==='direct'?userById(row.peer_id)?.last_seen??null:null};});

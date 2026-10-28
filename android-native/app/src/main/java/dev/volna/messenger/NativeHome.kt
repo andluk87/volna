@@ -340,7 +340,8 @@ internal fun NativeChatRow(chat: VolnaChat, me: Long?, token: String, draft: Str
                 NativeText(nativeClock(chat.lastAt), Modifier.padding(start = 4.dp), color = Muted, fontSize = 12.sp)
             }
             Row(Modifier.padding(top = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                NativeText(if (draft.isNotBlank()) "Черновик: $draft" else chat.lastText.ifBlank { "Начните разговор" }, Modifier.weight(1f), color = if (draft.isNotBlank()) Accent else Muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (draft.isBlank() && chat.lastCall) Icon(if (chat.lastCallIncoming) Icons.Outlined.CallReceived else Icons.Outlined.CallMade, null, tint = Accent, modifier = Modifier.padding(end = 4.dp).size(16.dp))
+                NativeText(if (draft.isNotBlank()) "Черновик: $draft" else chat.lastText.ifBlank { "Начните разговор" }, Modifier.weight(1f), color = if (draft.isNotBlank() || chat.lastCall) Accent else Muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 NativeUnreadBadge(chat.unread, Modifier.padding(start = 8.dp), containerColor = if (chat.muted) Muted else Accent, contentColor = if (chat.muted) Panel else AccentText, manualUnread = chat.manualUnread, fontSize = 12.sp)
             }
         }

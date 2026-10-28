@@ -51,9 +51,13 @@ internal fun rememberNativeChatCalls(token: String, account: Long, chat: VolnaCh
                         val page = api.callHistory(token, before, chat.id); all.addAll(page)
                         before = page.lastOrNull()?.created
                     } while (page.size == 50 && before != null && (all.size < pages * 50 || oldest != null && before > oldest) && all.size < 1000)
-                    all.distinctBy { it.id }
+                    val completed = all.distinctBy { it.id }.filter { it.status !in listOf("preparing", "ringing", "connecting", "active") }
+                    completed
                 }
                 records = rows
+                if ((context as? androidx.lifecycle.LifecycleOwner)?.lifecycle?.currentState?.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) == true) {
+                    withContext(Dispatchers.IO) { runCatching { api.readCalls(token, chat.id, rows.filter { it.incoming }.map { it.id }) } }
+                }
                 withContext(Dispatchers.IO) { cache.saveCalls(account, (rows + cache.calls(account).filter { it.chatId != chat.id }).sortedByDescending { it.created }) }
             } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { /* Keep the last cached history offline. */ }
             delay(10_000)
@@ -63,17 +67,14 @@ internal fun rememberNativeChatCalls(token: String, account: Long, chat: VolnaCh
 }
 
 internal fun nativeCallRecordTitle(call: VolnaCallRecord): String = when {
-    call.status == "cancelled" -> "Отменённый звонок"
-    call.status == "declined" -> if (call.incoming) "Отклонённый звонок" else "Звонок отклонён"
-    call.status == "missed" -> if (call.incoming) "Пропущенный звонок" else "Нет ответа"
-    call.status == "interrupted" -> "Прерванный звонок"
-    call.incoming -> "Входящий звонок"
-    else -> "Исходящий звонок"
+    call.duration > 0 || call.status == "ended" -> if (call.incoming) "Входящий звонок" else "Исходящий звонок"
+    call.incoming -> "Пропущенный звонок"
+    else -> "Отменённый звонок"
 }
 @Composable
 internal fun NativeChatCallCard(call: VolnaCallRecord, enabled: Boolean, onCall: () -> Unit) {
-    val missed = call.status in listOf("missed", "declined", "interrupted")
-    val arrow = if (missed) Color(0xFFFF6670) else Color(0xFF5DD57B)
+    val missed = call.duration == 0 && call.status != "ended"
+    val arrow = if (missed) Color(0xFFFF6670) else Accent
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (call.incoming) Arrangement.Start else Arrangement.End) {
         Row(Modifier.widthIn(max = 290.dp).fillMaxWidth(.76f).clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = if (call.incoming) 5.dp else 22.dp, bottomEnd = if (call.incoming) 22.dp else 5.dp)).background(if (call.incoming) Panel else Outgoing).clickable(enabled = enabled, onClick = onCall).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {

@@ -61,6 +61,11 @@ test('calls: timeout and TURN credentials with controlled clock',async()=>{
  try{const config=await invoke('/config',uid);const credentials=config.iceServers[0];assert.equal(credentials.credential,createHmac('sha1','secret-for-test').update(credentials.username).digest('base64'));assert.equal(JSON.stringify(config).includes('secret-for-test'),false);
  const device=d();await invoke('/start',uid,'POST',{device,chat_id:chat});assert.equal(status,201);now+=61000;assert.equal(await invoke('/current?device='+device,uid),null);
  const next=await invoke('/start',uid,'POST',{device,chat_id:chat});const offer={type:'offer',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n'};await invoke('/'+next.id+'/offer',uid,'POST',{device,description:offer});now+=45000;await invoke('/current?device='+device,uid);now+=10000;const other=d();await invoke('/'+next.id+'/accept',peer,'POST',{device:other});now+=20000;await invoke('/'+next.id+'/answer',peer,'POST',{device:other,description:{...offer,type:'answer'}});assert.equal(result.status,'active');
+ await invoke('/'+next.id+'/end',uid,'POST',{device});
+ assert.equal(app.db.prepare('SELECT callee_read FROM call_history WHERE id=?').get(next.id).callee_read,1);
+ const missed=await invoke('/start',uid,'POST',{device,chat_id:chat});await invoke('/'+missed.id+'/offer',uid,'POST',{device,description:offer});now+=61000;
+ await invoke('/current?device='+device,uid);
+ const row=app.db.prepare('SELECT status,callee_read FROM call_history WHERE id=?').get(missed.id);assert.equal(row.status,'missed');assert.equal(row.callee_read,0);
  }finally{service.close();await app.close();}
 });
 

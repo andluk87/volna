@@ -36,7 +36,7 @@ data class VolnaChat(
     val muted: Boolean = false,
     val pinned: Boolean = false,
     val role: String = "member", val canSend: Boolean = true, val memberCount: Int = 0,
-    val avatarUrl: String? = null, val lastId: Long = 0, val lastSenderId: Long = 0, val peerOnline: Boolean = false, val parentId: Long = 0, val topicClosed: Boolean = false, val isContact: Boolean = false, val manualUnread: Boolean = false, val peerLastSeen: Long = 0, val topicsEnabled: Boolean = false, val topicTitle: String = "", val topicIcon: String = "", val parentName: String = ""
+    val avatarUrl: String? = null, val lastId: Long = 0, val lastSenderId: Long = 0, val peerOnline: Boolean = false, val parentId: Long = 0, val topicClosed: Boolean = false, val isContact: Boolean = false, val manualUnread: Boolean = false, val peerLastSeen: Long = 0, val topicsEnabled: Boolean = false, val topicTitle: String = "", val topicIcon: String = "", val parentName: String = "", val lastCall: Boolean = false, val lastCallIncoming: Boolean = false
 )
 data class VolnaReaction(val emoji: String, val userId: Long, val name: String, val avatarUrl: String? = null)
 data class VolnaReply(val id: Long, val name: String, val text: String, val deleted: Boolean)
@@ -219,7 +219,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
                     (if (row.isNull("last_text")) "" else row.optString("last_text")), (if (row.isNull("last_at")) "" else row.optString("last_at")), row.optInt("unread"),
                     row.optInt("saved") == 1, row.optLong("peer_id"), row.optLong("peer_read"), row.optLong("peer_delivered", row.optLong("peer_read")),
                     row.optString("kind", "direct"), row.optInt("archived") == 1, row.optInt("muted") == 1, row.optInt("pinned") == 1,
-                    row.optString("role", "member"), row.optInt("can_send", 1) == 1, row.optInt("member_count"), nullableText(row, "avatar_url"), row.optLong("last_id"), row.optLong("last_sender_id"), row.optBoolean("peer_online"), row.optLong("parent_id"), row.optInt("topic_closed")==1, row.optBoolean("is_contact"), row.optInt("manual_unread") == 1, row.optLong("peer_last_seen"), row.optInt("topics_enabled")==1, row.optString("topic_name"),row.optString("topic_icon"),nullableText(row,"parent_name").orEmpty())
+                    row.optString("role", "member"), row.optInt("can_send", 1) == 1, row.optInt("member_count"), nullableText(row, "avatar_url"), row.optLong("last_id"), row.optLong("last_sender_id"), row.optBoolean("peer_online"), row.optLong("parent_id"), row.optInt("topic_closed")==1, row.optBoolean("is_contact"), row.optInt("manual_unread") == 1, row.optLong("peer_last_seen"), row.optInt("topics_enabled")==1, row.optString("topic_name"),row.optString("topic_icon"),nullableText(row,"parent_name").orEmpty(), row.optJSONObject("last_call") != null, row.optJSONObject("last_call")?.optBoolean("incoming") == true)
             }
         }
     }
@@ -373,6 +373,9 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
     fun contacts(token: String): List<VolnaUser> = arrayCall("/contacts", token).let { rows -> (0 until rows.length()).map { parseUser(rows.getJSONObject(it)) } }
     fun callHistory(token: String, before: Long? = null, chatId: Long? = null): List<VolnaCallRecord> = arrayCall("/calls/history?" + listOfNotNull(before?.let { "before=$it" }, chatId?.let { "chat_id=$it" }).joinToString("&"), token).let { rows ->
         (0 until rows.length()).map { i -> val row = rows.getJSONObject(i); VolnaCallRecord(row.getString("id"), row.getLong("chat_id"), row.optJSONObject("peer")?.let(::parseUser), row.optBoolean("incoming"), row.getLong("created"), row.optString("status"), row.optInt("duration"), row.optBoolean("screen_shared"), row.optBoolean("video")) }
+    }
+    fun readCalls(token: String, chatId: Long, ids: List<String>) {
+        if (ids.isNotEmpty()) call("/calls/read", "POST", token, JSONObject().put("chat_id", chatId).put("call_ids", JSONArray(ids)))
     }
     fun sessions(token: String): List<VolnaDeviceSession> = arrayCall("/sessions", token).let { rows ->
         (0 until rows.length()).map { i -> val row = rows.getJSONObject(i); VolnaDeviceSession(row.getString("id"), row.optString("label"), row.optBoolean("current"), row.optLong("last_seen"), row.getLong("expires")) }
