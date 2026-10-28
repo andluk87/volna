@@ -6,12 +6,16 @@ import EmojiPicker from './EmojiPicker';
 import {fitMessagePopup} from './message-popup.mjs';
 import './message-popup.css';
 
-export default function MessageMenu({message,quickReactions,meId,canSend,canManage,canDelete,onReact,onSelect,onCopy,onReply,onForward,onSave,onPin,onEdit,onDelete}){
+export default function MessageMenu({message,quickReactions,meId,canSend,canManage,canDelete,onReact,onSelect,onCopy,onReply,onQuote,onForward,onSave,onPin,onEdit,onDelete}){
  const [selectedQuote,setSelectedQuote]=useState(null),capturedQuote=useRef(null);
  const owner=useRef(null),popup=useRef(null),[point,setPoint]=useState({x:0,y:0}),id=useId(),[open,setOpen]=useState(false),[expanded,setExpanded]=useState(false),previousExpanded=useRef(false);
  const close=useCallback(()=>{if(owner.current)owner.current.open=false;setOpen(false);setExpanded(false);previousExpanded.current=false;capturedQuote.current=null;},[]);
  const collapse=useCallback(()=>setExpanded(false),[]);
  const react=emoji=>{close();onReact(emoji);};
+ const captureSelection=()=>{
+  const fragment=quoteFromSelection(owner.current?.closest('[data-message-id]')?.querySelector('.message-text'),message.text||'',window.getSelection());
+  capturedQuote.current=fragment;
+ };
  const show=useCallback(details=>{
   for(const other of document.querySelectorAll('.message-actions[open]'))if(other!==details)other.open=false;
   const fragment=quoteFromSelection(details.closest('[data-message-id]')?.querySelector('.message-text'),message.text||'',window.getSelection());
@@ -50,7 +54,7 @@ export default function MessageMenu({message,quickReactions,meId,canSend,canMana
  const action=(callback)=>()=>{close();callback();};
  const own=message.sender_id===meId;
  return <><details ref={owner} className="message-actions" data-menu-owner={id} onToggle={toggle}>
-  <summary aria-label={'Действия сообщения '+message.id} aria-expanded={open}><Icon name="more"/></summary>
+  <summary onPointerDown={captureSelection} aria-label={'Действия сообщения '+message.id} aria-expanded={open}><Icon name="more"/></summary>
  </details>{open&&createPortal(<div ref={popup} className={'message-popup'+(expanded?' message-popup-expanded':'')} data-message-menu-owner={id}>
   {expanded?<EmojiPicker reaction onPick={react} onClose={collapse}/>:<>
    <div className="reaction-picker message-quick-reactions" role="toolbar" aria-label="Быстрые реакции">
@@ -59,6 +63,7 @@ export default function MessageMenu({message,quickReactions,meId,canSend,canMana
    </div>
    <div className="message-menu" role="menu" aria-label="Действия сообщения">
     {canSend&&<button type="button" role="menuitem" onClick={action(()=>onReply(selectedQuote))}><Icon name="reply"/>{selectedQuote?'Ответить с цитатой':'Ответить'}</button>}
+    {canSend&&onQuote&&!selectedQuote&&message.text?.trim()&&<button type="button" role="menuitem" onClick={action(onQuote)}><Icon name="reply"/>Выбрать фрагмент для цитаты</button>}
     {canManage&&<button type="button" role="menuitem" onClick={action(onPin)}><Icon name="pin"/>{message.pinned?'Открепить':'Закрепить'}</button>}
     <button type="button" role="menuitem" onClick={action(()=>selectedQuote?navigator.clipboard.writeText(selectedQuote.text).catch(()=>{}):onCopy())}><Icon name="copy"/>{selectedQuote?'Копировать выделенное':'Копировать'}</button>
     <button type="button" role="menuitem" onClick={action(onForward)}><Icon name="forward"/>Переслать</button>
