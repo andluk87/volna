@@ -285,7 +285,7 @@ internal fun ChatRoomScreen(
         if (error.isNotBlank()) NativeConnectionNotice(error, onRetry)
         Box(Modifier.weight(1f).fillMaxWidth().hazeSource(backdrop, zIndex = 1f, key = "history")) {
             if (timeline.isEmpty()) Column(Modifier.fillMaxWidth().align(Alignment.Center)) { NativeEmptyState(Icons.Outlined.ChatBubbleOutline, if (searchQuery.isNotBlank()) "Ничего не найдено" else if (showPins) "Нет закреплённых сообщений" else "Начните разговор") }
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (firstScroll || timeline.isEmpty()) 1f else 0f }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(LocalNativeAppearance.current.spacing.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (firstScroll || timeline.isEmpty()) 1f else 0f }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy((LocalNativeAppearance.current.spacing - 2).coerceAtLeast(1).dp)) {
                 if (historyButton) item(key = "history") { TextButton(onClick = { if (moreHistory) onLoadOlder() else callPages++ }, enabled = !loadingHistory, modifier = Modifier.fillMaxWidth()) { if (loadingHistory) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else NativeText(if (moreHistory) "Более ранние сообщения" else "Более ранние звонки", fontSize = 12.sp) } }
                 itemsIndexed(timeline, key = { _, entry -> "${chat.id}-${entry.key}" }) { index, entry ->
                     val group = entry.messages
@@ -414,7 +414,7 @@ internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isM
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val screenWidth = maxWidth
     val available = screenWidth - 20.dp - (if (selectionMode) 44.dp else 0.dp) - (if (appearance.avatars && showAuthor && !isMine) 36.dp else 0.dp)
-    val maxWidth = (screenWidth * if (visualMedia) .82f else .75f).coerceAtMost(available).coerceAtMost(560.dp).coerceAtLeast(80.dp)
+    val maxWidth = (screenWidth * when { visualMedia -> .82f; message.attachmentId != null -> .75f; else -> .90f }).coerceAtMost(available).coerceAtMost(560.dp).coerceAtLeast(80.dp)
     val compactText = !standaloneEmoji && message.text.isNotBlank() && message.attachmentId == null && message.reply == null && message.forwardedName == null && !message.deleted && !message.edited && message.reactions.isEmpty() && message.emojiEntities.isEmpty() && group.size == 1 && !(showAuthor && !isMine)
     val minWidth = when {
         message.deleted -> 0.dp
@@ -426,7 +426,7 @@ internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isM
     NativeMessageContent(isMine) { Row(Modifier.fillMaxWidth().background(if (selected || highlighted) Accent.copy(alpha = .12f) else Color.Transparent), horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
         if (selectionMode) Checkbox(selected, { onSelectGroup() }, enabled = message.id > 0, modifier = Modifier.size(44.dp))
         if (appearance.avatars && showAuthor && !isMine) Box(Modifier.width(36.dp).heightIn(min = 32.dp), contentAlignment = Alignment.BottomCenter) { if (!joined) Box(Modifier.clickable { onProfile(message.senderId) }) { Avatar(message.senderName, message.senderId, size = 28.dp) } }
-        val shape = RoundedCornerShape(topStart = if (joined && !isMine) 6.dp else appearance.radius.dp, topEnd = if (joined && isMine) 6.dp else appearance.radius.dp, bottomEnd = appearance.radius.dp, bottomStart = appearance.radius.dp)
+        val shape = RoundedCornerShape(topStart = if (joined && !isMine) 6.dp else appearance.radius.dp, topEnd = if (joined && isMine) 6.dp else appearance.radius.dp, bottomEnd = if (isMine && !visualMedia && !sticker && !standaloneEmoji) appearance.radius.coerceAtMost(4).dp else appearance.radius.dp, bottomStart = if (!isMine && !visualMedia && !sticker && !standaloneEmoji) appearance.radius.coerceAtMost(4).dp else appearance.radius.dp)
         // Measure body and footer separately; no intrinsic sizing of the whole bubble.
         NativeBubbleContent(Modifier.testTag("message-bubble-${message.id}").widthIn(min = minWidth, max = maxWidth).clip(shape).background(if ((sticker || standaloneEmoji || visualMedia) && !message.deleted) androidx.compose.ui.graphics.SolidColor(Color.Transparent) else nativeMessageBrush(isMine))
             .combinedClickable(enabled = message.id > 0, onClick = { if (selectionMode) onSelectGroup() else { detail = !detail; if (standaloneEmoji && emojiAnimation != null) emojiReplay++ } }, onLongClick = { if (selectionMode) onSelectGroup() else { targetId = message.id; menu = true } })
@@ -539,7 +539,7 @@ internal fun NativeLinkedText(text: String, modifier: Modifier = Modifier, entit
         } }
     }
 
-    if (renderedEntities.isEmpty()) NativeText(linked, modifier, color = TextMain, fontSize = 15.sp, lineHeight = 20.sp)
+    if (renderedEntities.isEmpty()) NativeText(linked, modifier, color = TextMain, fontSize = 14.sp, lineHeight = 19.sp, letterSpacing = 0.sp)
     else {
         val context = LocalContext.current; val api = NativeExpressionHttp.api; val store = remember(account) { NativeExpressionStore(context, account) }
         val builder = androidx.compose.ui.text.AnnotatedString.Builder()
@@ -555,7 +555,7 @@ internal fun NativeLinkedText(text: String, modifier: Modifier = Modifier, entit
         } }
         builder.append(linked.subSequence(cursor, body.length))
         val annotated = emojiAnnotated(builder.toAnnotatedString(), LocalEmojiCatalog.current, LocalEmojiFont.current)
-        androidx.compose.material3.Text(annotated, modifier, color = TextMain, fontSize = 15.sp, lineHeight = 20.sp,
+        androidx.compose.material3.Text(annotated, modifier, color = TextMain, fontSize = 14.sp, lineHeight = 19.sp, letterSpacing = 0.sp,
             style = nativeEmojiTextStyle(LocalTextStyle.current), inlineContent = inline)
     }
 }
@@ -565,8 +565,8 @@ private fun NativeMessageStamp(message: VolnaMessage, isMine: Boolean, delivered
     val ink = if (overMedia) Color.White else Muted
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (visible) {
-            if (edited) NativeText("изменено · ", color = ink, fontSize = 10.sp)
-            NativeText(nativeClock(message.createdAt), color = ink, fontSize = 11.sp)
+            if (edited) NativeText("изменено · ", color = ink, fontSize = 10.sp, lineHeight = 14.sp, letterSpacing = 0.sp)
+            NativeText(nativeClock(message.createdAt), color = ink, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 0.sp)
         }
         if (isMine) Icon(if (message.id < 0) Icons.Outlined.Schedule else if (delivered || read) Icons.Outlined.DoneAll else Icons.Outlined.Done, if (message.id < 0) "Отправляется" else if (read) "Прочитано" else if (delivered) "Доставлено" else "Отправлено", tint = if (overMedia) Color.White else if (read) Accent else Muted, modifier = Modifier.padding(start = 3.dp).size(15.dp))
     }

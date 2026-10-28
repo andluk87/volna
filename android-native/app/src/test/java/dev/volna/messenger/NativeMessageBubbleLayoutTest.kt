@@ -83,7 +83,7 @@ class NativeMessageBubbleLayoutTest {
         content(text)
         val bubble = compose.onNodeWithTag("message-bubble-10").getUnclippedBoundsInRoot()
         val body = compose.onNodeWithText(text).getUnclippedBoundsInRoot()
-        assertTrue("bubble width: ${bubble.width}", bubble.width >= 240.dp && bubble.width <= 270.dp)
+        assertTrue("bubble width: ${bubble.width}", bubble.width >= 280.dp && bubble.width <= 324.dp)
         assertTrue("body height: ${body.height}", body.height < 120.dp)
         compose.onNodeWithContentDescription("Доставлено").assertIsDisplayed()
         screenshot("long")

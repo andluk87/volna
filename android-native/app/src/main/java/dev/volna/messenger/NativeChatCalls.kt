@@ -10,6 +10,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -75,17 +76,21 @@ internal fun nativeCallRecordTitle(call: VolnaCallRecord): String = when {
 internal fun NativeChatCallCard(call: VolnaCallRecord, enabled: Boolean, onCall: () -> Unit) {
     val missed = call.duration == 0 && call.status != "ended"
     val arrow = if (missed) Color(0xFFFF6670) else Accent
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val cardWidth = 270.dp.coerceAtMost(maxWidth)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (call.incoming) Arrangement.Start else Arrangement.End) {
-        Row(Modifier.widthIn(max = 290.dp).fillMaxWidth(.76f).clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = if (call.incoming) 5.dp else 22.dp, bottomEnd = if (call.incoming) 22.dp else 5.dp)).background(if (call.incoming) Panel else Outgoing).clickable(enabled = enabled, onClick = onCall).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.testTag("call-card-${call.id}").width(cardWidth).heightIn(min = 56.dp).clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = if (call.incoming) 4.dp else 16.dp, bottomEnd = if (call.incoming) 16.dp else 4.dp)).background(if (call.incoming) Panel else Outgoing).clickable(enabled = enabled, onClick = onCall).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                NativeText(nativeCallRecordTitle(call), color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (call.incoming) Icons.Outlined.SouthWest else Icons.Outlined.NorthEast, null, tint = arrow, modifier = Modifier.size(18.dp))
+                NativeText(nativeCallRecordTitle(call), color = TextMain, fontSize = 16.sp, lineHeight = 20.sp, letterSpacing = 0.sp, fontWeight = FontWeight.Medium)
+                Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (call.incoming) Icons.Outlined.SouthWest else Icons.Outlined.NorthEast, null, tint = arrow, modifier = Modifier.size(16.dp))
                     val duration = if (call.duration > 0) if (call.duration < 60) "${call.duration} сек." else "${call.duration / 60} мин." else ""
-                    NativeText(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(call.created)) + if (duration.isBlank()) "" else ", $duration", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp))
+                    NativeText(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(call.created)) + if (duration.isBlank()) "" else ", $duration", color = Muted, fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 0.sp, modifier = Modifier.padding(start = 4.dp))
                 }
             }
-            Icon(if (call.video) Icons.Outlined.Videocam else Icons.Outlined.Call, if (call.video) "Повторить видеозвонок" else "Повторить звонок", tint = Accent, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(12.dp))
+            Icon(if (call.video) Icons.Outlined.Videocam else Icons.Outlined.Call, if (call.video) "Повторить видеозвонок" else "Повторить звонок", tint = Accent, modifier = Modifier.size(24.dp))
         }
+    }
     }
 }
