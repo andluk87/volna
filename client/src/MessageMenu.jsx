@@ -1,3 +1,4 @@
+import {quoteFromSelection} from './reply-selection.mjs';
 import React,{useCallback,useId,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Icon} from './ui';
@@ -6,19 +7,22 @@ import {fitMessagePopup} from './message-popup.mjs';
 import './message-popup.css';
 
 export default function MessageMenu({message,quickReactions,meId,canSend,canManage,canDelete,onReact,onSelect,onCopy,onReply,onForward,onSave,onPin,onEdit,onDelete}){
+ const [selectedQuote,setSelectedQuote]=useState(null),capturedQuote=useRef(null);
  const owner=useRef(null),popup=useRef(null),[point,setPoint]=useState({x:0,y:0}),id=useId(),[open,setOpen]=useState(false),[expanded,setExpanded]=useState(false),previousExpanded=useRef(false);
- const close=useCallback(()=>{if(owner.current)owner.current.open=false;setOpen(false);setExpanded(false);previousExpanded.current=false;},[]);
+ const close=useCallback(()=>{if(owner.current)owner.current.open=false;setOpen(false);setExpanded(false);previousExpanded.current=false;capturedQuote.current=null;},[]);
  const collapse=useCallback(()=>setExpanded(false),[]);
  const react=emoji=>{close();onReact(emoji);};
  const show=useCallback(details=>{
   for(const other of document.querySelectorAll('.message-actions[open]'))if(other!==details)other.open=false;
+  const fragment=quoteFromSelection(details.closest('[data-message-id]')?.querySelector('.message-text'),message.text||'',window.getSelection());
+  if(fragment)capturedQuote.current=fragment;setSelectedQuote(capturedQuote.current);
   const anchor=details.getBoundingClientRect(),x=Number(details.dataset.menuX),y=Number(details.dataset.menuY);
   setPoint(details.dataset.menuX&&details.dataset.menuY?{x,y}:{x:anchor.right,y:anchor.bottom});
   previousExpanded.current=false;setExpanded(false);setOpen(true);
- },[]);
+ },[message.text]);
  const toggle=event=>{
   const details=event.currentTarget;
-  if(details.open)show(details);else{setOpen(false);setExpanded(false);previousExpanded.current=false;}
+  if(details.open)show(details);else{capturedQuote.current=null;setOpen(false);setExpanded(false);previousExpanded.current=false;}
   delete details.dataset.menuX;delete details.dataset.menuY;
  };
  useLayoutEffect(()=>{
@@ -54,9 +58,9 @@ export default function MessageMenu({message,quickReactions,meId,canSend,canMana
     <button type="button" className="reaction-expand" aria-label="Другие реакции" title="Другие реакции" aria-expanded={expanded} onClick={()=>setExpanded(true)}><Icon name="down"/></button>
    </div>
    <div className="message-menu" role="menu" aria-label="Действия сообщения">
-    {canSend&&<button type="button" role="menuitem" onClick={action(onReply)}><Icon name="reply"/>Ответить</button>}
+    {canSend&&<button type="button" role="menuitem" onClick={action(()=>onReply(selectedQuote))}><Icon name="reply"/>{selectedQuote?'Ответить с цитатой':'Ответить'}</button>}
     {canManage&&<button type="button" role="menuitem" onClick={action(onPin)}><Icon name="pin"/>{message.pinned?'Открепить':'Закрепить'}</button>}
-    <button type="button" role="menuitem" onClick={action(onCopy)}><Icon name="copy"/>Копировать</button>
+    <button type="button" role="menuitem" onClick={action(()=>selectedQuote?navigator.clipboard.writeText(selectedQuote.text).catch(()=>{}):onCopy())}><Icon name="copy"/>{selectedQuote?'Копировать выделенное':'Копировать'}</button>
     <button type="button" role="menuitem" onClick={action(onForward)}><Icon name="forward"/>Переслать</button>
     <button type="button" role="menuitem" onClick={action(onSave)}><Icon name="bookmark"/>В избранное</button>
     {own&&canSend&&!message.poll&&!message.checklist&&<button type="button" role="menuitem" onClick={action(onEdit)}><Icon name="edit"/>Редактировать</button>}

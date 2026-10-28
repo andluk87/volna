@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {writeFile,unlink} from 'node:fs/promises';
+import {chromium} from '../client/node_modules/playwright-core/index.mjs';
+import {createServer} from '../client/node_modules/vite/dist/node/index.js';
+const root=new URL('../client/',import.meta.url).pathname,html=root+'qa-quote.html',jsx=root+'src/qa-quote.jsx';
+await writeFile(html,'<div id="root"></div><script type="module" src="/src/qa-quote.jsx"></script>');
+await writeFile(jsx,`import React,{useState}from'react';import{createRoot}from'react-dom/client';import MessageMenu from './MessageMenu';import ReplyQuoteDialog from './ReplyQuoteDialog';import{useMessageGestures}from'./message-ui';import './windows-desktop.css';
+const m={id:1,chat_id:1,text:'Молоко\\nВанилин\\nТуалетная бумага\\nМолоко',sender_id:2,reactions:[]};
+function App(){const[reply,setReply]=useState(null),[editor,setEditor]=useState(false),[moved,setMoved]=useState(false),gestures=useMessageGestures();return <div className="conversation" style={{width:700,height:650}}><div className="messages"><article className="message" data-message-id="1" {...gestures}><div className="message-text" style={{whiteSpace:'pre-wrap'}}>{m.text}</div><MessageMenu message={m} meId={1} quickReactions={['👍']} canSend onReply={q=>setReply(q)} onCopy={()=>{}} onForward={()=>{}} onSave={()=>{}} onSelect={()=>{}} onReact={()=>{}}/></article></div><button id="edit" disabled={!reply} onClick={()=>setEditor(true)}>Изменить цитату</button><output id="selected" data-offset={reply?.offset}>{reply?.text}</output><output id="moved">{moved?'yes':'no'}</output>{editor&&<ReplyQuoteDialog message={m} initial={reply} chats={[{id:2,name:'Другой чат'}]} onClose={()=>setEditor(false)} onApply={q=>{setReply(q);setEditor(false);}} onRemove={()=>{setReply(null);setEditor(false);}} onShow={()=>setEditor(false)} onMove={(id,q)=>{setMoved(id===2);setReply(q);setEditor(false);}}/>}</div>};createRoot(document.getElementById('root')).render(<App/>);`);
+const vite=await createServer({root,server:{host:'127.0.0.1',port:5195,strictPort:true},logLevel:'error'});let browser;
+try{
+ await vite.listen();browser=await chromium.launch({headless:true,executablePath:'/usr/bin/chromium',args:['--no-sandbox']});const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:5195/qa-quote.html');await page.locator('.message-text').waitFor();
+ const select=async(selector,fragment,last=false)=>page.locator(selector).evaluate((el,{fragment,last})=>{const node=el.firstChild,text=node.textContent,start=last?text.lastIndexOf(fragment):text.indexOf(fragment),range=document.createRange();range.setStart(node,start);range.setEnd(node,start+fragment.length);const s=getSelection();s.removeAllRanges();s.addRange(range);},{fragment,last});
+ await select('.message-text','Туалетная бумага');await page.locator('.message-text').dispatchEvent('contextmenu',{clientX:160,clientY:100});
+ await page.getByRole('menuitem',{name:'Ответить с цитатой',exact:true}).click();assert.equal(await page.locator('#selected').textContent(),'Туалетная бумага');
+ await page.locator('#edit').click();await page.getByRole('dialog',{name:'Изменение цитаты'}).waitFor();
+ await select('.quote-source-text','Молоко',true);await page.locator('.quote-source-text').dispatchEvent('mouseup');await page.getByRole('button',{name:'Цитировать фрагмент',exact:true}).click();assert.equal(await page.locator('#selected').textContent(),'Молоко');assert.equal(Number(await page.locator('#selected').getAttribute('data-offset')),'Молоко\nВанилин\nТуалетная бумага\nМолоко'.lastIndexOf('Молоко'));
+ await page.locator('#edit').click();await page.getByRole('button',{name:'Отмена',exact:true}).click();assert.equal(await page.locator('#selected').textContent(),'Молоко');
+ await page.locator('#edit').click();await page.getByRole('button',{name:'Ответить в другом чате',exact:true}).click();await page.getByRole('button',{name:'Другой чат',exact:true}).click();assert.equal(await page.locator('#moved').textContent(),'yes');
+ await page.locator('#edit').click();await page.getByRole('button',{name:'Убрать ответ',exact:true}).click();assert.equal(await page.locator('#selected').textContent(),'');
+ await page.evaluate(()=>getSelection().removeAllRanges());await page.locator('.message-text').dispatchEvent('contextmenu',{clientX:160,clientY:100});await page.getByRole('menuitem',{name:'Ответить',exact:true}).waitFor();
+ assert.deepEqual(errors,[]);console.log('PASS: browser selection → quote menu → edit repeated fragment → cancel → move → remove');
+}finally{await browser?.close();await vite.close();await unlink(html);await unlink(jsx);}

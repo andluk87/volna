@@ -39,7 +39,7 @@ data class VolnaChat(
     val avatarUrl: String? = null, val lastId: Long = 0, val lastSenderId: Long = 0, val peerOnline: Boolean = false, val parentId: Long = 0, val topicClosed: Boolean = false, val isContact: Boolean = false, val manualUnread: Boolean = false, val peerLastSeen: Long = 0, val topicsEnabled: Boolean = false, val topicTitle: String = "", val topicIcon: String = "", val parentName: String = "", val lastCall: Boolean = false, val lastCallIncoming: Boolean = false
 )
 data class VolnaReaction(val emoji: String, val userId: Long, val name: String, val avatarUrl: String? = null)
-data class VolnaReply(val id: Long, val name: String, val text: String, val deleted: Boolean)
+data class VolnaReply(val id: Long, val name: String, val text: String, val deleted: Boolean, val canJump: Boolean = true)
 data class VolnaMessage(
     val id: Long,
     val senderId: Long,
@@ -480,7 +480,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
     internal fun parseMessage(row: JSONObject): VolnaMessage {
         val file = row.optJSONObject("attachment")
         val replyJson = row.optJSONObject("reply")
-        val reply = replyJson?.let { VolnaReply(it.optLong("id"), it.optString("name", ""), it.optString("text", ""), it.optBoolean("deleted")) }
+        val reply = replyJson?.let { VolnaReply(it.optLong("id"), it.optString("name", ""), it.optString("text", ""), it.optBoolean("deleted"), it.optBoolean("can_jump", true) && (it.optLong("chat_id") == 0L || it.optLong("chat_id") == row.optLong("chat_id"))) }
         val reactionsJson = row.optJSONArray("reactions")
         val reactions = if (reactionsJson == null) emptyList() else (0 until reactionsJson.length()).map { i ->
             val reaction = reactionsJson.getJSONObject(i); VolnaReaction(reaction.optString("emoji"), reaction.optLong("user_id"), reaction.optString("name"), reaction.optString("avatar_url").takeIf { it.isNotBlank() && it != "null" })
