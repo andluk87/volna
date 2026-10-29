@@ -108,7 +108,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   const handleTopics=topics({db,body,json,member,broadcast,publish});
   let callService;
   pushService = notifications({db,auth,body,json,sender:pushSender,callReceipt:id=>callService?.receipt(id),contactDisplay:(uid,id,name)=>contactService?.display(uid,id,name)||name});
-  callService = calls({db,auth,body,json,userById,onRing:pushService.call,onEnd:pushService.endCall,onChange:(chat,users)=>publish(users,{type:'chats',chat_id:chat,call_history:true})});
+  callService = calls({db,auth,body,json,userById,onRing:pushService.call,onEnd:pushService.endCall,onEvent:(users,event)=>publish(users,event),onChange:(chat,users)=>publish(users,{type:'chats',chat_id:chat,call_history:true})});
   mobileService=mobile({db,auth,body,json,userById,online:id=>!!streams.get(id)?.size,
     disconnect:(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();}});
   contactService=contacts({db,body,json,publish,userById});

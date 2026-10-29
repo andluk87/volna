@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {request,uploadFile} from './api';
 import Dialog from './Dialog';
+import CallPrivacy from './CallPrivacy';
 import {preparePhoto} from './prepare-photo.mjs';
 import {Avatar} from './ui';
 import './profile.css';
@@ -36,6 +37,7 @@ export default function Profile({id,me,token,revision,onClose,onSaved,inline=fal
     <small>{bio.length}/280 · Имя, фото и описание видны другим пользователям. Телефон доступен для точного поиска; публичный ник можно изменить.</small>
     <button className="primary" disabled={busy}>{busy?'Сохраняем…':'Сохранить профиль'}</button>{saved&&<p role="status">Профиль сохранён</p>}
    </form>:<p className="profile-bio">{user.bio||'Пользователь пока не добавил описание.'}</p>}
+   {!own&&<CallPrivacy token={token} peerId={id}/>}
    {!own&&<button className="secondary" onClick={editContact}>Изменить имя контакта</button>}
    {contact&&<Dialog title="Изменить имя" onClose={()=>setContact(null)}><p>Имя видите только вы на своих устройствах.</p><input aria-label="Личное имя" value={alias} maxLength={100} onChange={e=>setAlias(e.target.value)}/><button onClick={()=>setAlias('')}>Вернуть исходное имя</button><button className="primary" disabled={busy} onClick={saveContact}>Сохранить</button></Dialog>}
    {own&&<button className="secondary" onClick={()=>{setPhoneChange(true);setPhoneChallenge('');setNewPhone('');setSmsCode('');}}>Изменить номер телефона</button>}

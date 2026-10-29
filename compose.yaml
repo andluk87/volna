@@ -27,6 +27,7 @@ services:
       AUTH_TRUST_PROXY: ${AUTH_TRUST_PROXY:-1}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://volna.lknet.ru}
       TURN_HOST: ${TURN_HOST:-}
+      TURN_TLS_URLS: ${TURN_TLS_URLS:-}
       TURN_SECRET: ${TURN_SECRET:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:5173,https://localhost,app://volna}
     volumes:

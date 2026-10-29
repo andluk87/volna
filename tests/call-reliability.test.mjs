@@ -1,0 +1,74 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomBytes} from 'node:crypto';
+import {createApp} from './phone-fixture.mjs';
+import {calls} from '../server/calls.mjs';
+const device=()=>randomBytes(16).toString('hex');
+const offer={type:'offer',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=ice-ufrag:first\r\n'};
+const answer={...offer,type:'answer'};
+function fixture(t){
+ const app=createApp({database:':memory:'});let now=1000000,result;const events=[];
+ const users=['one','two','three'].map((name,i)=>Number(app.db.prepare('INSERT INTO users(username,name,phone) VALUES(?,?,?)').run(name,name,`+7900000000${i}`).lastInsertRowid));
+ const [a,b,c]=users,da=device(),db=device();const chat=Number(app.db.prepare("INSERT INTO chats(pair) VALUES('1:2')").run().lastInsertRowid);for(const uid of [a,b])app.db.prepare('INSERT INTO members(chat_id,user_id) VALUES(?,?)').run(chat,uid);
+ const service=calls({db:app.db,auth:()=>{},body:async r=>r.data,json:(_,status,data)=>{result={status,data};},userById:id=>({id,name:'User'}),clock:()=>now,onEvent:(_,e)=>events.push(e),turnSecret:'test-secret',turnHost:'turn.example',turnTlsUrls:'turns:turn.example:443?transport=tcp,http://bad,turns:bad:80?transport=tcp'});
+ t.after(async()=>{service.close();await app.close();});
+ const req=async(path,uid=a,data)=>{result=null;await service.handle({method:data===undefined?'GET':'POST',data},{},new URL('http://test/api/calls'+path),uid);return result.data;};
+ const action=(id,op,uid=a,data={})=>req(`/${id}/${op}`,uid,{device:uid===a?da:db,...data});
+ const start=(extra={})=>req('/start',a,{device:da,chat_id:chat,protocol:2,client_id:device(),...extra});
+ const connected=async()=>{const call=await start();await action(call.id,'offer',a,{description:offer});await action(call.id,'accept',b,{protocol:2});await action(call.id,'answer',b,{description:answer});await action(call.id,'media-state',a,{connected:true,restart_generation:0});await action(call.id,'media-state',b,{connected:true,restart_generation:0});return call;};
+ return {app,service,events,a,b,c,da,db,chat,req,action,start,connected,advance:n=>{now+=n;},row:id=>app.db.prepare('SELECT * FROM call_history WHERE id=?').get(id)};
+}
+test('protocol2: one create per key, one accepting device, timer waits for both media reports, terminal retries',async t=>{
+ const f=fixture(t),{a,b,c,da,db,req,action,start,row}=f;const key=device(),call=await start({client_id:key});
+ assert.equal((await start({client_id:key})).id,call.id);assert.equal(f.events.length,1);
+ await assert.rejects(start({client_id:key,device:device()}),{status:409});
+ await assert.rejects(req('/start',b,{device:db,chat_id:f.chat,protocol:2,client_id:device()}),{status:409});
+ await action(call.id,'offer',a,{description:offer});await action(call.id,'offer',a,{description:offer});
+ await action(call.id,'accept',b,{protocol:2});await action(call.id,'accept',b,{protocol:2});
+ await assert.rejects(action(call.id,'accept',b,{device:device(),protocol:2}),{status:409,code:'CALL_ANSWERED_ELSEWHERE'});
+ const other=await req('/current?device='+device(),b);assert.equal(other.reason,'answered_elsewhere');assert.equal(other.offer,undefined);
+ await assert.rejects(req('/'+call.id+'?device='+da,c),{status:404});
+ await action(call.id,'answer',b,{description:answer});await action(call.id,'answer',b,{description:answer});assert.equal(row(call.id).answered,null);
+ f.advance(3000);await action(call.id,'media-state',a,{connected:true,restart_generation:0});assert.equal(row(call.id).answered,null);
+ f.advance(3000);await action(call.id,'media-state',b,{connected:true,restart_generation:0});const at=row(call.id).answered;assert.ok(at);
+ f.advance(3000);await action(call.id,'media-state',b,{connected:true,restart_generation:0});assert.equal(row(call.id).answered,at);
+ const eventCount=f.events.length;await req('/current?device='+da,a);await req('/current?device='+db,b);assert.equal(f.events.length,eventCount);
+ const before=row(call.id).version;await assert.rejects(action(call.id,'end',a,{expected_version:before-1}),{code:'STALE_CALL_VERSION'});assert.equal(row(call.id).ended,null);
+ await action(call.id,'end',a,{expected_version:before});await action(call.id,'end');assert.equal(row(call.id).status,'ended');assert.equal((await start({client_id:key})).ended,row(call.id).ended);assert.equal((await req('/history',a))[0].duration,3);
+ assert.equal(f.events.filter(e=>e.type==='call.connected').length,1);assert.equal(f.events.filter(e=>e.type==='call.ended').length,1);
+ const audit=JSON.stringify(f.app.db.prepare('SELECT * FROM call_events').all());for(const secret of ['m=audio','ice-ufrag','first','sdp','candidate:'])assert.equal(audit.includes(secret),false);
+ assert.ok(f.events.every((e,i)=>e.sequence===i+1&&e.event_id&&e.schema_version===1));
+});
+test('protocol2: recovery keeps call and start time, rejects stale generations and unauthorized offers without mutation',async t=>{
+ const f=fixture(t),{a,b,action,req,row}=f,call=await f.connected(),at=row(call.id).answered;
+ const initialVersion=row(call.id).version;
+ await assert.rejects(action(call.id,'ice-restart',b,{description:offer,restart_generation:0}),{status:403});assert.equal((await req('/current?device='+f.da)).reconnecting,false);assert.equal(row(call.id).version,initialVersion);
+ await action(call.id,'ice-restart',b);const restart={...offer,sdp:offer.sdp.replace('first','second')};
+ const next=await action(call.id,'ice-restart',a,{description:restart,restart_generation:0});assert.equal(next.restart_generation,1);assert.equal(next.answer,null);
+ assert.equal((await action(call.id,'ice-restart',a,{description:restart,restart_generation:0})).version,next.version);
+ await assert.rejects(action(call.id,'media-state',b,{connected:true,restart_generation:0}),{status:409});
+ await assert.rejects(action(call.id,'answer',b,{description:answer,restart_generation:0}),{status:409});
+ await action(call.id,'answer',b,{description:answer,restart_generation:1});await action(call.id,'answer',b,{description:answer,restart_generation:1});
+ f.advance(5000);await action(call.id,'media-state',a,{connected:true,restart_generation:1});assert.equal((await req('/current?device='+f.da)).reconnecting,true);
+ await action(call.id,'media-state',b,{connected:true,restart_generation:1});assert.equal((await req('/current?device='+f.da)).reconnecting,false);assert.equal(row(call.id).answered,at);
+ await action(call.id,'ice-restart',a,{description:restart,restart_generation:0});assert.equal((await req('/current?device='+f.da)).reconnecting,false);
+ await action(call.id,'ice-restart',b);f.advance(20001);assert.equal(await req('/current?device='+f.da),null);assert.equal(row(call.id).status,'interrupted');
+});
+test('protocol2: ring expiry, media connection expiry, stale invites and server restart become terminal',async t=>{
+ const f=fixture(t),{a,b,da,action,req,row}=f;let call=await f.start();await action(call.id,'offer',a,{description:offer});f.advance(45001);assert.equal(await req('/current?device='+da),null);assert.equal(row(call.id).status,'missed');await assert.rejects(action(call.id,'accept',b,{protocol:2}),{status:404});
+ call=await f.start();await action(call.id,'offer',a,{description:offer});await action(call.id,'accept',b,{protocol:2});await action(call.id,'answer',b,{description:answer});f.advance(31000);await req('/current?device='+da,a);await req('/current?device='+f.db,b);f.advance(30000);assert.equal(await req('/current?device='+da),null);assert.equal(row(call.id).answered,null);assert.equal(row(call.id).status,'interrupted');
+ const id=device();f.app.db.prepare("INSERT INTO call_history(id,chat_id,caller,callee,created,status,ringed) VALUES(?,?,?,?,?,'ringing',1)").run(id,f.chat,a,b,1);
+ const next=calls({db:f.app.db,auth:()=>{},body:async()=>({}),json:()=>{},userById:id=>({id})});t.after(()=>next.close());assert.equal(row(id).status,'interrupted');
+});
+test('call privacy: contacts, nobody, bilateral blocks, terminating blocked calls and TURN TLS relay policy',async t=>{
+ const f=fixture(t),{a,b,req,action}=f;
+ const config=await req('/config');assert.equal(config.turnTlsConfigured,true);assert.deepEqual(config.iceServers[1].urls,['turns:turn.example:443?transport=tcp']);
+ await req('/privacy',b,{allow_calls:'contacts',relay_only:true});await assert.rejects(f.start(),{status:404});
+ f.app.db.prepare('INSERT INTO account_contacts(owner,id,linked,manual,version,updated) VALUES(?,?,?,1,1,1)').run(b,'linked-contact',a);let allowed=await f.start();await action(allowed.id,'offer',a,{description:offer});await action(allowed.id,'end',b);await action(allowed.id,'end',b);assert.equal(f.row(allowed.id).status,'declined');
+ f.app.db.prepare('UPDATE account_contacts SET deleted=1 WHERE owner=? AND linked=?').run(b,a);await assert.rejects(f.start(),{status:404});
+ await req('/privacy',b,{allow_calls:'nobody',relay_only:true});await assert.rejects(f.start(),{status:404});
+ await req('/privacy',b,{allow_calls:'everyone',relay_only:true});let call=await f.connected();assert.equal((await req('/config?call_id='+call.id)).iceTransportPolicy,'relay');
+ await req('/blocks/'+a,b,{blocked:true});assert.equal(f.row(call.id).status,'ended');await assert.rejects(f.start(),{status:404});assert.equal((await req('/privacy',b)).blocked[0].id,a);
+ await req('/blocks/'+a,b,{blocked:false});call=await f.start();await action(call.id,'end');
+ await req('/blocks/'+b,a,{blocked:true});await assert.rejects(f.start(),{status:404});await assert.rejects(req('/blocks/'+a,a,{blocked:true}),{status:400});
+});

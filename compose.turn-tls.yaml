@@ -1,0 +1,44 @@
+# Standalone TURN host with its own public IP, NOT an override on the HTTPS host.
+# docker compose --env-file /secure/turn.env -f compose.turn-tls.yaml up -d
+services:
+  turn-tls:
+    image: coturn/coturn:4.18.0-r0
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      TURN_SECRET: ${TURN_SECRET:?Set the same TURN_SECRET as the API server}
+    entrypoint: ["/bin/sh", "-ec", 'test "$${#TURN_SECRET}" -eq 64 || { echo "TURN_SECRET must contain 64 characters"; exit 1; }; exec turnserver "$$@"', "volna-turn-tls"]
+    volumes:
+      - ${TURN_TLS_CERT_DIR:?Directory containing fullchain.pem and privkey.pem}:/certs:ro
+    command:
+      - -n
+      - --log-file=stdout
+      - --listening-ip=0.0.0.0
+      - --listening-port=3478
+      - --tls-listening-port=443
+      - --external-ip=${TURN_EXTERNAL_IP:?Set dedicated TURN public IP}
+      - --realm=${TURN_TLS_HOST:?Set certificate hostname}
+      - --cert=/certs/fullchain.pem
+      - --pkey=/certs/privkey.pem
+      - --no-dtls
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET:?Set shared TURN secret}
+      - --fingerprint
+      - --min-port=49160
+      - --max-port=49200
+      - --no-multicast-peers
+      - --no-tcp-relay
+      - --user-quota=8
+      - --total-quota=200
+      - --max-bps=${TURN_MAX_BPS:-512000}
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=10.0.0.0-10.255.255.255
+      - --denied-peer-ip=100.64.0.0-100.127.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.255.255
+      - --denied-peer-ip=224.0.0.0-255.255.255.255
+      - --denied-peer-ip=::1
+      - --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+      - --denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff

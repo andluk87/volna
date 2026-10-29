@@ -90,6 +90,7 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
                     if (chat != null) ProfileAction(Icons.Outlined.Search, "Поиск", Modifier.weight(1f)) { onOpenChat(chat, true) }
                 }
             }
+            if (!own) NativeCallPrivacy(token, api, userId)
             if (!own) NativePriorityCallSetting(currentUser?.id ?: 0, userId)
             if (!own) NativePrivateContactName(currentUser?.id ?: 0, userId, token, api) { retry++ }
             Row(Modifier.fillMaxWidth().background(Panel).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {

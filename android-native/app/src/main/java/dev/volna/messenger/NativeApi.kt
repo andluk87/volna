@@ -414,7 +414,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         return call("/communities/$chatId/$action", "POST", token, data)
     }
 
-    fun callConfig(token: String): JSONObject = call("/calls/config", token = token)
+    fun callConfig(token: String, callId: String? = null): JSONObject = call("/calls/config" + (callId?.let { "?call_id=$it" } ?: ""), token = token)
     fun callScreen(token: String, device: String, id: String, sharing: Boolean) { call("/calls/$id/screen", "POST", token, JSONObject().put("device", device).put("sharing", sharing)) }
     fun callCamera(token: String, device: String, id: String, enabled: Boolean) { call("/calls/$id/camera", "POST", token, JSONObject().put("device", device).put("enabled", enabled)) }
 
@@ -427,17 +427,21 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         }
     }
 
-    fun startCall(token: String, device: String, chatId: Long, video: Boolean = false): VolnaCall =
-        parseCall(call("/calls/start", "POST", token, JSONObject().put("device", device).put("chat_id", chatId).put("video", video)))
+    fun startCall(token: String, device: String, chatId: Long, video: Boolean = false): VolnaCall {
+        val data = JSONObject().put("device", device).put("chat_id", chatId).put("video", video).put("protocol", 2).put("client_id", UUID.randomUUID().toString())
+        return parseCall(nativeRetryCallMutation { call("/calls/start", "POST", token, data) })
+    }
 
     fun callAction(token: String, device: String, id: String, action: String, description: JSONObject? = null): VolnaCall? {
         val data = JSONObject().put("device", device)
+        if (action == "accept") data.put("protocol", 2)
         if (description != null) data.put("description", description)
-        val result = call("/calls/$id/$action", "POST", token, data)
+        val result = if(action in listOf("offer","accept","answer","end")) nativeRetryCallMutation { call("/calls/$id/$action", "POST", token, data) } else call("/calls/$id/$action", "POST", token, data)
         return if (action == "end") null else parseCall(result)
     }
 
-    private fun parseCall(row: JSONObject) = VolnaCall(row.getString("id"), row.optLong("chat_id"), row.optJSONObject("peer")?.let(::parseUser), row.optBoolean("incoming"), row.getString("status"), row.optJSONObject("offer"), row.optJSONObject("answer"), if (row.has("peer_sharing")) row.optBoolean("peer_sharing") else null, row.optBoolean("video"), row.optBoolean("peer_video"), row.optBoolean("ring_received"))
+    fun callProtocol(token: String, device: String, id: String, action: String, payload: JSONObject): VolnaCall = parseCall(nativeRetryCallMutation { call("/calls/$id/$action", "POST", token, payload.put("device", device)) })
+    private fun parseCall(row: JSONObject) = VolnaCall(row.getString("id"), row.optLong("chat_id"), row.optJSONObject("peer")?.let(::parseUser), row.optBoolean("incoming"), row.getString("status"), row.optJSONObject("offer"), row.optJSONObject("answer"), if (row.has("peer_sharing")) row.optBoolean("peer_sharing") else null, row.optBoolean("video"), row.optBoolean("peer_video"), row.optBoolean("ring_received"), row.optBoolean("media_reporting"), row.optInt("restart_generation"), row.optBoolean("restart_requested"), row.optBoolean("reconnecting"), row.optLong("version"))
 
     private fun parseCommunity(row: JSONObject): VolnaCommunity {
         fun users(name: String): List<VolnaMember> {
@@ -512,6 +516,6 @@ data class VolnaMember(val id: Long, val name: String, val username: String, val
 data class VolnaCommunity(val id: Long, val kind: String, val title: String, val description: String, val role: String, val memberCount: Int, val members: List<VolnaMember>, val banned: List<VolnaMember>, val invite: JSONObject?, val postingPolicy: String = "all") {
     val canManage: Boolean get() = role == "owner" || role == "admin"
 }
-data class VolnaCall(val id: String, val chatId: Long, val peer: VolnaUser?, val incoming: Boolean, val status: String, val offer: JSONObject?, val answer: JSONObject?, val peerSharing: Boolean? = null, val video: Boolean = false, val peerVideo: Boolean = false, val ringReceived: Boolean = false)
+data class VolnaCall(val id: String, val chatId: Long, val peer: VolnaUser?, val incoming: Boolean, val status: String, val offer: JSONObject?, val answer: JSONObject?, val peerSharing: Boolean? = null, val video: Boolean = false, val peerVideo: Boolean = false, val ringReceived: Boolean = false, val mediaReporting: Boolean = false, val restartGeneration: Int = 0, val restartRequested: Boolean = false, val reconnecting: Boolean = false, val version: Long = 0)
 data class VolnaCallRecord(val id: String, val chatId: Long, val peer: VolnaUser?, val incoming: Boolean, val created: Long, val status: String, val duration: Int, val screenShared: Boolean, val video: Boolean = false)
 data class VolnaDeviceSession(val id: String, val label: String, val current: Boolean, val lastSeen: Long, val expires: Long)

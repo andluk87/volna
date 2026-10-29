@@ -302,7 +302,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     }
     val videoPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         val chat = pendingVideoChat; pendingVideoChat = null
-        if (chat != null && granted[Manifest.permission.RECORD_AUDIO] == true && granted[Manifest.permission.CAMERA] == true) { voicePlayback.stop(); NativeCalls.start(chat, video = true) }
+        if (chat != null && granted[Manifest.permission.RECORD_AUDIO] == true) { voicePlayback.stop(); NativeCalls.start(chat, video = granted[Manifest.permission.CAMERA] == true) }
         else error = "Разрешите микрофон и камеру для видеозвонка"
     }
     val startVideo: (VolnaChat) -> Unit = { chat ->

@@ -231,6 +231,7 @@ internal fun ChatListScreen(
         Spacer(Modifier.height(24.dp))
     }
     when (settings) {
+        "call-privacy" -> NativeCallPrivacyScreen(token, api) { settings = "" }
         "updates" -> NativeUpdatesScreen(update, updateBusy, updateStatus, autoUpdateDownload, onAutoUpdateDownload, autoInstallIdle,onAutoInstallIdle,updateReady, onCheckUpdate, onUpdate, onUpdateLater) { settings = "" }
         "notifications" -> NativeNotificationSettings(user?.id ?: 0) { settings = "" }
         "security", "devices" -> NativeSessionsScreen(token, api, onScanQr) { settings = "" }
@@ -469,6 +470,7 @@ private fun NativeSettingsScreen(user: VolnaUser?, token: String, appearance: Na
             NativeSettingRow(Icons.Outlined.PersonOutline, "Аккаунт", "Имя, фото и описание") { user?.id?.let(onProfile) }
             NativeSettingRow(Icons.Outlined.Palette, "Настройки чатов", "Оформление, текст и плотность") { onAppearance() }
             NativeSettingRow(Icons.Outlined.Lock, "Конфиденциальность и безопасность", "QR-вход и активные сеансы") { onSection("security") }
+            NativeSettingRow(Icons.Outlined.Call, "Звонки", "Доступ и защита IP-адреса") { onSection("call-privacy") }
             NativeSettingRow(Icons.Outlined.NotificationsNone, "Уведомления", "Сообщения, ответы и реакции") { onSection("notifications") }
         } }
         item { NativeSettingsCard {

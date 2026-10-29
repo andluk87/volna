@@ -211,7 +211,7 @@ class MessagingService : Service() {
                 }
             } catch(problem: NativeApiException) { if(problem.status in listOf(401,403)) { invalidSession(stream); break } }
             catch(_:Exception) { }
-            try { Thread.sleep(2_000) } catch(_:InterruptedException) { break }
+            try { Thread.sleep(2_000) } catch(_:InterruptedException) { if(!current(stream))break }
         }
         if (streams[stream.userId] == null || streams[stream.userId] === stream) clearBackgroundCall(stream.userId)
     }
@@ -220,6 +220,7 @@ class MessagingService : Service() {
         try {
             val event = JSONObject(raw)
             val type = event.optString("type")
+            if (type.startsWith("call.") || type.startsWith("rtc.")) { NativeCalls.wake(token); streams[userId]?.callsWorker?.interrupt(); return }
             if (type == "ready") { streams[userId]?.let { it.receiptSyncVersion++ }; signals.tryEmit(NativeSessionSignal(userId, "connected", 0, 0)); return }
             if (type in listOf("read", "delivered")) { signals.tryEmit(NativeSessionSignal(userId, type, event.optLong("chat_id"), 0)); return }
             if (type in listOf("profile","profile-posts","topics","community","removed","chats","history-cleared")) { if(type=="profile" && event.optLong("user_id")==userId) runCatching { val user=api.me(token);NativeAccounts.remember(this,user,token);cache.saveMe(user) };signals.tryEmit(NativeSessionSignal(userId,type,event.optLong("chat_id"),event.optLong("user_id"),event.optBoolean("deleted")));return }
