@@ -41,7 +41,8 @@ class NativeCallPrivacyUiTest {
             compose.waitUntil(10000){compose.onAllNodesWithText("Никто").fetchSemanticsNodes().isNotEmpty()}
             compose.onAllNodes(isSelectable())[2].performClick()
             compose.waitUntil(10000){policy.get().optString("allow_calls")=="nobody"}
-            compose.waitForIdle();compose.onNode(isToggleable()).performClick()
+            compose.waitForIdle();compose.onNodeWithText("Все звонки — только через сервер TURN. Прямое соединение отключено.").assertIsDisplayed()
+            compose.onAllNodes(isToggleable()).assertCountEquals(0)
             compose.waitUntil(10000){policy.get().optBoolean("relay_only")}
             compose.waitForIdle();compose.onNodeWithText("Борис — разблокировать").performScrollTo().performClick()
             compose.waitUntil(10000){policy.get().getJSONArray("blocked").length()==0}

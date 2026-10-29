@@ -66,7 +66,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
    if(turnHost&&turnSecret){const username=`${Math.floor(clock()/1000)+5*3600}:${uid}`;iceServers.push({urls:[`turn:${turnHost}:3478?transport=udp`,`turn:${turnHost}:3478?transport=tcp`],username,credential:createHmac('sha1',turnSecret).update(username).digest('base64')});}
    const tls=String(turnTlsUrls).split(',').map(x=>x.trim()).filter(x=>/^turns:[a-zA-Z0-9.-]+:443\?transport=tcp$/.test(x));if(tls.length&&turnSecret){const username=`${Math.floor(clock()/1000)+5*3600}:${uid}`;iceServers.push({urls:tls,username,credential:createHmac('sha1',turnSecret).update(username).digest('base64')});}
    const selected=url.searchParams.get('call_id'),c=selected?active.get(selected):null;if(selected&&(!c||![c.caller,c.callee].includes(uid)))throw fail(404,'Звонок недоступен');
-   json(res,200,{iceServers,relayConfigured:iceServers.length>0,iceTransportPolicy:(c?.relayOnly||policy.get(uid).relay_only)?'relay':'all',turnTlsConfigured:tls.length>0&&!!turnSecret,timeouts:ttl});return true;
+   json(res,200,{iceServers,relayConfigured:iceServers.length>0,iceTransportPolicy:'relay',turnTlsConfigured:tls.length>0&&!!turnSecret,timeouts:ttl});return true;
   }
   if(url.pathname==='/api/calls/current'&&req.method==='GET'){
    const d=device(url.searchParams.get('device'));const c=[...active.values()].find(c=>c.caller===uid||c.callee===uid);
@@ -89,7 +89,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
    if(!policy.allowed(uid,peer))throw fail(404,'Собеседник недоступен');
    if([...active.values()].some(c=>[c.caller,c.callee].some(id=>id===uid||id===peer)))throw fail(409,'Вы или собеседник уже участвуете в звонке');
    if(active.size>=100)throw fail(503,'Сервер звонков занят');
-   const c={id:randomBytes(16).toString('hex'),caller:uid,callee:peer,chat:chat.id,callerDevice:d,calleeDevice:null,status:'preparing',ringReceipt:randomBytes(24).toString('hex'),video:!!data.video,created:clock(),callerSeen:clock(),calleeSeen:clock(),version:0,callerProtocol:data.protocol===2?2:1,calleeProtocol:1,restartGeneration:0,relayOnly:!!policy.get(uid).relay_only||!!policy.get(peer).relay_only};
+   const c={id:randomBytes(16).toString('hex'),caller:uid,callee:peer,chat:chat.id,callerDevice:d,calleeDevice:null,status:'preparing',ringReceipt:randomBytes(24).toString('hex'),video:!!data.video,created:clock(),callerSeen:clock(),calleeSeen:clock(),version:0,callerProtocol:data.protocol===2?2:1,calleeProtocol:1,restartGeneration:0,relayOnly:true};
    db.prepare('INSERT INTO call_history(id,chat_id,caller,callee,created,status,video) VALUES(?,?,?,?,?,?,?)').run(c.id,c.chat,uid,peer,c.created,c.status,c.video?1:0);
    db.prepare('UPDATE call_history SET idempotency_key=?,caller_device=? WHERE id=?').run(key,d,c.id);
    active.set(c.id,c);change(c,'call.created');json(res,201,view(c,uid,d));return true;

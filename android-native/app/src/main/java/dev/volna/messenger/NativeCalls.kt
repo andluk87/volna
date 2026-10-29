@@ -143,7 +143,7 @@ object NativeCalls {
     private suspend fun applyCurrent(current: VolnaCall?) {
         val version = generation
         if (current == null) { if (state.value.call != null) end(); return }
-        if (current.status == "other-device") { if (state.value.call != null) end("Звонок открыт на другом устройстве", notifyServer = false); return }
+        if (current.status == "other-device") { if (state.value.call != null) end(notifyServer = false); return }
         val existing = state.value.call
         if (existing == null) {
             if (current.incoming && current.status == "ringing") {
@@ -240,7 +240,7 @@ object NativeCalls {
                 updateScreenReady()
                 if (!state.value.connected) NativeCallDiagnostics.step("Ожидание соединения ICE")
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (problem: Exception) { if (version == generation) { NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось принять звонок") } }
+            catch (problem: Exception) { if (version == generation) { if(problem is NativeApiException && problem.errorCode == "CALL_ANSWERED_ELSEWHERE") end(notifyServer = false) else { NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось принять звонок") } } }
             catch (problem: LinkageError) { if (version == generation) { NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.") } }
             finally { if (version == generation) mutableState.update { it.copy(busy = false) } }
         }
@@ -256,6 +256,7 @@ object NativeCalls {
         }
         NativeCallDiagnostics.step("Получение настроек ICE/TURN")
         val config = withContext(Dispatchers.IO) { api.callConfig(token, state.value.call?.id) }
+        check(config.optBoolean("relayConfigured") && (config.optJSONArray("iceServers")?.length() ?: 0) > 0) { "Звонки доступны только через TURN. Сервер TURN не настроен." }
         checkVersion(version)
         NativeCallDiagnostics.step("Запуск сервиса микрофона")
         CallService.ensureReady(app)
@@ -298,7 +299,7 @@ object NativeCalls {
             val addresses = if (urls != null) (0 until urls.length()).map { urls.getString(it) } else listOf(server.getString("urls"))
             iceServers += PeerConnection.IceServer.builder(addresses).setUsername(server.optString("username")).setPassword(server.optString("credential")).createIceServer()
         }
-        val rtc = PeerConnection.RTCConfiguration(iceServers).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN; if(config.optString("iceTransportPolicy")=="relay")iceTransportsType=PeerConnection.IceTransportsType.RELAY }
+        val rtc = PeerConnection.RTCConfiguration(iceServers).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN; iceTransportsType=PeerConnection.IceTransportsType.RELAY }
         NativeCallDiagnostics.step("Создание соединения WebRTC")
         val pc = mediaFactory.createPeerConnection(rtc, observer(version)) ?: error("Не удалось создать WebRTC")
         peer = pc

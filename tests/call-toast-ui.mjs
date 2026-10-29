@@ -13,11 +13,12 @@ const toastServer=createHttpServer(async(req,res)=>{try{const file=path.resolve(
 try{
  browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox','--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream']});
  for(const desktop of [false,true]) {
-  const context=await browser.newContext({permissions:['microphone'],viewport:{width:1000,height:800}});let call=null;
-  await context.addInitScript(desktop=>{window.__callOverlays=[];window.addEventListener('volna-call-visibility',()=>window.__callOverlays.push(!!document.querySelector('.call-panel:not(.call-minimized)')));if(desktop){document.addEventListener('DOMContentLoaded',()=>document.documentElement.dataset.desktop='true');window.volnaDesktop={platform:'win32',callState:async()=>{},onShowCall:()=>()=>{}};}},desktop);
+  const context=await browser.newContext({permissions:['microphone'],viewport:{width:1000,height:800}});let call=null,turnConfigured=true;
+  await context.addInitScript(desktop=>{const PC=window.RTCPeerConnection;window.RTCPeerConnection=class extends PC { constructor(config){super(config);window.__icePolicy=config.iceTransportPolicy;} };window.__callOverlays=[];window.addEventListener('volna-call-visibility',()=>window.__callOverlays.push(!!document.querySelector('.call-panel:not(.call-minimized)')));if(desktop){document.addEventListener('DOMContentLoaded',()=>document.documentElement.dataset.desktop='true');window.volnaDesktop={platform:'win32',callState:async()=>{},onShowCall:()=>()=>{}};}},desktop);
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.route('**/api/**',route=>{const path=new URL(route.request().url()).pathname;let body={};if(path.endsWith('/config'))body={iceServers:[],relay:false};else if(path.endsWith('/start'))body=call={id:'test-call',incoming:false,status:'ringing',peer:{id:2,name:'Иван'}};else if(path.endsWith('/end')){call=null;body={ok:true};}else body=call;return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});});
+  await page.route('**/api/**',route=>{const path=new URL(route.request().url()).pathname;let body={};if(path.endsWith('/config'))body={iceServers:turnConfigured?[{urls:["turn:127.0.0.1:9?transport=udp"],username:"test",credential:"test"}]:[],relayConfigured:turnConfigured,iceTransportPolicy:"all"};else if(path.endsWith('/start'))body=call={id:'test-call',incoming:false,status:'ringing',peer:{id:2,name:'Иван'}};else if(path.endsWith('/end')){call=null;body={ok:true};}else body=call;return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});});
   await page.goto('http://127.0.0.1:5197/qa-call-53.html');await page.getByText('Начать тест',{exact:true}).click();
+  await page.waitForFunction(()=>window.__icePolicy==='relay');
   if(desktop){const compact=await page.locator('.call-panel').boundingBox();assert.ok(compact.width<=420&&compact.height<760,JSON.stringify(compact));assert.ok(compact.x>0&&compact.y>0);await page.screenshot({path:new URL('../work/windows-call-compact-55.png',import.meta.url).pathname});}
   const topbar=page.locator('.call-topbar');const label=await topbar.locator('span').first().boundingBox(),account=await page.locator('.call-encryption').boundingBox();assert.ok(account.x>=label.x+label.width+12||account.y>=label.y+label.height,'call status and account are separate');assert.equal(await page.locator('.call-avatar').evaluate(n=>getComputedStyle(n,'::before').content),'none');
   await page.getByRole('button',{name:'Свернуть звонок, чтобы открыть переписку',exact:true}).click();
@@ -30,6 +31,7 @@ try{
   await page.screenshot({path:new URL(`../work/call-${desktop?'windows':'web'}-0.12.54.png`,import.meta.url).pathname});
   await page.getByRole('button',{name:'Развернуть звонок',exact:true}).click();await page.getByRole('button',{name:'Свернуть звонок, чтобы открыть переписку',exact:true}).waitFor();assert.equal(await page.evaluate(()=>window.__callOverlays.at(-1)),true);
   await page.getByRole('button',{name:'Завершить звонок',exact:true}).click();await page.locator('.call-panel').waitFor({state:'hidden'});
+  turnConfigured=false;await page.getByText('Начать тест',{exact:true}).click();await page.locator('output').filter({hasText:'Сервер TURN не настроен'}).waitFor();await page.locator('.call-panel').waitFor({state:'hidden'});
   assert.deepEqual(errors,[]);await context.close();
  }
  const page=await browser.newPage({viewport:{width:360,height:552}});

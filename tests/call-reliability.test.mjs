@@ -72,3 +72,15 @@ test('call privacy: contacts, nobody, bilateral blocks, terminating blocked call
  await req('/blocks/'+a,b,{blocked:false});call=await f.start();await action(call.id,'end');
  await req('/blocks/'+b,a,{blocked:true});await assert.rejects(f.start(),{status:404});await assert.rejects(req('/blocks/'+a,a,{blocked:true}),{status:400});
 });
+
+test('TURN is mandatory for every account and call, including legacy saved P2P preferences',async t=>{
+ const f=fixture(t);
+ assert.equal((await f.req('/config')).iceTransportPolicy,'relay');
+ f.app.db.prepare("INSERT INTO call_privacy(user_id,allow_calls,relay_only) VALUES(?,'everyone',0)").run(f.a);
+ assert.equal((await f.req('/privacy')).relay_only,true);
+ assert.equal((await f.req('/privacy')).relay_required,true);
+ const saved=await f.req('/privacy',f.a,{allow_calls:'everyone',relay_only:false});
+ assert.equal(saved.relay_only,true);assert.equal(f.app.db.prepare('SELECT relay_only FROM call_privacy WHERE user_id=?').get(f.a).relay_only,1);
+ const call=await f.start();assert.equal(call.relay_only,true);
+ assert.equal((await f.req('/config?call_id='+call.id)).iceTransportPolicy,'relay');
+});

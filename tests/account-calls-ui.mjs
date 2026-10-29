@@ -27,7 +27,7 @@ try{
   await page.waitForTimeout(100);assert.equal(await request('/calls/current?device='+device,accounts[2].token),null);
   const again=await request('/calls/start',accounts[2].token,{device,chat_id:chat.id});
   await request(`/calls/${again.id}/offer`,accounts[2].token,{device,description:{type:'offer',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n'}});
-  await dialog.waitFor({state:'visible'});await request(`/calls/${again.id}/end`,accounts[2].token,{device});await dialog.waitFor({state:'hidden'});
+  await dialog.waitFor({state:'visible'});const winner=crypto.randomUUID().replaceAll('-','');await request(`/calls/${again.id}/accept`,accounts[1].token,{device:winner,protocol:2});await dialog.waitFor({state:'hidden'});assert.equal(await page.locator('output').textContent(),'','answered elsewhere closes the call without an error banner');await request(`/calls/${again.id}/end`,accounts[1].token,{device:winner});
   assert.equal(await page.locator('output').textContent(),'','ordinary remote hangup must not display an error banner');
   await context.close();
  }
