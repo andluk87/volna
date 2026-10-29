@@ -94,7 +94,7 @@ internal fun ChatRoomScreen(
     onMessageAction: (VolnaMessage, String, String) -> Unit, onRetry: () -> Unit,
     focusMessageId: Long?, onFocusConsumed: () -> Unit, onJumpToMessage: (Long) -> Unit,
     startSearch: Boolean, onSearchStarted: () -> Unit, onVisibleMessage: (Long) -> Unit, earlierWindow: Boolean, onNewest: () -> Unit,
-    onForwardMany: (List<VolnaMessage>) -> Unit, topicNavigation: @Composable () -> Unit = {}, readVisible: Boolean = true, photoReply: VolnaMessage? = null, onPhotoReplyConsumed: () -> Unit = {}
+    onForwardMany: (List<VolnaMessage>) -> Unit, topicNavigation: @Composable () -> Unit = {}, readVisible: Boolean = true, photoReply: VolnaMessage? = null, onPhotoReplyConsumed: () -> Unit = {}, uploadContent: @Composable ()->Unit = {}, uploadKey: String? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -175,6 +175,7 @@ internal fun ChatRoomScreen(
     var previousLastEvent by remember(chat.id) { mutableStateOf("") }
     val historyButton = (moreHistory || chatCalls.size >= callPages * 50 && callPages < 20) && !searchOpen && !showPins
     val offset = if (historyButton) 1 else 0
+    LaunchedEffect(uploadKey) { if(uploadKey!=null){listState.scrollToItem(timeline.size+offset);firstScroll=true} }
     fun jumpBottom() { if (timeline.isNotEmpty()) scope.launch { if (motion) listState.animateScrollToItem(timeline.lastIndex + offset) else listState.scrollToItem(timeline.lastIndex + offset); newMessages = 0 } }
     fun jump(id: Long) {
         val index = timeline.indexOfFirst { entry -> entry.messages.any { it.id == id } }
@@ -284,7 +285,7 @@ internal fun ChatRoomScreen(
         if (showPins) Row(Modifier.fillMaxWidth().background(Panel).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) { NativeText("Закреплённые · ${pinnedMessages.size}", Modifier.weight(1f), color = Accent, fontSize = 13.sp); TextButton(onClick = { showPins = false }) { NativeText("Закрыть") } }
         if (error.isNotBlank()) NativeConnectionNotice(error, onRetry)
         Box(Modifier.weight(1f).fillMaxWidth().hazeSource(backdrop, zIndex = 1f, key = "history")) {
-            if (timeline.isEmpty()) Column(Modifier.fillMaxWidth().align(Alignment.Center)) { NativeEmptyState(Icons.Outlined.ChatBubbleOutline, if (searchQuery.isNotBlank()) "Ничего не найдено" else if (showPins) "Нет закреплённых сообщений" else "Начните разговор") }
+            if (timeline.isEmpty() && uploadKey == null) Column(Modifier.fillMaxWidth().align(Alignment.Center)) { NativeEmptyState(Icons.Outlined.ChatBubbleOutline, if (searchQuery.isNotBlank()) "Ничего не найдено" else if (showPins) "Нет закреплённых сообщений" else "Начните разговор") }
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (firstScroll || timeline.isEmpty()) 1f else 0f }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy((LocalNativeAppearance.current.spacing - 2).coerceAtLeast(1).dp)) {
                 if (historyButton) item(key = "history") { TextButton(onClick = { if (moreHistory) onLoadOlder() else callPages++ }, enabled = !loadingHistory, modifier = Modifier.fillMaxWidth()) { if (loadingHistory) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else NativeText(if (moreHistory) "Более ранние сообщения" else "Более ранние звонки", fontSize = 12.sp) } }
                 itemsIndexed(timeline, key = { _, entry -> "${chat.id}-${entry.key}" }) { index, entry ->
@@ -306,6 +307,7 @@ internal fun ChatRoomScreen(
                     onJump = ::jump, highlighted = group.any { it.id == highlighted }, onProfile = onOpenProfile, canReply = chat.canSend)
                     }
                 }
+                if(uploadKey != null && !searchOpen && !showPins)item(key="upload-$uploadKey"){ uploadContent() }
             }
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             if (timeline.isNotEmpty() && (earlierWindow || lastVisible < timeline.lastIndex + offset - 1)) SmallFloatingActionButton(onClick = { if (earlierWindow) onNewest() else jumpBottom() }, modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp), containerColor = Panel, contentColor = Accent) { BadgedBox(badge = { if (newMessages > 0) Badge { NativeText(newMessages.toString()) } }) { Icon(Icons.Outlined.KeyboardArrowDown, "К новым сообщениям") } }
@@ -455,7 +457,7 @@ internal fun MessageBubble(message: VolnaMessage, group: List<VolnaMessage>, isM
                         if (overlayStamp) Box(Modifier.align(Alignment.BottomEnd).padding(6.dp)) { MediaStamp() }
                     }
                     message.attachmentMime?.startsWith("audio/") == true -> NativeVoiceMessage(message, token, voicePlayback, { if (selectionMode) onSelect(message) else onPlayAudio(message) }, transcribing, { onAction(message, "transcribe", "") }, isMine)
-                    else -> Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { if (selectionMode) onSelect(message) else onOpenAttachment(message) }, verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Description, null, tint = Accent); Column(Modifier.padding(start = 8.dp)) { NativeText(message.attachmentName.orEmpty(), color = TextMain, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis); NativeText("%.1f МБ".format(message.attachmentSize / 1048576.0), color = Muted, fontSize = 11.sp) } }
+                    else -> Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { if (selectionMode) onSelect(message) else onOpenAttachment(message) }, verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(46.dp).clip(CircleShape).background(Accent.copy(alpha=.24f)),contentAlignment=Alignment.Center){Icon(Icons.Outlined.Description,null,tint=Accent,modifier=Modifier.size(24.dp))}; Column(Modifier.weight(1f).padding(start = 8.dp)) { NativeText(message.attachmentName.orEmpty(), color = TextMain, fontSize = 14.sp, fontWeight=FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis); NativeText(uploadBytesLabel(message.attachmentSize) + message.attachmentName.orEmpty().substringAfterLast('.', "").takeIf{it.isNotBlank()}?.let{" · "+it.uppercase(java.util.Locale.ROOT)}.orEmpty(), color = Accent, fontSize = 12.sp) } }
                 }
                 if (message.text.isNotBlank()) {
                     if (standaloneEmoji && emojiAnimation != null) NativeAnimatedEmoji(emojiText, emojiAnimation, emojiReplay)

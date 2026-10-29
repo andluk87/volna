@@ -223,7 +223,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
         }
       }
       throw fail(404, 'Не найдено');
-    } catch(e) { if (!e.status) console.error(e); if (!res.headersSent) json(res, e.status || 500, { error: e.status ? e.message : 'Ошибка сервера', ...(e.status&&e.code?{code:e.code}:{}),...(e.status&&e.retry_at?{retry_at:e.retry_at,server_time:Date.now()}:{}),...(e.status&&e.suggestions?{suggestions:e.suggestions}:{}) }); else res.end(); }
+    } catch(e) { if(req.aborted&&e.code==='ECONNRESET'&&req.method==='POST'&&req.url?.split('?')[0]==='/api/uploads')return; if (!e.status) console.error(e); if (!res.headersSent) json(res, e.status || 500, { error: e.status ? e.message : 'Ошибка сервера', ...(e.status&&e.code?{code:e.code}:{}),...(e.status&&e.retry_at?{retry_at:e.retry_at,server_time:Date.now()}:{}),...(e.status&&e.suggestions?{suggestions:e.suggestions}:{}) }); else res.end(); }
   });
   server.requestTimeout = 120000; server.headersTimeout = 15000;
   return { server, adminServer:adminService.server, db, push:pushService, close: async () => { await adminService.close();callService.close();contactService.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close(); } };

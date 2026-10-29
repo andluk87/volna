@@ -1,4 +1,5 @@
 import {DEMO_TOKEN,demoRequest,demoEvents,demoBlob,demoUpload} from './demo-api.mjs';
+import {uploadTransport} from './upload-transport.mjs';
 import {sessionFetch} from './session.mjs';
 export const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/,'');
 export async function request(path, token, data, signal, method) {
@@ -27,10 +28,10 @@ export async function events(token, signal, onEvent, onStatus, onUnauthorized) {
 export function messageId(){
   return Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
 }
-export async function uploadFile(file,token,signal){
+export async function uploadFile(file,token,signal,onProgress){
   if(token===DEMO_TOKEN)return demoUpload(file);
   if(file.size>20*1024*1024)throw Error('Максимальный размер файла — 20 МБ');
-  const res=await sessionFetch(API+'/api/uploads',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':file.type||'application/octet-stream','X-File-Name':encodeURIComponent(file.name)},body:file,signal});
+  const res=await sessionFetch(API+'/api/uploads',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':file.type||'application/octet-stream','X-File-Name':encodeURIComponent(file.name)},body:file,signal},onProgress?uploadTransport(onProgress):undefined);
   const value=await res.json();if(!res.ok)throw Object.assign(new Error(value.error||'Ошибка загрузки'),{status:res.status});return value;
 }
 const localVoiceBlobs=new Map();

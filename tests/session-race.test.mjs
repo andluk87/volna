@@ -63,3 +63,10 @@ test('an aborted request does not retry or turn shared refresh into a logout',as
  const f=await setup(t),start=deferred(),release=deferred(),native=f.bridge.refreshSession,controller=new AbortController();f.intercept(async()=>new Response('{}',{status:401}));f.bridge.refreshSession=async value=>{const result=await native(value);start.resolve();await release.promise;return result;};
  const pending=f.session.sessionFetch('/api/me',{headers:{Authorization:'Bearer '+f.login.token},signal:controller.signal});const rejected=assert.rejects(pending,e=>e.name==='AbortError');await start.promise;controller.abort();release.resolve();await rejected;assert.equal(f.refreshCount(),1);assert.equal(f.session.accountSessions().length,1);assert.equal(f.store.load().accounts.length,1);
 });
+
+test('upload progress transport keeps the original account and refreshes its expired token',async t=>{
+ const f=await setup(t),sent=[];
+ const transport=async(url,options)=>{const value=new Headers(options.headers).get('Authorization');sent.push(value);return new Response('{}',{status:value==='Bearer '+f.login.token?401:201});};
+ const response=await f.session.sessionFetch('/api/uploads',{method:'POST',headers:{Authorization:'Bearer '+f.login.token},body:new Uint8Array([1,2,3])},transport);
+ assert.equal(response.status,201);assert.equal(sent.length,2);assert.notEqual(sent[0],sent[1]);assert.equal(f.refreshCount(),1);assert.equal(f.session.accountSessions()[0].user.id,f.login.user.id);
+});

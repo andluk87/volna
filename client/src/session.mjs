@@ -50,14 +50,14 @@ export async function restoreSession(throwNetwork=true){
   const result=await refreshAccount(null,throwNetwork);return result;
  }catch(error){if(throwNetwork)throw error;return null;}finally{restoring=null;}})();return restoring;
 }
-export async function sessionFetch(url,options={}){
+export async function sessionFetch(url,options={},transport=fetch){
  const headers=new Headers(options.headers),provided=headers.get('Authorization')?.replace(/^Bearer /,''),id=provided?aliases.get(provided):null;
  const discard=response=>response.body?.cancel().catch(()=>{});
  for(let attempt=0;attempt<4;attempt++){
   options.signal?.throwIfAborted();
   const sentToken=id?sessions.get(id)?.token||provided:provided;
   if(sentToken)headers.set('Authorization','Bearer '+sentToken);
-  const response=await fetch(url,{...options,credentials:'include',headers});
+  const response=await transport(url,{...options,credentials:'include',headers});
   if(response.status!==401||!id)return response;
   options.signal?.throwIfAborted();
   diagnostic('renderer-401',id);

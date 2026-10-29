@@ -1,3 +1,5 @@
+import {uploadSize} from './upload-transport.mjs';
+import './uploads.css';
 import {mediaCache} from './media-repository.mjs';
 import {PhotoActionsContext} from './photo-actions';
 import React,{useEffect,useState,useRef,useContext} from 'react';
@@ -26,7 +28,7 @@ export default function Attachment({file,token,gallery=[],messageId=null,transcr
  {!url&&file.mime.startsWith('video/')&&!expression&&<button className="video-placeholder" aria-label={'Открыть видео '+file.name} disabled={loading} onClick={openMedia}><Icon name="play"/><span>Открыть видео</span></button>}
  {url&&file.mime.startsWith('video/')&&!expression&&<button onClick={openMedia}>Открыть видео</button>}
  {url&&file.mime.startsWith('video/')&&<video src={url} controls={!expression} autoPlay={expression} loop={expression} muted={expression} playsInline preload="metadata"/>}
- {!photo&&!audio&&!expression&&<div className="file-label"><span><Icon name="clip"/> {file.name}<small>{(file.size/1024).toFixed(1)} КБ</small></span>{download||<button disabled={loading} onClick={()=>setAttempt(v=>v+1)}>{loading?'Загрузка…':'Загрузить'}</button>}</div>}
+ {!photo&&!audio&&!expression&&<div className="file-label telegram-file"><span className="file-circle"><Icon name="clip"/></span><span className="file-copy"><strong>{file.name}</strong><small>{uploadSize(file.size)}{file.name.includes('.')?' · '+file.name.split('.').at(-1).toUpperCase():''}</small></span>{download||<button disabled={loading} onClick={()=>setAttempt(v=>v+1)}>{loading?'Загрузка…':'Загрузить'}</button>}</div>}
  {expression&&!url&&!photo&&<button disabled={loading} onClick={()=>setAttempt(v=>v+1)}>{loading?'Загрузка…':'Загрузить анимацию'}</button>}
  {audio&&url&&<details className="media-save"><summary aria-label="Сохранить аудио">Сохранить</summary>{download}</details>}
  {preview&&<PhotoViewer file={{...file,messageId}} gallery={gallery} previewUrl={url} token={token} onClose={()=>setPreview(false)}/>}

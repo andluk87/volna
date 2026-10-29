@@ -283,6 +283,8 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     val voicePlayback = remember { NativeVoicePlayback(context) { error = it } }
     var attachmentBatch by remember { mutableStateOf<NativeAttachmentBatch?>(null) }
     var attachmentSending by remember { mutableStateOf(false) }
+    var attachmentJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var uploadProgress by remember { mutableStateOf(NativeUploadProgress()) }
     DisposableEffect(attachmentBatch?.clientId) {
         val directory = attachmentBatch?.ownedDirectory
         onDispose { directory?.deleteRecursively() }
@@ -395,19 +397,22 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         val session = token
         batch.caption = batch.caption ?: caption
         val text = batch.caption.orEmpty()
-        attachmentSending = true; busy = true; attachmentError = ""
-        scope.launch {
+        attachmentSending = true; busy = true; attachmentError = ""; uploadProgress = NativeUploadProgress()
+        attachmentJob = scope.launch {
             try {
                 withContext(Dispatchers.IO) { NativeVoiceOutbox.save(batch) }
                 batch.files.forEachIndexed { index, file ->
                     attachmentStatus = "Загрузка ${index + 1} из ${batch.files.size}"
-                    if (batch.uploads[index] == null) batch.uploads[index] = withContext(Dispatchers.IO) {
-                        if (file.optimizePhoto) api.upload(session, file.name.substringBeforeLast('.', file.name) + ".jpg", "image/jpeg", profilePhoto(context, file.uri, 1600, 80))
-                        else api.upload(session, file.name, file.mime, readAttachment(context.contentResolver, file.uri))
+                    uploadProgress = NativeUploadProgress(index, total=file.size)
+                    if (batch.uploads[index] == null) {
+                        val bytes = withContext(Dispatchers.IO) { if(file.optimizePhoto)profilePhoto(context,file.uri,1600,80) else readAttachment(context.contentResolver,file.uri) }
+                        batch.uploads[index] = api.uploadTracked(session,if(file.optimizePhoto)file.name.substringBeforeLast('.',file.name)+".jpg" else file.name,if(file.optimizePhoto)"image/jpeg" else file.mime,bytes) { sent,total ->
+                            scope.launch { if(attachmentBatch === batch && attachmentSending && uploadProgress.index==index && !uploadProgress.committing)uploadProgress=NativeUploadProgress(index,sent,total) }
+                        }
                     }
                     withContext(Dispatchers.IO) { NativeVoiceOutbox.save(batch) }
                 }
-                attachmentStatus = "Отправляем…"
+                attachmentStatus = "Отправляем…"; uploadProgress = uploadProgress.copy(committing=true)
                 val ids = batch.files.indices.map { batch.uploads.getValue(it) }
                 val album = ids.size > 1 && batch.files.all { it.mime.startsWith("image/") || it.mime.startsWith("video/") }
                 val created = withContext(Dispatchers.IO) {
@@ -719,6 +724,8 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     VolnaTheme(if (individual == null) appearance else appearance.copy(design = individual, radius = individual.radius)) {
                     ChatRoomScreen(
                     user = me, chat = selectedChat!!, messages = messages.toList(), busy = busy,
+                    uploadContent = { attachmentBatch?.takeIf { it.chatId==selectedChat?.id && it.voiceFile==null && it.caption!=null }?.let { batch -> NativeUploadCards(batch,uploadProgress,attachmentError,attachmentSending,onCancel={ if(!uploadProgress.committing||!attachmentSending){val job=attachmentJob;job?.cancel();scope.launch{job?.join();if(attachmentBatch===batch)discardBatch(batch)}} },onRetry={sendBatch(batch,batch.caption.orEmpty())}) } },
+                    uploadKey = attachmentBatch?.takeIf{it.chatId==selectedChat?.id&&it.voiceFile==null&&it.caption!=null}?.clientId,
                     searchQuery = messageQuery, searchResults = messageSearchResults.toList(), pinnedMessages = pinnedMessages.toList(),
                     onSearch = { messageQuery = it }, onForward = { forwardTargetMessage = it; forwardBatch = listOf(it); forwardNonce = UUID.randomUUID().toString() },
                     onForwardMany = { batch -> if (batch.isNotEmpty()) { forwardBatch = batch; forwardTargetMessage = batch.first(); forwardNonce = UUID.randomUUID().toString() } },
@@ -921,7 +928,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                         onShareConsumed()
                     })
             }
-            attachmentBatch?.takeIf { it.voiceFile == null || attachmentError.isNotBlank() }?.let { batch -> NativeAttachmentComposer(batch, attachmentSending, attachmentStatus, attachmentError,
+            attachmentBatch?.takeIf { it.voiceFile == null && it.caption == null || it.voiceFile != null && attachmentError.isNotBlank() }?.let { batch -> NativeAttachmentComposer(batch, attachmentSending, attachmentStatus, attachmentError,
                 onDismiss = { discardBatch(batch) }, onSend = { sendBatch(batch, it) }) }
             if (callDiagnosticsOpen) {
                 val clipboard = LocalClipboardManager.current

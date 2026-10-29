@@ -312,6 +312,16 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         }
     }
 
+    internal suspend fun uploadTracked(token: String, fileName: String, mime: String, bytes: ByteArray, progress: (Long,Long)->Unit): String = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+        val request=Request.Builder().url("$base/api/uploads").header("Authorization","Bearer $token").header("X-File-Name",java.net.URLEncoder.encode(fileName,"UTF-8").replace("+","%20")).header("Content-Type",mime).post(NativeUploadBody(bytes,mime.toMediaTypeOrNull(),progress)).build()
+        val transfer=http.newCall(request)
+        continuation.invokeOnCancellation { transfer.cancel() }
+        transfer.enqueue(object: okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call,e: java.io.IOException){if(continuation.isActive)continuation.resumeWith(Result.failure(e))}
+            override fun onResponse(call: okhttp3.Call,response: okhttp3.Response){try { val id=response.use{val data=JSONObject(it.body?.string().orEmpty());if(!it.isSuccessful)throw NativeApiException(it.code,data.optString("error").ifBlank{"Ошибка загрузки (${it.code})"});data.getString("id")};if(continuation.isActive)continuation.resumeWith(Result.success(id)) }catch(problem:Exception){if(continuation.isActive)continuation.resumeWith(Result.failure(problem))}}
+        })
+    }
+
     fun attachmentUrl(fileId: String) = "$base/api/files/$fileId"
 
     fun downloadAttachment(token: String, fileId: String, destination: File) {

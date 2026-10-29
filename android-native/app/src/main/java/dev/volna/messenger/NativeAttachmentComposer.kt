@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import java.util.UUID
 
-internal data class NativeSelectedAttachment(val uri: Uri, val name: String, val mime: String, val optimizePhoto: Boolean = false)
+internal data class NativeSelectedAttachment(val uri: Uri, val name: String, val mime: String, val optimizePhoto: Boolean = false, val size: Long = 0)
 internal class NativeAttachmentBatch(val chatId: Long, val files: List<NativeSelectedAttachment>, val initialCaption: String, val replyId: Long?, val onSent: () -> Unit,
     val clientId: String = UUID.randomUUID().toString().replace("-", ""), val voiceFile: java.io.File? = null, val account: Long = 0, val ownedDirectory: java.io.File? = null) {
     val uploads = mutableMapOf<Int, String>()
@@ -34,15 +34,17 @@ internal fun selectedAttachments(resolver: ContentResolver, uris: List<Uri>): Li
     require(selected.size in 1..10) { "Выберите не больше 10 вложений" }
     return selected.map { uri ->
         var name = "Вложение"
+        var byteSize = 0L
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (column >= 0) name = cursor.getString(column).orEmpty().ifBlank { "Вложение" }
                 val size = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if(size >= 0 && !cursor.isNull(size))byteSize=cursor.getLong(size).coerceAtLeast(0)
                 require(size < 0 || cursor.isNull(size) || cursor.getLong(size) <= 20L * 1024 * 1024) { "$name: максимальный размер — 20 МБ" }
             }
         }
-        NativeSelectedAttachment(uri, name, resolver.getType(uri) ?: "application/octet-stream")
+        NativeSelectedAttachment(uri, name, resolver.getType(uri) ?: "application/octet-stream", size = byteSize)
     }
 }
 
