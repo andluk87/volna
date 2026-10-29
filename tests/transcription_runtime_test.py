@@ -76,6 +76,51 @@ class RuntimeTest(unittest.TestCase):
         self.assertFalse(runtime._thread.is_alive())
         self.assertFalse(runtime.snapshot()['ready'])
 
+    def test_cached_fallback_works_during_primary_download_then_upgrades(self):
+        release = threading.Event()
+        primary, fallback = object(), object()
+        runtime = ModelRuntime(lambda: (release.wait(3), primary)[1], fallback_factory=lambda: fallback,
+                               primary_name='small', fallback_name='base')
+        try:
+            runtime.start()
+            wait_until(lambda: runtime.snapshot()['ready'])
+            self.assertEqual(runtime.snapshot()['state'], 'degraded')
+            self.assertEqual(runtime.get_model_with_name(), (fallback, 'base'))
+            release.set()
+            wait_until(lambda: runtime.snapshot()['state'] == 'ready')
+            self.assertEqual(runtime.get_model_with_name(), (primary, 'small'))
+        finally:
+            release.set()
+            runtime.close()
+
+    def test_primary_failure_does_not_remove_cached_fallback(self):
+        def fail():
+            raise ConnectionError('private URL')
+        fallback = object()
+        runtime = ModelRuntime(fail, fallback_factory=lambda: fallback, fallback_name='base')
+        try:
+            runtime.start()
+            wait_until(lambda: runtime.snapshot()['ready'] and runtime.snapshot()['primary_state'] == 'failed')
+            self.assertEqual(runtime.snapshot()['state'], 'degraded')
+            self.assertIs(runtime.get_model(), fallback)
+            self.assertNotIn('private', str(runtime.snapshot()))
+        finally:
+            runtime.close()
+
+    def test_late_fallback_cannot_replace_ready_primary(self):
+        release = threading.Event()
+        primary, fallback = object(), object()
+        runtime = ModelRuntime(lambda: primary, fallback_factory=lambda: (release.wait(3), fallback)[1])
+        try:
+            runtime.start()
+            wait_until(lambda: runtime.snapshot()['state'] == 'ready')
+            release.set()
+            runtime._fallback_thread.join(2)
+            self.assertIs(runtime.get_model(), primary)
+        finally:
+            release.set()
+            runtime.close()
+
     def test_error_summary_follows_causes_without_exception_text(self):
         try:
             try:

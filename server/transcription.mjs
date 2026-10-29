@@ -3,7 +3,7 @@ export function createTranscriber({endpoint=process.env.WHISPER_URL||'http://tra
   return async ({bytes,name,mime}) => {
     const form=new FormData();
     form.set('file',new Blob([bytes],{type:mime||'application/octet-stream'}),name||'voice.webm');
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),180000);
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),900000);
     try {
       let response;
       for(let attempt=0;attempt<2;attempt++){
@@ -21,7 +21,9 @@ export function createTranscriber({endpoint=process.env.WHISPER_URL||'http://tra
         if(response.status===429)throw Object.assign(new Error('Сервис распознавания занят. Попробуйте через минуту'),{status:429});
         if(response.status===503) {
           const body=await response.json().catch(()=>null);
-          const message=body?.detail?.state==='failed'?'Распознавание временно недоступно. Попробуйте позже':'Локальная модель распознавания ещё загружается';
+          const detail=body?.detail;let message='Локальный сервис распознавания временно недоступен';
+          if(detail?.state==='loading')message=detail.loading_seconds>=300?'Загрузка модели задерживается. Проверьте доступ к хранилищу моделей и свободное место на сервере':'Локальная модель распознавания ещё загружается';
+          if(detail?.state==='failed')message=detail.error?.errno===28?'Недостаточно места на сервере для модели распознавания':detail.error?.errno===13?'Сервис распознавания не имеет доступа к кэшу моделей':'Не удалось загрузить модель распознавания. Проверьте журнал контейнера transcription';
           throw Object.assign(new Error(message),{status:503});
         }
         throw Object.assign(new Error('Локальное распознавание временно недоступно'),{status:502});

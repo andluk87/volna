@@ -92,6 +92,22 @@ class HTTPTest(unittest.TestCase):
                 self.assertTrue(downloads[0]['local_files_only'])
                 self.assertEqual(downloads[0]['cache_dir'], '/models')
 
+    def test_fallback_never_downloads_missing_weights(self):
+        downloads = []
+        fw = ModuleType('faster_whisper'); fw.__path__ = []; fw.WhisperModel = lambda *a, **k: object()
+        utils = ModuleType('faster_whisper.utils')
+        def download(name, **options):
+            downloads.append(options)
+            return '/nonexistent-cached-whisper-model'
+        utils.download_model = download
+        hub = ModuleType('huggingface_hub'); hub.__path__ = []
+        errors = ModuleType('huggingface_hub.errors'); errors.LocalEntryNotFoundError = type('LocalEntryNotFoundError', (Exception,), {})
+        with patch.dict(sys.modules, {'faster_whisper':fw,'faster_whisper.utils':utils,'huggingface_hub':hub,'huggingface_hub.errors':errors}):
+            with self.assertRaises(FileNotFoundError):
+                load_model('base', local_only=True)
+        self.assertEqual(len(downloads), 1)
+        self.assertTrue(downloads[0]['local_files_only'])
+
     def test_http_is_live_while_model_download_blocks_and_returns_503_for_audio(self):
         release = threading.Event()
         def factory():

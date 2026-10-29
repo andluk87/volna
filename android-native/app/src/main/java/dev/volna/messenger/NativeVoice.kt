@@ -178,10 +178,55 @@ internal class NativeVoicePlayback(context: Context, private val onError: (Strin
     var speed by mutableStateOf(prefs.getFloat("voice_speed", 1f).takeIf { it in listOf(1f, 1.5f, 2f) } ?: 1f)
         private set
 
+    private val audioManager=app.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+    private var musicFocus: android.media.AudioFocusRequest? = null
+    var musicSpeed by mutableStateOf(prefs.getFloat("music_speed",1f).takeIf{it in listOf(1f,1.5f,2f)}?:1f)
+        private set
+    fun pauseMusic() { if(loading){stop();return};runCatching{player?.pause()};playing=false;ticker?.cancel();musicFocus?.let{audioManager.abandonAudioFocusRequest(it)};musicFocus=null }
+    private fun requestMusicFocus(): Boolean {
+        if(!isMusic)return true
+        var request=musicFocus
+        if(request==null){
+            lateinit var created: android.media.AudioFocusRequest
+            created=android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                .setOnAudioFocusChangeListener{change->if(change<=0)scope.launch{if(musicFocus===created)pauseMusic()}}.build()
+            request=created;musicFocus=created
+        }
+        return audioManager.requestAudioFocus(request)==android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+    private val noisyReceiver=object:android.content.BroadcastReceiver(){override fun onReceive(context:Context,intent:android.content.Intent){if(intent.action==android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY)pauseMusic()}}
+    init { androidx.core.content.ContextCompat.registerReceiver(app,noisyReceiver,android.content.IntentFilter(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY),androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED) }
+    var currentMessage by mutableStateOf<VolnaMessage?>(null)
+        private set
+    val isMusic: Boolean get() = currentMessage?.let { nativeIsMusic(it) } == true
+    private var queue = emptyList<VolnaMessage>()
+    private var musicToken = ""
+    var volume by mutableStateOf(1f)
+        private set
+    var shuffle by mutableStateOf(false)
+        private set
+    var repeatMode by mutableStateOf("off")
+        private set
+    fun setMusicQueue(token: String, messages: List<VolnaMessage>) { musicToken=token;queue=messages.filter(::nativeIsMusic) }
+    fun toggleCurrent() { currentMessage?.let { toggle(musicToken,it) } }
+    fun seekCurrent(fraction: Float) { currentMessage?.let { seek(musicToken,it,(fraction.coerceIn(0f,1f)*durationMs).toInt()) } }
+    fun changeVolume(value: Float) { volume=value.coerceIn(0f,1f);player?.setVolume(volume,volume) }
+    fun toggleShuffle() { shuffle=!shuffle }
+    fun changeRepeat() { repeatMode=when(repeatMode){"off"->"all";"all"->"one";else->"off"} }
+    fun nextMusic(direction: Int=1, completed: Boolean=false) {
+        if(NativeCalls.state.value.call!=null)return
+        val message=currentMessage?:return
+        if(direction<0&&positionMs>3000){seekCurrent(0f);return}
+        val next=nativeMusicNext(queue.map{it.id},message.id,direction,shuffle,repeatMode=="all")
+        if(next!=null)queue.firstOrNull{it.id==next}?.let{open(musicToken,it,0,true)}
+        else if(completed){playing=false;positionMs=durationMs;ticker?.cancel()}
+    }
+
     fun toggle(token: String, message: VolnaMessage) {
         if (NativeCalls.state.value.call != null) { onError("Аудиосообщения доступны после завершения звонка"); return }
         if (messageId == message.id && prepared) {
-            try { if (playing) { player?.pause(); playing = false; ticker?.cancel() } else { player?.start(); playing = true; startTicker() } }
+            try { if (playing) { pauseMusic() } else { if(!requestMusicFocus())return;player?.start(); playing = true; startTicker() } }
             catch (problem: Exception) { fail(problem) }
         } else if (messageId != message.id || !loading) open(token, message, 0, play = true)
     }
@@ -195,15 +240,17 @@ internal class NativeVoicePlayback(context: Context, private val onError: (Strin
         else open(token, message, milliseconds, play = false)
     }
     fun changeSpeed() {
-        val next = when (speed) { 1f -> 1.5f; 1.5f -> 2f; else -> 1f }
+        val selectedSpeed=if(isMusic)musicSpeed else speed
+        val next = when (selectedSpeed) { 1f -> 1.5f; 1.5f -> 2f; else -> 1f }
         try {
-            if (prepared) { player?.playbackParams = player!!.playbackParams.setSpeed(next); if (!playing) player?.pause() }
-            speed = next; prefs.edit().putFloat("voice_speed", next).apply()
+            if (prepared) { player?.playbackParams = android.media.PlaybackParams().setPitch(1f).setSpeed(next); if (!playing) player?.pause() }
+            if(isMusic)musicSpeed=next else speed=next; prefs.edit().putFloat(if(isMusic)"music_speed" else "voice_speed", next).apply()
         } catch (problem: Exception) { onError(problem.message ?: "Не удалось изменить скорость") }
     }
     private fun open(token: String, message: VolnaMessage, seekMs: Int, play: Boolean) {
-        stop()
+        stop(clearQueue=false)
         val version = generation
+        currentMessage=message
         messageId = message.id; loading = true
         pendingSeek = seekMs; playWhenReady = play
         load = scope.launch {
@@ -211,19 +258,21 @@ internal class NativeVoicePlayback(context: Context, private val onError: (Strin
                 val audio = NativeVoiceRepository.load(app, token, message, waveform = false)
                 if (version != generation) return@launch
                 val next = MediaPlayer().also { player = it }
-                next.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                next.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(if(nativeIsMusic(message))AudioAttributes.CONTENT_TYPE_MUSIC else AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                val gain=if(nativeIsMusic(message))volume else 1f
+                next.setVolume(gain,gain)
                 next.setDataSource(audio.file.absolutePath)
                 next.setOnPreparedListener {
                     if (version != generation || player !== it) return@setOnPreparedListener
                     try {
                         prepared = true; loading = false; durationMs = it.duration.coerceAtLeast(0)
                         positionMs = pendingSeek.coerceIn(0, durationMs)
-                        it.playbackParams = it.playbackParams.setSpeed(speed)
+                        it.playbackParams = android.media.PlaybackParams().setPitch(1f).setSpeed(if(isMusic)musicSpeed else speed)
                         it.seekTo(positionMs.toLong(), MediaPlayer.SEEK_CLOSEST)
-                        if (playWhenReady) { it.start(); playing = true; startTicker() } else it.pause()
+                        if (playWhenReady && requestMusicFocus()) { it.start(); playing = true; startTicker() } else it.pause()
                     } catch (problem: Exception) { fail(problem) }
                 }
-                next.setOnCompletionListener { if (version == generation && player === it) { playing = false; positionMs = 0; ticker?.cancel() } }
+                next.setOnCompletionListener { if (version == generation && player === it) { if(isMusic){if(repeatMode=="one")open(musicToken,message,0,true) else nextMusic(completed=true)}else{playing = false; positionMs = 0; ticker?.cancel()} } }
                 next.setOnErrorListener { failed, _, _ -> if (version == generation && player === failed) fail(IllegalStateException("Не удалось воспроизвести аудио")); true }
                 next.prepareAsync()
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -235,7 +284,9 @@ internal class NativeVoicePlayback(context: Context, private val onError: (Strin
         ticker = scope.launch { while (isActive && playing) { positionMs = runCatching { player?.currentPosition ?: 0 }.getOrDefault(0); delay(100) } }
     }
     private fun fail(problem: Exception) { stop(); onError(problem.message ?: "Не удалось открыть аудио") }
-    fun stop() {
+    fun stop(clearQueue: Boolean = true) {
+        musicFocus?.let{audioManager.abandonAudioFocusRequest(it)};musicFocus=null
+        currentMessage=null;if(clearQueue){queue=emptyList();musicToken=""}
         generation++; load?.cancel(); load = null; ticker?.cancel(); ticker = null
         val old = player; player = null; prepared = false
         old?.setOnPreparedListener(null); old?.setOnCompletionListener(null); old?.setOnErrorListener(null)
@@ -243,7 +294,7 @@ internal class NativeVoicePlayback(context: Context, private val onError: (Strin
         playing = false; loading = false; messageId = 0; positionMs = 0; durationMs = 0
         pendingSeek = 0; playWhenReady = false
     }
-    fun close() { stop(); scope.cancel() }
+    fun close() { stop();runCatching{app.unregisterReceiver(noisyReceiver)}; scope.cancel() }
 }
 
 @Composable

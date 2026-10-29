@@ -41,10 +41,10 @@ test('transcriber sends audio only to the private Whisper service, without a pai
 });
 
 test('transcriber reports local Whisper service errors without exposing internals',async()=>{
- const transcribe=createTranscriber({fetchImpl:async()=>new Response('{}',{status:503})});
+ const transcribe=createTranscriber({fetchImpl:async()=>new Response('{"detail":{"state":"loading"}}',{status:503})});
  await assert.rejects(transcribe({bytes:Buffer.from('x'),name:'voice.webm',mime:'audio/webm'}),error=>error.status===503&&/модель распознавания ещё загружается/.test(error.message));
  const failed=createTranscriber({fetchImpl:async()=>new Response(JSON.stringify({detail:{state:'failed',error:{type:'OSError',private:'secret'}}}),{status:503})});
- await assert.rejects(failed({bytes:Buffer.from('x'),mime:'audio/webm'}),error=>error.status===503&&/временно недоступно/.test(error.message)&&!/secret|OSError/.test(error.message));
+ await assert.rejects(failed({bytes:Buffer.from('x'),mime:'audio/webm'}),error=>error.status===503&&/Не удалось загрузить модель/.test(error.message)&&!/secret|OSError/.test(error.message));
 });
 
 test('transcription distinguishes silent audio and invalid recordings from service outages',async()=>{
@@ -60,4 +60,10 @@ test('transcription retries a transient service or connection failure once and b
  }
  let calls=0;const transcribe=createTranscriber({fetchImpl:async()=>{calls++;return new Response('{}',{status:500});},wait:async()=>{}});
  await assert.rejects(transcribe({bytes:Buffer.from('x')}),e=>e.status===502);assert.equal(calls,2);
+});
+
+test('transcription distinguishes delayed download, full disk and unknown 503 from ordinary loading',async()=>{
+ for(const [detail,phrase]of[[{state:'loading',loading_seconds:400},'Загрузка модели задерживается'],[{state:'failed',error:{errno:28}},'Недостаточно места'],[{state:'failed',error:{errno:13}},'не имеет доступа'],[undefined,'сервис распознавания временно недоступен']]){
+  const transcribe=createTranscriber({fetchImpl:async()=>new Response(JSON.stringify({detail}),{status:503})});await assert.rejects(transcribe({bytes:Buffer.from('x')}),e=>e.status===503&&e.message.includes(phrase));
+ }
 });

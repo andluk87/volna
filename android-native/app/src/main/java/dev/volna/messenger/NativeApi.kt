@@ -107,7 +107,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         if (method == "POST") builder.post((data ?: JSONObject()).toString().toRequestBody(jsonType))
         if (method == "PATCH") builder.patch((data ?: JSONObject()).toString().toRequestBody(jsonType))
         if (method == "DELETE") builder.delete()
-        val client = if (path.endsWith("/transcribe")) http.newBuilder().readTimeout(180, TimeUnit.SECONDS).build() else http
+        val client = if (path.endsWith("/transcribe")) http.newBuilder().readTimeout(960, TimeUnit.SECONDS).build() else http
         val response = client.newCall(builder.build()).execute()
         response.use {
             val text = it.body?.string().orEmpty()

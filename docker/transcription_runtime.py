@@ -1,6 +1,7 @@
 """Load one model in the background without blocking the private HTTP service."""
 import json
 import threading
+import time
 
 
 def error_summary(error):
@@ -24,8 +25,14 @@ def error_summary(error):
 
 
 class ModelRuntime:
-    def __init__(self, factory, retry_seconds=60):
+    def __init__(self, factory, retry_seconds=60, fallback_factory=None, primary_name=None, fallback_name=None):
         self.factory = factory
+        self.fallback_factory = fallback_factory
+        self.primary_name = primary_name
+        self.fallback_name = fallback_name
+        self._active_name = None
+        self._fallback_thread = None
+        self._loading_started = time.monotonic()
         self.retry_seconds = retry_seconds
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -40,7 +47,24 @@ class ModelRuntime:
             if self._thread is not None:
                 return
             self._thread = threading.Thread(target=self._load, name="whisper-loader", daemon=True)
+            if self.fallback_factory:
+                self._fallback_thread = threading.Thread(target=self._load_fallback, name="whisper-cached-fallback", daemon=True)
+                self._fallback_thread.start()
             self._thread.start()
+
+    def _load_fallback(self):
+        try:
+            model = self.fallback_factory()
+            if model is None:
+                return
+            with self._lock:
+                if self._stop.is_set() or self._model is not None:
+                    return
+                self._model = model
+                self._active_name = self.fallback_name
+            print("[whisper] cached_fallback_ready", flush=True)
+        except Exception as error:
+            print(f"[whisper] cached_fallback_unavailable type={type(error).__name__}", flush=True)
 
     def _load(self):
         while not self._stop.is_set():
@@ -48,6 +72,7 @@ class ModelRuntime:
                 self._state = "loading"
                 self._error = None
                 self._attempts += 1
+                self._loading_started = time.monotonic()
             try:
                 model = self.factory()
                 if model is None:
@@ -65,6 +90,7 @@ class ModelRuntime:
                     if self._stop.is_set():
                         return
                     self._model = model
+                    self._active_name = self.primary_name
                     self._state = "ready"
                     self._error = None
                 print("[whisper] model_ready", flush=True)
@@ -72,14 +98,22 @@ class ModelRuntime:
 
     def snapshot(self):
         with self._lock:
-            return {"ready": self._model is not None, "state": self._state,
+            return {"ready": self._model is not None, "state": "degraded" if self._model is not None and self._state != "ready" else self._state,
+                    "primary_state": self._state, "active_model": self._active_name,
+                    "loading_seconds": round(time.monotonic()-self._loading_started, 1) if self._state == "loading" else 0,
                     "attempts": self._attempts, "error": self._error}
 
     def get_model(self):
         with self._lock:
             return self._model
 
+    def get_model_with_name(self):
+        with self._lock:
+            return self._model, self._active_name
+
     def close(self):
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=0.2)
+        if self._fallback_thread is not None:
+            self._fallback_thread.join(timeout=0.2)

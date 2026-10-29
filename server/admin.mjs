@@ -24,7 +24,7 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
  adminPhone=process.env.ADMIN_PHONE||ADMIN_PHONE,origin=process.env.ADMIN_PUBLIC_URL||(process.env.CHAT_DOMAIN?`https://${process.env.CHAT_DOMAIN}:8998`:'http://localhost:8998'),
  sender,smsReady,smsOptions={},clock=Date.now,
  codeGenerator=()=>String(randomInt(0,1000000)).padStart(6,'0'),trustProxy=process.env.AUTH_TRUST_PROXY==='1',cookieSecure=new URL(origin).protocol==='https:',
- serviceStatus=async()=>{const url=new URL(process.env.WHISPER_URL||'http://transcription:8000/transcribe');url.pathname='/health';const r=await fetch(url,{signal:AbortSignal.timeout(2500)});if(!r.ok)throw Error();const v=await r.json();return {available:true,ready:!!v.ready,state:String(v.state||'unknown').slice(0,30),model:String(v.model||'').slice(0,40)};}}){
+ serviceStatus=async()=>{const url=new URL(process.env.WHISPER_URL||'http://transcription:8000/transcribe');url.pathname='/health';const r=await fetch(url,{signal:AbortSignal.timeout(2500)});if(!r.ok)throw Error();const v=await r.json();return {available:true,ready:!!v.ready,state:String(v.state||'unknown').slice(0,30),model:String(v.active_model||v.model||'').slice(0,40)};}}){
  initAdminSchema(db);const sms=createSmsRouter({db,...smsOptions});sender??=sms.send;const isSmsReady=()=>typeof smsReady==='function'?smsReady():smsReady??sms.ready();adminPhone=normalizePhone(adminPhone);origin=new URL(origin).origin;
  const priorPhone=db.prepare("SELECT value FROM admin_meta WHERE key='admin-phone'").get()?.value;
  if(priorPhone&&priorPhone!==adminPhone){db.exec('DELETE FROM admin_sessions; DELETE FROM admin_sms;');}

@@ -289,7 +289,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         val directory = attachmentBatch?.ownedDirectory
         onDispose { directory?.deleteRecursively() }
     }
-    DisposableEffect(attachmentSending, incomingShare?.id, attachmentBatch?.clientId){NativeIdleUpdater.transferBusy=attachmentSending || incomingShare != null || attachmentBatch != null;onDispose{NativeIdleUpdater.transferBusy=false}}
+    DisposableEffect(attachmentSending, incomingShare?.id, attachmentBatch?.clientId,voicePlayback.isMusic){NativeIdleUpdater.transferBusy=attachmentSending || incomingShare != null || attachmentBatch != null || voicePlayback.isMusic;onDispose{NativeIdleUpdater.transferBusy=false}}
     var attachmentStatus by remember { mutableStateOf("") }
     var attachmentError by remember { mutableStateOf("") }
     var pickedChat by remember { mutableStateOf<Long?>(null) }
@@ -360,7 +360,8 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     }
 
     DisposableEffect(Unit) { onDispose { voicePlayback.close() } }
-    LaunchedEffect(token, selectedChat?.id) { voicePlayback.stop() }
+    LaunchedEffect(me?.id) { voicePlayback.stop() }
+    LaunchedEffect(selectedChat?.id) { if(!voicePlayback.isMusic)voicePlayback.stop() }
     LaunchedEffect(callState.call?.id) {
         if (callState.call != null) voicePlayback.stop()
     }
@@ -632,6 +633,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
 
             Surface(Modifier.fillMaxSize().background(Ink).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)), color = Ink) {
             Column(Modifier.fillMaxSize()) {
+            if(voicePlayback.isMusic)NativeMusicBar(voicePlayback)
             if (attachmentSending && attachmentBatch?.voiceFile != null) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Accent)
             if (callState.call != null && callState.minimized) NativeCallScreen(callState, token)
             if ((callState.error.isNotBlank() || callDiagnosticReport.isNotBlank()) && callState.call == null) Column {
@@ -824,6 +826,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     onSendVoice = sendVoice,
                     onPlayAudio = { message ->
                         if (callState.call != null) { error = "Аудиосообщения доступны после завершения звонка"; return@ChatRoomScreen }
+                        if(nativeIsMusic(message))voicePlayback.setMusicQueue(token,messages.toList())
                         voicePlayback.toggle(token, message)
                     },
                     voicePlayback = voicePlayback,

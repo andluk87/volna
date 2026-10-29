@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upgrade the old fast Whisper defaults; retain custom model/language settings."""
+"""Apply the full local Whisper profile; retain custom model paths and language."""
 import os
 import re
 import shutil
@@ -10,14 +10,18 @@ from pathlib import Path
 def improve(text):
     values = {}
     for line in text.splitlines():
-        match = re.match(r'^\s*(WHISPER_MODEL|WHISPER_BEAM_SIZE)\s*=\s*(.*?)\s*$', line)
+        match = re.match(r'^\s*(WHISPER_MODEL|WHISPER_BEAM_SIZE|WHISPER_COMPUTE_TYPE|WHISPER_CPU_THREADS)\s*=\s*(.*?)\s*$', line)
         if match:
             values[match[1]] = match[2].split(' #', 1)[0].strip().strip('\"\'')
     patches = {}
-    if values.get('WHISPER_MODEL', '') in ('', 'tiny', 'base'):
-        patches['WHISPER_MODEL'] = 'small'
+    if values.get('WHISPER_MODEL', '') in ('', 'tiny', 'base', 'small', 'medium', 'large-v1', 'large-v2', 'large'):
+        patches['WHISPER_MODEL'] = 'large-v3'
     if values.get('WHISPER_BEAM_SIZE', '') in ('', '1'):
         patches['WHISPER_BEAM_SIZE'] = '5'
+    if values.get('WHISPER_COMPUTE_TYPE', '') in ('', 'int8', 'int8_float32'):
+        patches['WHISPER_COMPUTE_TYPE'] = 'float32'
+    if values.get('WHISPER_CPU_THREADS', '') in ('', '4'):
+        patches['WHISPER_CPU_THREADS'] = '8'
     lines = text.splitlines()
     for key, value in patches.items():
         found = False

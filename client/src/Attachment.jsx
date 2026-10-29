@@ -1,3 +1,4 @@
+import {MusicBubble} from './MusicPlayer';
 import {uploadSize} from './upload-transport.mjs';
 import './uploads.css';
 import {mediaCache} from './media-repository.mjs';
@@ -16,7 +17,7 @@ export default function Attachment({file,token,gallery=[],messageId=null,transcr
  const [url,setUrl]=useState(''),[error,setError]=useState(''),[attempt,setAttempt]=useState(0),[loading,setLoading]=useState(false),[preview,setPreview]=useState(false),[sharing,setSharing]=useState(false);
  const photo=file.mime.startsWith('image/'),audio=file.mime.startsWith('audio/'),voice=audio&&file.name.startsWith('Голосовое-');
  const expression=expressionKind==='sticker'||expressionKind==='gif';
- const auto=(photo||audio||expression)&&file.size<=(expression?10:5)*1024*1024;
+ const auto=(photo||voice||expression)&&file.size<=(expression?10:5)*1024*1024;
  useEffect(()=>{let object;const controller=new AbortController();if(auto&&visible||attempt){setLoading(true);fileBlob(file.id,token,controller.signal).then(blob=>{if(messageId&&!expression&&(photo||file.mime.startsWith('video/')))mediaCache.put({...file,messageId},token,blob);object=URL.createObjectURL(blob);setUrl(object);setError('');}).catch(e=>{if(e.name!=='AbortError')setError(e.message);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});}return()=>{controller.abort();if(object)URL.revokeObjectURL(object);};},[file.id,token,attempt,auto,visible]);
  function openMedia(){const fileContext={...file,messageId:expression?null:messageId,viewerStandalone:expression};if(photoActions?.open)photoActions.open(fileContext,expression?[]:gallery,url,root.current?.getBoundingClientRect().toJSON());else setPreview(true);}
  async function share(){setSharing(true);try{await shareMedia(url,file);}catch(e){setError(e.message||'Не удалось открыть файл');}finally{setSharing(false);}}
@@ -24,7 +25,7 @@ export default function Attachment({file,token,gallery=[],messageId=null,transcr
  return <div ref={root} className={'attachment '+(photo?'photo-attachment':audio?'audio-attachment':'document-attachment')+(expression?' expression-attachment':'')}>
  {error&&<button className="media-error" onClick={()=>setAttempt(v=>v+1)}>Повторить: {error}</button>}
  {photo&&(url?<button className="image-open" aria-label={'Открыть изображение '+file.name} onClick={openMedia}><img src={url} alt={file.name} loading="lazy" onError={()=>setError('Изображение не поддерживается')}/></button>:<button className="photo-placeholder" disabled={loading} onClick={()=>setAttempt(v=>v+1)}><Icon name="photo"/>{loading?'Загружаем фото…':'Загрузить фото'}</button>)}
- {audio&&(url?<AudioPlayer url={url} name={file.name} voice={voice} messageId={voice?messageId:null} token={token} transcript={voice?transcript:''}/>:<button className="voice-placeholder" disabled={loading} onClick={()=>setAttempt(v=>v+1)}><Icon name="play"/>{loading?'Загрузка аудио…':voice?'Загрузить голосовое':'Загрузить аудио'}</button>)}
+ {audio&&(voice?(url?<AudioPlayer url={url} name={file.name} voice={voice} messageId={voice?messageId:null} token={token} transcript={voice?transcript:''}/>:<button className="voice-placeholder" disabled={loading} onClick={()=>setAttempt(v=>v+1)}><Icon name="play"/>{loading?'Загрузка аудио…':voice?'Загрузить голосовое':'Загрузить аудио'}</button>):<MusicBubble file={file} token={token} messageId={messageId}/>)}
  {!url&&file.mime.startsWith('video/')&&!expression&&<button className="video-placeholder" aria-label={'Открыть видео '+file.name} disabled={loading} onClick={openMedia}><Icon name="play"/><span>Открыть видео</span></button>}
  {url&&file.mime.startsWith('video/')&&!expression&&<button onClick={openMedia}>Открыть видео</button>}
  {url&&file.mime.startsWith('video/')&&<video src={url} controls={!expression} autoPlay={expression} loop={expression} muted={expression} playsInline preload="metadata"/>}
