@@ -253,7 +253,11 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
         if(!row.attachment_id)throw error(400,'В сообщении нет аудио');
         const file=db.prepare('SELECT * FROM attachments WHERE id=?').get(row.attachment_id);
         if(!file||!file.mime.startsWith('audio/')||!file.name.startsWith('Голосовое-'))throw error(400,'Распознавание доступно только для голосовых сообщений');
-        if(row.transcript){json(res,200,{transcript:row.transcript});return true;}
+        const options=await body(req);member(row.chat_id,uid);
+        if(options.force!==undefined&&typeof options.force!=='boolean')throw error(400,'Некорректный режим распознавания');
+        const current=get(row.id);if(!current||current.deleted_at)throw error(410,'Сообщение удалено');
+        if(row.id<=cutoff(row.chat_id,uid))throw error(404,'Сообщение не найдено');
+        if(current.transcript&&!options.force&&!pendingTranscriptions.has(row.id)){json(res,200,{transcript:current.transcript});return true;}
         if(!transcriber)throw error(503,'Распознавание на сервере не настроено');
         let job=pendingTranscriptions.get(row.id);
         if(!job){

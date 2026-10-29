@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'docker'))
 import uvicorn
-from transcription_service import create_app, load_model
+from transcription_service import create_app, load_model, MODEL_NAME, BEAM_SIZE
 
 
 @contextmanager
@@ -134,12 +134,16 @@ class HTTPTest(unittest.TestCase):
             def transcribe(self, path, **options):
                 paths.append(path)
                 self_test.assertEqual(Path(path).read_bytes(), b'voice data')
+                self_test.assertEqual(options['beam_size'], BEAM_SIZE)
                 self_test.assertTrue(options['vad_filter'])
                 self_test.assertFalse(options['condition_on_previous_text'])
                 return iter([SimpleNamespace(text=' Привет.')]), None
         self_test = self
         with running_app(FakeModel) as (base, runtime):
             self.assertEqual(request(base, '/ready')[0], 200)
+            health = request(base, '/health')[1]
+            self.assertEqual(health['model'], MODEL_NAME)
+            self.assertEqual(health['beam_size'], BEAM_SIZE)
             status, body = request(base, '/transcribe', b'voice data')
             self.assertEqual(status, 200)
             self.assertEqual(body, {'text': 'Привет.'})

@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync,writeFileSync,readFileSync,readdirSync,statSync,rmSync} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+test('Whisper quality migration upgrades old defaults, preserves custom choices and backs up the environment privately',()=>{
+ const script=new URL('../scripts/improve-transcription.py',import.meta.url).pathname;
+ for(const [source,expected] of [['TURN_SECRET=keep-me\nWHISPER_MODEL=base\nWHISPER_BEAM_SIZE=1\nWHISPER_LANGUAGE=auto\n',['WHISPER_MODEL=small','WHISPER_BEAM_SIZE=5']],['WHISPER_MODEL=medium\nWHISPER_BEAM_SIZE=3\n',['WHISPER_MODEL=medium','WHISPER_BEAM_SIZE=3']]]){
+  const dir=mkdtempSync(path.join(os.tmpdir(),'volna-whisper-profile-'));
+  try{writeFileSync(path.join(dir,'.env'),source,{mode:0o600});const run=()=>spawnSync('python3',[script],{cwd:dir,encoding:'utf8'});const result=run();assert.equal(result.status,0,result.stderr);const changed=readFileSync(path.join(dir,'.env'),'utf8');for(const line of expected)assert.ok(changed.includes(line));if(source.includes('TURN_SECRET')){assert.ok(changed.includes('TURN_SECRET=keep-me'));assert.ok(changed.includes('WHISPER_LANGUAGE=auto'));const backup=path.join(dir,'backups',readdirSync(path.join(dir,'backups'))[0]);assert.equal(readFileSync(backup,'utf8'),source);assert.equal(statSync(backup).mode&0o777,0o600);assert.ok(!result.stdout.includes('keep-me'));}assert.equal(run().status,0);assert.equal(readFileSync(path.join(dir,'.env'),'utf8'),changed);}finally{rmSync(dir,{recursive:true,force:true});}
+ }
+});

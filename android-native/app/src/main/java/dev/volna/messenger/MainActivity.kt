@@ -838,7 +838,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                                         "edit" -> api.updateMessage(session, message.id, value)
                                         "delete" -> api.deleteMessage(session, message.id)
                                         "pin" -> api.pin(session, message.id, !message.pinned)
-                                        "transcribe" -> message.copy(transcript = api.transcribe(session, message.id))
+                                        "transcribe" -> message.copy(transcript = api.transcribe(session, message.id, force = value == "force"))
                                         "react" -> api.react(session, message.id, value, message.reactions.none { it.emoji == value && it.userId == me?.id })
                                         else -> message
                                     }

@@ -11,3 +11,5 @@
 @keyframes transcript-appear{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:760px){.transcript-text,.transcript-error{margin-left:48px}}
 @media(prefers-reduced-motion:reduce){.transcribe-button,.transcript-text{transition:none;animation:none}.transcribe-button.is-loading:before{animation-duration:2s}}
+
+.transcript-retry{font-size:12px;color:var(--accent);padding:4px 0 8px}.transcript-panel .transcript-text{margin-bottom:4px}

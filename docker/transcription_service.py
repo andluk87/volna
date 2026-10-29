@@ -9,10 +9,10 @@ from pathlib import Path
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from transcription_runtime import ModelRuntime
 
-MODEL_NAME = os.getenv("WHISPER_MODEL", "base")
+MODEL_NAME = os.getenv("WHISPER_MODEL", "small")
 THREADS = max(1, min(8, int(os.getenv("WHISPER_CPU_THREADS", "4"))))
 COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-BEAM_SIZE = max(1, min(5, int(os.getenv("WHISPER_BEAM_SIZE", "1"))))
+BEAM_SIZE = max(1, min(5, int(os.getenv("WHISPER_BEAM_SIZE", "5"))))
 LANGUAGE = os.getenv("WHISPER_LANGUAGE", "ru").strip().lower()
 if LANGUAGE in ("", "auto", "detect"):
     LANGUAGE = None
@@ -82,7 +82,7 @@ def create_app(model_factory=load_model, retry_seconds=60):
     @app.get("/health")
     async def health():
         # Docker checks HTTP service liveness, not completion of a model download.
-        return {"ok": True, "model": MODEL_NAME, **runtime.snapshot()}
+        return {"ok": True, "model": MODEL_NAME, "beam_size": BEAM_SIZE, "language": LANGUAGE or "auto", **runtime.snapshot()}
 
     @app.get("/ready")
     async def ready():

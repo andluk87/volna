@@ -299,7 +299,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
     fun pin(token: String, id: Long, pinned: Boolean) = parseMessage(call("/messages/$id/pin", "POST", token, JSONObject().put("pinned", pinned)))
     fun forward(token: String, messageId: Long, chatId: Long, clientId: String = UUID.randomUUID().toString().replace("-", "")): VolnaMessage = parseMessage(call("/messages/$messageId/forward", "POST", token,
         JSONObject().put("chat_id", chatId).put("client_id", clientId)))
-    fun transcribe(token: String, id: Long): String = call("/messages/$id/transcribe", "POST", token).optString("transcript")
+    fun transcribe(token: String, id: Long, force: Boolean = false): String = call("/messages/$id/transcribe", "POST", token, JSONObject().put("force",force)).optString("transcript")
 
     fun upload(token: String, fileName: String, mime: String, bytes: ByteArray): String {
         val request = Request.Builder().url("$base/api/uploads").header("Authorization", "Bearer $token")

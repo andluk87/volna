@@ -8,8 +8,8 @@ import {createApp,fixtureFetch as fetch} from './phone-fixture.mjs';
 import {createTranscriber} from '../server/transcription.mjs';
 
 test('server transcription stores once, is chat-authorized and returns text in message history',async()=>{
- const dir=mkdtempSync(join(tmpdir(),'volna-transcription-'));let calls=0,received;
- const app=createApp({database:join(dir,'db'),uploads:join(dir,'uploads'),transcriber:async input=>{calls++;received=input;return 'Привет, это проверка.';}});
+ const dir=mkdtempSync(join(tmpdir(),'volna-transcription-'));let calls=0,received,failRecognition=false;
+ const app=createApp({database:join(dir,'db'),uploads:join(dir,'uploads'),transcriber:async input=>{calls++;received=input;if(failRecognition)throw Object.assign(Error('Сервис занят'),{status:503});return calls===1?'Привет, это проверка.':'Привет, исправленный текст.';}});
  await new Promise(r=>app.server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${app.server.address().port}/api`;
  const call=async(path,token,data)=>{const res=await fetch(base+path,{method:data===undefined?'GET':'POST',headers:{...(token?{Authorization:'Bearer '+token}:{}),...(data===undefined?{}:{'Content-Type':'application/json'})},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:res.status,data:await res.json()};};
  try{
@@ -22,6 +22,11 @@ test('server transcription stores once, is chat-authorized and returns text in m
   assert.equal(calls,1);assert.deepEqual(received.bytes,Buffer.from('fake audio bytes'));assert.equal(received.mime,'audio/webm');
   assert.equal((await call(`/messages/${sent.data.id}/transcribe`,alice.token,{})).data.transcript,result.data.transcript);assert.equal(calls,1);
   assert.equal((await call(`/chats/${chat}/messages`,bob.token)).data[0].transcript,result.data.transcript);
+  assert.equal((await call(`/messages/${sent.data.id}/transcribe`,eve.token,{force:true})).status,404);
+  assert.equal((await call(`/messages/${sent.data.id}/transcribe`,bob.token,{force:'yes'})).status,400);
+  const corrected=await call(`/messages/${sent.data.id}/transcribe`,bob.token,{force:true});assert.equal(corrected.status,200);assert.equal(corrected.data.transcript,'Привет, исправленный текст.');assert.equal(calls,2);
+  failRecognition=true;assert.equal((await call(`/messages/${sent.data.id}/transcribe`,bob.token,{force:true})).status,503);
+  assert.equal((await call(`/messages/${sent.data.id}`,bob.token)).data.transcript,'Привет, исправленный текст.');
   assert.equal((await call(`/messages/${sent.data.id}/delete`,alice.token,{})).status,200);
   assert.equal((await call(`/messages/${sent.data.id}`,bob.token)).data.transcript,null);
  }finally{await app.close();rmSync(dir,{recursive:true,force:true});}
