@@ -17,8 +17,9 @@ import java.net.URI
 data class VolnaUser(
     val id: Long, val username: String, val name: String, val avatarUrl: String? = null,
     val bio: String = "", val phone: String = "", val online: Boolean = false,
-    val firstName: String = "", val lastName: String = "", val profileSetupRequired: Boolean = false
+    val firstName: String = "", val lastName: String = "", val profileSetupRequired: Boolean = false, val lastSeen: Long = 0
 )
+data class VolnaProfilePost(val id: Long, val userId: Long, val text: String, val created: Long, val archived: Boolean, val fileId: String? = null, val fileName: String = "", val mime: String = "", val size: Long = 0)
 data class VolnaUpdate(val versionCode: Long, val versionName: String, val apkPath: String, val sha256: String)
 data class VolnaChat(
     val id: Long,
@@ -377,6 +378,11 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
     fun readCalls(token: String, chatId: Long, ids: List<String>) {
         if (ids.isNotEmpty()) call("/calls/read", "POST", token, JSONObject().put("chat_id", chatId).put("call_ids", JSONArray(ids)))
     }
+    fun profilePosts(token: String, userId: Long, archive: Boolean = false, before: Long? = null): List<VolnaProfilePost> = arrayCall("/users/$userId/posts?archive=${if (archive) 1 else 0}" + (before?.let { "&before=$it" } ?: ""), token).let { rows -> (0 until rows.length()).map { parseProfilePost(rows.getJSONObject(it)) } }
+    fun publishPost(token: String, text: String, fileId: String?, clientId: String): VolnaProfilePost = parseProfilePost(call("/posts", "POST", token, JSONObject().put("text", text).put("attachment_id", fileId ?: JSONObject.NULL).put("client_id", clientId)))
+    fun archivePost(token: String, id: Long, archive: Boolean) { call("/posts/$id/archive", "POST", token, JSONObject().put("archived", archive)) }
+    fun deletePost(token: String, id: Long) { call("/posts/$id/delete", "POST", token) }
+    internal fun parseProfilePost(row: JSONObject): VolnaProfilePost { val file = row.optJSONObject("attachment"); return VolnaProfilePost(row.getLong("id"), row.getLong("user_id"), row.optString("text"), row.getLong("created"), row.optInt("archived") == 1, file?.optString("id"), file?.optString("name").orEmpty(), file?.optString("mime").orEmpty(), file?.optLong("size") ?: 0) }
     fun sessions(token: String): List<VolnaDeviceSession> = arrayCall("/sessions", token).let { rows ->
         (0 until rows.length()).map { i -> val row = rows.getJSONObject(i); VolnaDeviceSession(row.getString("id"), row.optString("label"), row.optBoolean("current"), row.optLong("last_seen"), row.getLong("expires")) }
     }
@@ -473,7 +479,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         return VolnaUser(
             id = row.optLong("id"), username = row.optString("username"), name = row.optString("name", row.optString("username")),
             avatarUrl = row.optString("avatar_url").takeIf { it.isNotBlank() && it != "null" },
-            bio = row.optString("bio"), phone = nullableText(row,"phone").orEmpty(), online = row.optBoolean("online"), firstName = row.optString("first_name"), lastName = row.optString("last_name"), profileSetupRequired = row.optBoolean("profile_setup_required")
+            bio = row.optString("bio"), phone = nullableText(row,"phone").orEmpty(), online = row.optBoolean("online"), firstName = row.optString("first_name"), lastName = row.optString("last_name"), profileSetupRequired = row.optBoolean("profile_setup_required"), lastSeen = row.optLong("last_seen")
         )
     }
 

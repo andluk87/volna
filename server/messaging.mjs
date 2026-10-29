@@ -91,7 +91,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     // Startup must initialize expressions before collecting unreferenced files.
     const expressionService=expressions();
     if(!expressionService)return;
-    const unused=db.prepare('SELECT id FROM attachments WHERE created_at<? AND NOT EXISTS (SELECT 1 FROM messages WHERE attachment_id=attachments.id) AND NOT EXISTS (SELECT 1 FROM users WHERE avatar_id=attachments.id)').all(Date.now()-86400000);
+    const unused=db.prepare('SELECT id FROM attachments WHERE created_at<? AND NOT EXISTS (SELECT 1 FROM messages WHERE attachment_id=attachments.id) AND NOT EXISTS (SELECT 1 FROM users WHERE avatar_id=attachments.id) AND NOT EXISTS (SELECT 1 FROM profile_posts WHERE attachment_id=attachments.id AND deleted=0)').all(Date.now()-86400000);
     for(const file of unused){
       if(expressionService.fileUsed(file.id))continue;
       // Let SQLite reject any additional references before touching the file.
@@ -147,7 +147,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(discard&&method==='POST'){
       const file=db.prepare('SELECT * FROM attachments WHERE id=? AND owner_id=?').get(discard[1],uid);
       if(!file||file.admin_blocked)throw error(404,'Файл не найден');
-      if(db.prepare('SELECT 1 FROM messages WHERE attachment_id=?').get(file.id)||db.prepare('SELECT 1 FROM users WHERE avatar_id=?').get(file.id)||expressions()?.fileUsed(file.id))throw error(409,'Файл уже используется');
+      if(db.prepare('SELECT 1 FROM messages WHERE attachment_id=?').get(file.id)||db.prepare('SELECT 1 FROM users WHERE avatar_id=?').get(file.id)||db.prepare('SELECT 1 FROM profile_posts WHERE attachment_id=? AND deleted=0').get(file.id)||expressions()?.fileUsed(file.id))throw error(409,'Файл уже используется');
       try{unlinkSync(join(uploads,file.id));}catch(e){if(e.code!=='ENOENT')throw e;}
       db.prepare('DELETE FROM attachments WHERE id=?').run(file.id);json(res,200,{ok:true});return true;
     }
@@ -157,9 +157,10 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       const attached=db.prepare('SELECT 1 FROM messages WHERE attachment_id=?').get(id);
       const accessible=db.prepare('SELECT 1 FROM messages m JOIN members c ON c.chat_id=m.chat_id JOIN chats ch ON ch.id=m.chat_id LEFT JOIN chat_visibility v ON v.chat_id=m.chat_id AND v.user_id=c.user_id WHERE m.attachment_id=? AND m.deleted_at IS NULL AND c.user_id=? AND m.id>COALESCE(v.hidden_before,0) AND ch.admin_deleted=0 AND ch.topic_deleted=0 LIMIT 1').get(id,uid);
       if(url.searchParams.has('message_id')){const mid=Number(url.searchParams.get('message_id'));if(!Number.isSafeInteger(mid)||mid<1)throw error(400,'Некорректное сообщение');const message=authorized(mid,uid);if(message.deleted_at||message.attachment_id!==id)throw error(404,'Медиа недоступно');}
+      const post=db.prepare('SELECT 1 FROM profile_posts p JOIN users u ON u.id=p.user_id WHERE p.attachment_id=? AND p.deleted=0 AND u.admin_blocked=0 AND (p.archived=0 OR p.user_id=?) LIMIT 1').get(id,uid);
       const avatar=db.prepare('SELECT 1 FROM users WHERE avatar_id=? AND avatar_hidden=0').get(id);
       if(expressions()?.blockedFile(id))throw error(404,'Эмодзи заблокирован');
-      if(!file||file.admin_blocked||(!accessible&&!avatar&&!expressions()?.fileAccessible(id,uid)&&!(file.owner_id===uid&&!attached)))throw error(404,'Файл недоступен');
+      if(!file||file.admin_blocked||(!accessible&&!avatar&&!post&&!expressions()?.fileAccessible(id,uid)&&!(file.owner_id===uid&&!attached)))throw error(404,'Файл недоступен');
       let bytes;try{bytes=readFileSync(join(uploads,id));}catch{throw error(404,'Файл отсутствует в хранилище');}
       res.writeHead(200,{'Content-Type':file.mime,'Content-Length':bytes.length,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,'Cache-Control':'private, no-store','Content-Security-Policy':"default-src 'none'; sandbox"});res.end(bytes);return true;
     }

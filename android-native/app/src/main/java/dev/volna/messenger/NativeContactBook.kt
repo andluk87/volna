@@ -25,6 +25,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -162,7 +166,7 @@ internal fun NativeContactSyncHost(account: Long, token: String, api: NativeApi)
 @Composable
 internal fun NativeAccountContactsScreen(account: Long, token: String, api: NativeApi, onPerson: (VolnaUser) -> Unit, onProfile: (Long) -> Unit, onCall: (VolnaChat) -> Unit, onVideo: (VolnaChat) -> Unit,onRecentCalls: (() -> Unit)?=null,bottomInset: androidx.compose.ui.unit.Dp=80.dp) {
     val context = LocalContext.current; val store = remember(account) { NativeContactBook(context, account) }; val scope = rememberCoroutineScope()
-    var book by remember(account) { mutableStateOf(store.cached()) }; var query by remember { mutableStateOf("") }
+    var book by remember(account) { mutableStateOf(store.cached()) }; var query by rememberSaveable(account) { mutableStateOf("") }; var sortByName by rememberSaveable(account) { mutableStateOf(true) }; var sorting by remember { mutableStateOf(false) }
     var config by remember { mutableStateOf(false) }; var manual by remember { mutableStateOf(false) }; var name by remember { mutableStateOf("") }; var number by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<JSONObject?>(null) }; var personalName by remember { mutableStateOf("") }; var purge by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }; var found by remember { mutableStateOf(emptyList<VolnaUser>()) }
@@ -179,22 +183,48 @@ internal fun NativeAccountContactsScreen(account: Long, token: String, api: Nati
     fun call(person: VolnaUser, video: Boolean) { scope.launch { try { val id = withContext(Dispatchers.IO) { api.startChat(token, person.id) }; val chat = VolnaChat(id, person.name, person.username, "", "", 0, false, person.id); if (video) onVideo(chat) else onCall(chat) } catch (problem: Exception) { error = problem.message.orEmpty() } } }
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
-        NativeSearchField(query, { query = it }, "Имя, номер или @username", compact = true)
+        NativeSearchField(query, { query = it }, "Поиск контактов", compact = true)
         TextButton(onClick={try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,"Присоединяйся к VLN: ${BuildConfig.API_BASE_URL}/download/volna-android.apk"),"Пригласить друзей"))}catch(problem:Exception){error=problem.message.orEmpty()}},modifier=Modifier.fillMaxWidth()){Icon(Icons.Outlined.PersonAdd,null);NativeText("Пригласить друзей",Modifier.weight(1f).padding(start=12.dp))}
         if(onRecentCalls!=null)TextButton(onClick=onRecentCalls,modifier=Modifier.fillMaxWidth()){Icon(Icons.Outlined.History,null);NativeText("Недавние звонки",Modifier.weight(1f).padding(start=12.dp))}
-        Row { TextButton(onClick = { config = true }) { NativeText("Контакты и синхронизация") }; TextButton(onClick = { name = ""; number = ""; manual = true }) { Icon(Icons.Outlined.Add, null) } }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) {
+                TextButton(onClick = { sorting = true }) { NativeText(if (sortByName) "Сортировка по имени" else "Сортировка по времени захода", color = Accent, fontSize = 12.sp) }
+                DropdownMenu(sorting, { sorting = false }) {
+                    DropdownMenuItem(text = { NativeText("По имени") }, onClick = { sortByName = true; sorting = false })
+                    DropdownMenuItem(text = { NativeText("По времени захода") }, onClick = { sortByName = false; sorting = false })
+                }
+            }
+            IconButton(onClick = { config = true }) { Icon(Icons.Outlined.Sync, "Контакты и синхронизация", tint = Muted) }
+        }
         if (error.isNotBlank()) NativeConnectionNotice(error) { load(true) }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = bottomInset+20.dp)) {
             for ((registered, label) in listOf(true to "Пользователи VLN", false to "Пригласить в VLN")) {
-            val section = visible.filter { (it.optJSONObject("user") != null) == registered }
+            val section = visible.filter { (it.optJSONObject("user") != null) == registered }.sortedWith(
+                if (sortByName) compareBy { title(it).lowercase(Locale.ROOT) }
+                else compareByDescending<JSONObject> { it.optJSONObject("user")?.optBoolean("online") == true }.thenByDescending { it.optJSONObject("user")?.optLong("last_seen") ?: 0L }.thenBy { title(it).lowercase(Locale.ROOT) })
             if (section.isNotEmpty()) item { NativeText(label, Modifier.padding(12.dp), color = Muted) }
             items(section, key = { it.getString("contact_id") }) { row ->
                 val person = row.optJSONObject("user")?.let(api::contactUser)
-                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Row { Avatar(title(row), person?.id ?: row.getString("contact_id").hashCode().toLong(), person?.avatarUrl, token, size = 40.dp); Spacer(Modifier.width(10.dp)); NativeText(title(row), Modifier.weight(1f).clickable { if (person != null) onProfile(person.id) }, fontSize = 16.sp); IconButton(onClick = { editing = row; personalName = row.optString("custom_name") }) { Icon(Icons.Outlined.Edit, "Изменить имя") } }
-                    if (person != null) Row { TextButton(onClick = { onPerson(person) }) { NativeText("Написать") }; IconButton(onClick = { call(person, false) }) { Icon(Icons.Outlined.Call, "Позвонить") }; IconButton(onClick = { call(person, true) }) { Icon(Icons.Outlined.Videocam, "Видеозвонок") } }
-                    else TextButton(onClick = { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "Присоединяйся к VLN: ${BuildConfig.API_BASE_URL}/download/volna-android.apk"), "Пригласить в VLN")) }) { NativeText("Пригласить") }
+                var actions by remember(row.getString("contact_id")) { mutableStateOf(false) }
+                Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).clickable { if (person != null) onPerson(person) else actions = true }.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.clickable { if (person != null) onProfile(person.id) }) { Avatar(title(row), person?.id ?: row.getString("contact_id").hashCode().toLong(), person?.avatarUrl, token, size = 42.dp) }
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        NativeText(title(row), color = TextMain, fontSize = 15.sp, lineHeight = 20.sp, letterSpacing = 0.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        NativeText(if (person == null) "Пригласить в VLN" else if (person.online) "в сети" else if (person.lastSeen > 0) "был(а) " + java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(person.lastSeen)) else "Статус недоступен", color = if (person?.online == true) Accent else Muted, fontSize = 12.sp, lineHeight = 16.sp)
+                    }
+                    Box {
+                        IconButton(onClick = { actions = true }) { Icon(Icons.Outlined.MoreVert, "Действия контакта ${title(row)}", tint = Muted, modifier = Modifier.size(20.dp)) }
+                        DropdownMenu(actions, { actions = false }) {
+                            if (person != null) {
+                                DropdownMenuItem(text = { NativeText("Написать") }, onClick = { actions = false; onPerson(person) })
+                                DropdownMenuItem(text = { NativeText("Профиль") }, onClick = { actions = false; onProfile(person.id) })
+                                DropdownMenuItem(text = { NativeText("Позвонить") }, onClick = { actions = false; call(person, false) })
+                                DropdownMenuItem(text = { NativeText("Видеозвонок") }, onClick = { actions = false; call(person, true) })
+                            } else DropdownMenuItem(text = { NativeText("Пригласить") }, onClick = { actions = false; context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "Присоединяйся к VLN: ${BuildConfig.API_BASE_URL}/download/volna-android.apk"), "Пригласить в VLN")) })
+                            DropdownMenuItem(text = { NativeText("Изменить имя") }, onClick = { actions = false; editing = row; personalName = row.optString("custom_name") })
+                        }
+                    }
                 }
             }
             }

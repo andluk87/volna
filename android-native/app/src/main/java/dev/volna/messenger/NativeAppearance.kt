@@ -35,7 +35,7 @@ import androidx.compose.ui.window.DialogProperties
 
 data class NativeAppearance(
     val theme: String = "system", val textScale: Float = 1f, val font: String = "system",
-    val density: String = "standard", val radius: Int = 16, val accent: Long = 0xFF58B7E8,
+    val density: String = "standard", val radius: Int = 16, val accent: Long = 0xFF53A9E8,
     val avatars: Boolean = false, val timeOnTap: Boolean = false,
     val background: String = "plain", val outgoing: Long = 0, val uiScale: Float = 1f,
     val animations: Boolean = true, val powerSaving: Boolean = false,
@@ -64,7 +64,7 @@ data class NativeAppearance(
             textScale = prefs.getFloat("textScale", 1f).takeIf { it.isFinite() }?.coerceIn(0.75f, 1.60f) ?: 1f,
             font = prefs.getString("font", "system").takeIf { it in listOf("system", "neutral", "serif", "condensed", "mono") } ?: "system",
             density = prefs.getString("density", "standard").takeIf { it in listOf("minimal", "compact", "standard", "large") } ?: "standard",
-            radius = prefs.getInt("radius", 16).coerceIn(0, 30), accent = prefs.getLong("accent", 0xFF58B7E8),
+            radius = prefs.getInt("radius", 16).coerceIn(0, 30), accent = prefs.getLong("accent", 0xFF53A9E8),
             avatars = prefs.getBoolean("avatars", false), timeOnTap = prefs.getBoolean("timeOnTap", false),
             background = prefs.getString("background", "plain").takeIf { it in listOf("plain", "blue", "mint", "violet") } ?: "plain",
             outgoing = prefs.getLong("outgoing", 0), uiScale = prefs.getFloat("uiScale", 1f).takeIf { it.isFinite() }?.coerceIn(0.9f, 1.15f) ?: 1f,
@@ -87,8 +87,8 @@ val LocalNativeAppearance = staticCompositionLocalOf { NativeAppearance() }
 internal val LocalMotionEnabled = staticCompositionLocalOf { true }
 private val LocalNativeBaseDensity = staticCompositionLocalOf<Density?> { null }
 internal val LocalVolnaPalette = staticCompositionLocalOf {
-    VolnaPalette(Color(0xFF0E1823), Color(0xFF1E2B39), Color(0xFF273746), Color(0xFF2D4053), Color(0xFFEDF3F8),
-        Color(0xFF8295A7), Color(0xFF58B7E8), Color(0xFF2B5278), Color(0xFF1B2B39))
+    VolnaPalette(Color(0xFF17212B), Color(0xFF202B36), Color(0xFF202B36), Color(0xFF293744), Color(0xFFFFFFFF),
+        Color(0xFF8D9BA8), Color(0xFF53A9E8), Color(0xFF2B5278), Color(0xFF1B2B39))
 }
 internal val Ink: Color @Composable get() = LocalVolnaPalette.current.ink
 internal val Panel: Color @Composable get() = LocalVolnaPalette.current.panel
@@ -119,8 +119,8 @@ fun VolnaTheme(appearance: NativeAppearance, updateSystemBars: Boolean = true, c
     val systemMotion = nativeSystemMotionEnabled()
     val accent = Color((variant?.accent ?: appearance.accent).toInt())
     val outgoingAccent = if (appearance.outgoing == 0L) accent else Color(appearance.outgoing.toInt())
-    val defaultPalette = if (dark) VolnaPalette(Color(0xFF0E1823), Color(0xFF1E2B39), Color(0xFF273746), Color(0xFF2D4053),
-        Color(0xFFEDF3F8), Color(0xFF9AABB9), accent, if (appearance.outgoing == 0L) Color(0xFF3C6087) else lerp(Color(0xFF1E2B39), outgoingAccent, 0.28f), Color(0xFF1E2B39))
+    val defaultPalette = if (dark) VolnaPalette(Color(0xFF17212B), Color(0xFF202B36), Color(0xFF202B36), Color(0xFF293744),
+        Color(0xFFFFFFFF), Color(0xFF8D9BA8), accent, if (appearance.outgoing == 0L) Color(0xFF3C6087) else lerp(Color(0xFF1E2B39), outgoingAccent, 0.28f), Color(0xFF1E2B39))
     else VolnaPalette(Color(0xFFF0F4F8), Color.White, Color(0xFFE7EDF3), Color(0xFFDCE8F0), Color(0xFF17212B),
         Color(0xFF536A7C), lerp(accent, Color(0xFF153F62), 0.25f), lerp(Color.White, outgoingAccent, 0.23f), Color.White)
     val rawTarget = if (variant == null) defaultPalette else VolnaPalette(Color(variant.wallpaper.colors.first().toInt()), Color(variant.surface.toInt()), Color(variant.secondarySurface.toInt()),

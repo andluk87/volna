@@ -32,7 +32,7 @@ class NativeHomeReferenceUiTest {
   NativeCredentials.initialize(org.robolectric.RuntimeEnvironment.getApplication())
   android.security.NetworkSecurityPolicy::class.java.getDeclaredMethod("setCleartextTrafficPermitted",Boolean::class.javaPrimitiveType).invoke(android.security.NetworkSecurityPolicy.getInstance(),true)
   server=java.net.ServerSocket(0,8,java.net.InetAddress.getByName("127.0.0.1"))
-  kotlin.concurrent.thread(isDaemon=true){while(!server.isClosed)try{server.accept().use{socket->val input=socket.getInputStream().bufferedReader();val line=input.readLine().orEmpty();var header=input.readLine();while(!header.isNullOrEmpty())header=input.readLine();val result=when{line.contains("/folders")->"{\"version\":1,\"folders\":[{\"id\":\"all\",\"name\":\"Все чаты\",\"rule\":\"all\",\"chats\":[]},{\"id\":\"work\",\"name\":\"Работа\",\"chats\":[2,3]}]}";line.contains("/users/")->"{\"id\":1,\"name\":\"Андрей\",\"username\":\"andrey\",\"bio\":\"О себе\"}";else->"[]"};val bytes=result.toByteArray();socket.getOutputStream().apply{write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray());write(bytes);flush()}}}catch(_:java.net.SocketException){}}
+  kotlin.concurrent.thread(isDaemon=true){while(!server.isClosed)try{server.accept().use{socket->val input=socket.getInputStream().bufferedReader();val line=input.readLine().orEmpty();var header=input.readLine();while(!header.isNullOrEmpty())header=input.readLine();val result=when{line.contains("/folders")->"{\"version\":1,\"folders\":[{\"id\":\"all\",\"name\":\"Все чаты\",\"rule\":\"all\",\"chats\":[]},{\"id\":\"work\",\"name\":\"Работа\",\"chats\":[2,3]}]}";line.contains("/posts")->"[]";line.contains("/users/")->"{\"id\":1,\"name\":\"Андрей\",\"username\":\"andrey\",\"bio\":\"О себе\"}";else->"[]"};val bytes=result.toByteArray();socket.getOutputStream().apply{write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray());write(bytes);flush()}}}catch(_:java.net.SocketException){}}
   activity=Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
   activity.get().getSharedPreferences("volna-folders-1",0).edit().putBoolean("cloud_migrated",true).commit()
   NativeFolders.save(activity.get(),1,listOf(NativeFolder("all","Все чаты",emptySet(),"all"),NativeFolder("work","Работа",setOf(2,3))))
@@ -52,7 +52,7 @@ class NativeHomeReferenceUiTest {
   compose.onNodeWithText("Профиль",useUnmergedTree=true).performClick();compose.waitForIdle()
   compose.onNodeWithContentDescription("Профиль").assertIsSelected()
   compose.onNodeWithText("Чаты",useUnmergedTree=true).assertIsDisplayed()
-  compose.onNodeWithText("Андрей",useUnmergedTree=true).assertIsDisplayed();screenshot("profile")
+  compose.onNodeWithText("Андрей",useUnmergedTree=true).assertIsDisplayed();compose.waitUntil(10000){compose.onAllNodesWithText("Публикаций пока нет").fetchSemanticsNodes().isNotEmpty()};compose.onNodeWithText("Публикаций пока нет").assertIsDisplayed();screenshot("profile")
   compose.onNodeWithText("Настройки",useUnmergedTree=true).performClick();compose.waitForIdle()
   compose.onNodeWithText("Папки с чатами",useUnmergedTree=true).assertExists()
  }

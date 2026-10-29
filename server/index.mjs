@@ -1,3 +1,4 @@
+import {profilePosts} from './profile-posts.mjs';
 import {accountAppearance} from './appearance.mjs';
 import {createNewsChannel} from './news.mjs';
 import http from 'node:http';
@@ -98,6 +99,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   const handleFolders = folders({db,body,json,publish});
   const handleProfiles = profiles({db,uploads,auth,publish,userById,json,body});
   usernameService=usernames({db,body,json,userById,publish,uploads});
+  const handlePosts=profilePosts({db,auth,body,json,userById,publish});
   let expressionService;
   const handleMessaging = messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions:()=>expressionService});
   expressionService=expressions({db,uploads,body,json,member,publish});
@@ -162,6 +164,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
       if (await callService.handle(req,res,url,uid)) return;
       if (await usernameService.handle(req,res,url,uid)) return;
       if (await handleProfiles(req,res,url,uid)) return;
+      if (await handlePosts(req,res,url,uid)) return;
       if (await handleTopics(req,res,url,uid)) return;
       if (await handleCommunities(req,res,url,uid)) return;
       if (await expressionService.handle(req,res,url,uid)) return;

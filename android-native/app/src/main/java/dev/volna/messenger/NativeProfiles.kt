@@ -2,6 +2,7 @@
 package dev.volna.messenger
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,7 +45,7 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
     var profile by remember(userId) { mutableStateOf(if (userId == currentUser?.id) currentUser else null) }
     var error by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf(false) }
-    var tab by remember { mutableStateOf("info") }
+    var tab by rememberSaveable(userId) { mutableStateOf("posts") }
     var retry by remember { mutableStateOf(0) }
     val contactNames = rememberNativeContactNames(currentUser?.id ?: 0)
     val own = userId == currentUser?.id
@@ -54,6 +56,15 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
         try { val fresh = withContext(Dispatchers.IO) { api.userProfile(token, userId) }; profile = fresh; withContext(Dispatchers.IO) { cache.saveProfile(account, fresh) }; error = "" }
         catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message ?: "Не удалось загрузить профиль" }
     }
+    val scope = rememberCoroutineScope()
+    var photoBusy by remember { mutableStateOf(false) }
+    val choosePhoto = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null && own) scope.launch {
+            photoBusy = true
+            try { val updated = withContext(Dispatchers.IO) { val loaded = profile ?: error("Профиль ещё загружается"); val id = api.upload(token, "avatar.jpg", "image/jpeg", profilePhoto(context, uri)); api.updateProfile(token, loaded.name, loaded.bio, true, id) }; profile = updated; onSaved(updated) }
+            catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message.orEmpty() } finally { photoBusy = false }
+        }
+    }
     @Composable fun Frame(content: @Composable ColumnScope.()->Unit) { if(embedded)Column(Modifier.fillMaxSize().padding(bottom=bottomInset),content=content)else NativeFullScreen(if(own)"Мой профиль" else "Профиль",onDismiss,content=content) }
     Frame {
         val loaded = profile
@@ -62,12 +73,15 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
         else {
             Column(Modifier.fillMaxWidth().background(Panel).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Avatar(loaded.name, loaded.id, loaded.avatarUrl, token, size = 88.dp)
-                NativeText(contactNames[userId] ?: loaded.name, color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
-                NativeText("@${loaded.username}", Modifier.clickable { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(nativeProfileUrl(loaded.username)))) }, color = Accent, fontSize = 14.sp)
+                NativeText(contactNames[userId] ?: loaded.name, color = TextMain, fontSize = 20.sp, lineHeight = 24.sp, letterSpacing = 0.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
+                NativeText("@${loaded.username}", Modifier.clickable { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(nativeProfileUrl(loaded.username)))) }, color = Accent, fontSize = 14.sp, lineHeight = 18.sp)
                 if(own && loaded.phone.isNotBlank() && loaded.username.startsWith(loaded.phone.filter { it.isDigit() })) NativeText("Ник содержит ваш номер. Измените username в профиле.",Modifier.clickable { editing=true },color=Muted,fontSize=12.sp)
-                if (!own && loaded.online) NativeText("в сети", color = Accent, fontSize = 12.sp)
-                if(own&&onSettings!=null)TextButton(onClick=onSettings){Icon(Icons.Outlined.Settings,null);NativeText("Настройки",Modifier.padding(start=8.dp))}
-                if (own) TextButton(onClick = { editing = true }) { Icon(Icons.Outlined.Edit, null); NativeText("Редактировать профиль", Modifier.padding(start = 8.dp)) }
+                NativeText(if (own || loaded.online) "в сети" else if (loaded.lastSeen > 0) "был(а) " + java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(loaded.lastSeen)) else "Статус недоступен", color = if (own || loaded.online) Accent else Muted, fontSize = 12.sp, lineHeight = 16.sp)
+                if (own) Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ProfileAction(Icons.Outlined.PhotoCamera, if (photoBusy) "Загрузка…" else "Выбрать фото", Modifier.weight(1f)) { if (!photoBusy) choosePhoto.launch(arrayOf("image/jpeg", "image/png", "image/webp")) }
+                    ProfileAction(Icons.Outlined.Edit, "Изменить", Modifier.weight(1f)) { editing = true }
+                    if (onSettings != null) ProfileAction(Icons.Outlined.Settings, "Настройки", Modifier.weight(1f), onSettings)
+                }
                 else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     ProfileAction(Icons.Outlined.ChatBubbleOutline, "Написать", Modifier.weight(1f)) { if (chat != null) onOpenChat(chat, false) else onStartChat(loaded, false) }
                     ProfileAction(Icons.Outlined.Call, "Позвонить", Modifier.weight(1f)) { if (chat != null) onCall(chat) else onStartChat(loaded, true) }
@@ -76,18 +90,24 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
                     if (chat != null) ProfileAction(Icons.Outlined.Search, "Поиск", Modifier.weight(1f)) { onOpenChat(chat, true) }
                 }
             }
-            if (own) NativePhoneChange(loaded, token, api) { profile = it; onSaved(it) }
             if (!own) NativePriorityCallSetting(currentUser?.id ?: 0, userId)
             if (!own) NativePrivateContactName(currentUser?.id ?: 0, userId, token, api) { retry++ }
-            Row(Modifier.fillMaxWidth().background(Panel), horizontalArrangement = Arrangement.SpaceEvenly) {
-                TextButton(onClick = { tab = "info" }) { NativeText("Информация", color = if (tab == "info") Accent else Muted) }
+            Row(Modifier.fillMaxWidth().background(Panel).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { tab = "posts" }) { NativeText("Публикации", color = if (tab == "posts") Accent else Muted, fontSize = 12.sp) }
+                if (own) TextButton(onClick = { tab = "archive" }) { NativeText("Архив публикаций", color = if (tab == "archive") Accent else Muted, fontSize = 12.sp) }
+                TextButton(onClick = { tab = "info" }) { NativeText("Информация", color = if (tab == "info") Accent else Muted, fontSize = 12.sp) }
                 if (chat != null) TextButton(onClick = { tab = "media" }) { NativeText("Общие медиа", color = if (tab == "media") Accent else Muted) }
             }
-            if (tab == "media" && chat != null) NativeProfileMedia(chat, token, api, onOpenAttachment, Modifier.weight(1f))
+            if (tab == "posts" || tab == "archive") NativeProfilePosts(userId, own, tab == "archive", token, api, Modifier.weight(1f))
+            else if (tab == "media" && chat != null) NativeProfileMedia(chat, token, api, onOpenAttachment, Modifier.weight(1f))
             else Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (chat != null && onAppearance != null) NativeSettingsCard { NativeSettingRow(Icons.Outlined.Palette, "Изменить оформление", "Тема этой переписки") { onAppearance(chat) } }
                 NativeSettingsCard { Column(Modifier.padding(16.dp)) { NativeText("О себе", color = Accent, fontSize = 12.sp); NativeText(loaded.bio.ifBlank { "Пока без описания" }, color = if (loaded.bio.isBlank()) Muted else TextMain, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp)) } }
-                if (own && loaded.phone.isNotBlank()) NativeSettingsCard { NativeText("Телефон: ${loaded.phone} · подтверждён", Modifier.padding(16.dp), color = Muted) }
+                NativeSettingsCard {
+                    if (own && loaded.phone.isNotBlank()) NativeSettingRow(Icons.Outlined.Phone, loaded.phone, "Телефон") { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:${loaded.phone}"))) }.onFailure { error = "Не удалось открыть телефон" } }
+                    NativeSettingRow(Icons.Outlined.AlternateEmail, "@${loaded.username}", "Имя пользователя") { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(nativeProfileUrl(loaded.username)))) }
+                }
+                if (own) NativePhoneChange(loaded, token, api) { profile = it; onSaved(it) }
                 if (chat == null && !own) NativeText("После начала диалога здесь будут доступны общие медиа и поиск в переписке.", color = Muted, fontSize = 13.sp)
             }
         }
@@ -97,7 +117,7 @@ internal fun NativeProfileDialog(userId: Long, currentUser: VolnaUser?, token: S
 
 @Composable
 private fun ProfileAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(modifier.clickable(onClick = onClick).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, label, tint = Accent, modifier = Modifier.size(24.dp)); NativeText(label, color = Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp)) }
+    Column(modifier.clip(RoundedCornerShape(10.dp)).background(Hover).clickable(onClick = onClick).padding(vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, label, tint = Accent, modifier = Modifier.size(22.dp)); NativeText(label, color = Muted, fontSize = 10.sp, lineHeight = 14.sp, letterSpacing = 0.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp)) }
 }
 
 @Composable
