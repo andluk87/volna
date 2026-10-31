@@ -98,6 +98,8 @@ services:
       - --log-file=stdout
       - --listening-port=3478
       - --listening-ip=0.0.0.0
+      # Bind relay sockets explicitly: wildcard 0.0.0.0 breaks same-TURN peer mapping.
+      - --relay-ip=${TURN_RELAY_IP:-${TURN_EXTERNAL_IP:-127.0.0.1}}
       - --external-ip=${TURN_EXTERNAL_IP:-127.0.0.1}
       - --realm=${TURN_HOST:-localhost}
       - --use-auth-secret

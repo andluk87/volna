@@ -16,6 +16,7 @@ services:
       - --listening-ip=0.0.0.0
       - --listening-port=3478
       - --tls-listening-port=443
+      - --relay-ip=${TURN_RELAY_IP:-${TURN_EXTERNAL_IP:?Set dedicated TURN public IP}}
       - --external-ip=${TURN_EXTERNAL_IP:?Set dedicated TURN public IP}
       - --realm=${TURN_TLS_HOST:?Set certificate hostname}
       - --cert=/certs/fullchain.pem
