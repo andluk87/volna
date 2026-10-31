@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -525,6 +526,15 @@ private fun NativeMessageReactions(message: VolnaMessage, me: Long?, onReact: (S
 @Composable
 internal fun NativeLinkedText(text: String, modifier: Modifier = Modifier, entities: List<NativeEmojiEntity> = emptyList(), token: String = "", account: Long = 0) {
     val accent = Accent
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val openLink: (String) -> Unit = { url ->
+        if (nativeCommunityInvite(url, BuildConfig.API_BASE_URL) != null) {
+            context.startActivity(android.content.Intent(context, MainActivity::class.java)
+                .setAction(android.content.Intent.ACTION_VIEW).setData(android.net.Uri.parse(url))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP))
+        } else uriHandler.openUri(url)
+    }
     val formatted = remember(text) { nativeFormatted(text) }
     var revealed by remember(text) { mutableStateOf(emptySet<Int>()) }
     val body = formatted.text
@@ -533,11 +543,11 @@ internal fun NativeLinkedText(text: String, modifier: Modifier = Modifier, entit
         val masked = body.toCharArray()
         formatted.spans.filter { it.kind == "spoiler" && it.start !in revealed }.forEach { span -> for(i in span.start until span.end) if(!masked[i].isWhitespace()) masked[i] = '•' }
         append(String(masked))
-        Regex("https?://[^\\s<>]+", RegexOption.IGNORE_CASE).findAll(body).forEach { match -> if(formatted.spans.none { it.kind in listOf("inline","code","link","spoiler") && match.range.first >= it.start && match.range.first < it.end }) addLink(LinkAnnotation.Url(match.value.trimEnd('.', ',', ')'), TextLinkStyles(style = SpanStyle(color = accent, textDecoration = TextDecoration.Underline))), match.range.first, match.range.last + 1) }
+        Regex("https?://[^\\s<>]+", RegexOption.IGNORE_CASE).findAll(body).forEach { match -> if(formatted.spans.none { it.kind in listOf("inline","code","link","spoiler") && match.range.first >= it.start && match.range.first < it.end }) addLink(LinkAnnotation.Url(match.value.trimEnd('.', ',', ')'), TextLinkStyles(style = SpanStyle(color = accent, textDecoration = TextDecoration.Underline)),linkInteractionListener={openLink(match.value.trimEnd('.', ',', ')'))}), match.range.first, match.range.last + 1) }
         formatted.spans.forEach { span -> if(span.start < span.end) {
             val style = when(span.kind){"bold" -> SpanStyle(fontWeight=FontWeight.Bold); "italic" -> SpanStyle(fontStyle=FontStyle.Italic); "underline" -> SpanStyle(textDecoration=TextDecoration.Underline); "strike" -> SpanStyle(textDecoration=TextDecoration.LineThrough); "inline","code" -> SpanStyle(fontFamily=FontFamily.Monospace,background=Muted.copy(alpha=0.12f)); "quote" -> SpanStyle(background=accent.copy(alpha=0.10f)); "syntax-keyword" -> SpanStyle(color=accent); "syntax-string" -> SpanStyle(color=Color(0xff33966b)); "syntax-number" -> SpanStyle(color=Color(0xffc27727)); "syntax-comment" -> SpanStyle(color=Muted,fontStyle=FontStyle.Italic); else -> SpanStyle() }
             addStyle(style,span.start,span.end)
-            if(span.kind == "link") addLink(LinkAnnotation.Url(span.url,TextLinkStyles(style=SpanStyle(color=accent,textDecoration=TextDecoration.Underline))),span.start,span.end)
+            if(span.kind == "link") addLink(LinkAnnotation.Url(span.url,TextLinkStyles(style=SpanStyle(color=accent,textDecoration=TextDecoration.Underline)),linkInteractionListener={openLink(span.url)}),span.start,span.end)
             if(span.kind == "spoiler") { val visible=span.start in revealed; addStyle(SpanStyle(color=if(visible)TextMain else Color.Transparent,background=Muted.copy(alpha=if(visible)0.12f else 0.65f)),span.start,span.end); addLink(LinkAnnotation.Clickable("spoiler-${span.start}",linkInteractionListener={ revealed=if(visible)revealed-span.start else revealed+span.start }),span.start,span.end) }
         } }
     }

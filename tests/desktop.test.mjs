@@ -21,3 +21,9 @@ test('idle self-update is opt-in, waits for OS inactivity and never interrupts c
  assert.equal(controller.tickIdle(),true);assert.equal(installs,1);controller.tickIdle();assert.equal(installs,1);
  assert.throws(()=>controller.setIdleInstall('true'));controller.setIdleInstall(false);assert.equal(saved,false);
 });
+
+test('invitation links accept only the configured server or canonical Volna protocol',()=>{
+ const {invitationCode}=require('../client/electron/desktop-core.cjs'),code='a'.repeat(48),base='https://volna.lknet.ru';
+ for(const value of ['volna://invite/'+code,base+'/app?invite='+code])assert.equal(invitationCode(value,base),code);
+ for(const value of ['volna://auth/'+code,'volna://invite/'+code+'?x=1','volna://invite/'+code+'#x','volna://user@invite/'+code,base+'/app?invite='+code+'&invite='+code,'https://evil.example/app?invite='+code,base+':8443/app?invite='+code,base+'/other?invite='+code,'http://volna.lknet.ru/app?invite='+code,'volna://invite/invalid','volna://invite/'+code+'/','--url=volna://invite/'+code])assert.equal(invitationCode(value,base),null,value);
+});

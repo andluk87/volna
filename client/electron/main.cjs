@@ -9,7 +9,7 @@ const {notificationState}=require('./notification-state.cjs');
 const {createNotificationWindow}=require('./notification-window.cjs');
 const {ignoredSpelling}=require('./ignored-spelling.cjs');
 const path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
-const {trustedRenderer,externalURL,validateConfig,rendererFile}=require('./desktop-core.cjs');
+const {invitationCode,trustedRenderer,externalURL,validateConfig,rendererFile}=require('./desktop-core.cjs');
 const {restoredBounds,readWindowState,trackWindowState,desktopShortcut}=require('./window-state.cjs');
 const {createUpdates}=require('./updates.cjs');const {createSessionStore,createSessionRefresh}=require('./session-store.cjs');const {pickScreen}=require('./screen-picker.cjs');
 // Preserve the existing profile, permissions and session when the display name changes.
@@ -18,7 +18,9 @@ app.setName('VLN');
 protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true}}]);
 app.commandLine.appendSwitch('autoplay-policy','no-user-gesture-required');
 const appWindows=new Set(),editorFocus=new WeakMap(),transfers=new Set();
-let messageToasts;
+let messageToasts,pendingInvite=null,desktopReady=false;
+function openInvitation(url){const code=invitationCode(url,config?.apiBase);if(!code)return false;pendingInvite=code;if(desktopReady){show();if(!win.webContents.isLoading())win.webContents.send('desktop:invite',code);}return true;}
+
 let win,tray,quitting=false,config,updates,sessionRefresh,activeCall=false,lastIncoming='',callNotification,spellingDictionary,selectedAccountId=null;
 const show=()=>{if(!win||win.isDestroyed())createWindow();if(win.isMinimized())win.restore();win.show();win.focus();win.flashFrame(false);};
 function createWindow(chatId=null,accountId=null){
@@ -29,7 +31,7 @@ function createWindow(chatId=null,accountId=null){
  if(!secondary){trackWindowState(window,stateFile);if(saved.maximized===true)window.maximize();}
  window.on('focus',()=>window.flashFrame(false));
  window.once('ready-to-show',()=>window.show());
- window.webContents.on('before-input-event',(event,input)=>{const shortcut=desktopShortcut(input);if(!shortcut||editorFocus.get(window.webContents)&&shortcut==='search')return;event.preventDefault();if(shortcut==='close')window.close();else window.webContents.send('desktop:shortcut',shortcut);});const external=url=>{const target=externalURL(url);if(target)shell.openExternal(target).catch(()=>{});};
+ window.webContents.on('before-input-event',(event,input)=>{const shortcut=desktopShortcut(input);if(!shortcut||editorFocus.get(window.webContents)&&shortcut==='search')return;event.preventDefault();if(shortcut==='close')window.close();else window.webContents.send('desktop:shortcut',shortcut);});const external=url=>{if(openInvitation(url))return;const target=externalURL(url);if(target)shell.openExternal(target).catch(()=>{});};
  window.webContents.on('context-menu',(_event,params)=>{
   if(!params.isEditable||!trustedRenderer(window.webContents.getURL()))return;
   const editingComposer=editorFocus.get(window.webContents),flags=params.editFlags||{},formatting=[['bold','Жирный','CmdOrCtrl+B'],['italic','Курсив','CmdOrCtrl+I'],['underline','Подчёркнутый','CmdOrCtrl+U'],['strike','Зачёркнутый'],['inline','Моноширинный'],['code','Блок кода'],['spoiler','Спойлер'],['quote','Цитата'],['link','Гиперссылка','CmdOrCtrl+K']].map(([kind,label,accelerator])=>({label,accelerator,registerAccelerator:false,click:()=>window.webContents.send('desktop:format',kind)}));
@@ -45,11 +47,16 @@ function createWindow(chatId=null,accountId=null){
 
 function ipc(channel,fn){ipcMain.handle(channel,(event,...args)=>{if(![...appWindows].some(window=>!window.isDestroyed()&&event.sender===window.webContents)||event.senderFrame!==event.sender.mainFrame||!trustedRenderer(event.senderFrame?.url))throw Error('Untrusted desktop request');return fn(...args,event);});}
 if(!app.requestSingleInstanceLock())app.quit();else{
- app.on('second-instance',(_event,argv)=>{show();});
+ app.on('second-instance',(_event,argv)=>{for(const arg of argv)openInvitation(arg);if(desktopReady)show();});
+ app.on('open-url',(event,url)=>{event.preventDefault();openInvitation(url);});
 
  app.whenReady().then(async()=>{
   const sessionLog=createSessionLog({directory:path.join(app.getPath('userData'),'logs'),version:app.getVersion()});sessionLog.write('app-start');
-  config=validateConfig(JSON.parse(fs.readFileSync(path.join(__dirname,'config.json'),'utf8')));app.setAppUserModelId('dev.volna.messenger');
+  config=validateConfig(JSON.parse(fs.readFileSync(path.join(__dirname,'config.json'),'utf8')));
+  if(app.isPackaged)app.setAsDefaultProtocolClient('volna');
+  for(const arg of process.argv)if(invitationCode(arg,config.apiBase))pendingInvite=invitationCode(arg,config.apiBase);
+  ipc('desktop:take-invite',(event)=>event.sender===win?.webContents?pendingInvite:null);
+  ipc('desktop:consume-invite',(code,event)=>{if(event.sender!==win?.webContents)return false;if(pendingInvite===code)pendingInvite=null;return true;});app.setAppUserModelId('dev.volna.messenger');
   const root=path.join(app.getAppPath(),'dist');protocol.handle('app',request=>{const file=rendererFile(root,request.url);return file?net.fetch(pathToFileURL(file).toString()):new Response('Not found',{status:404});});
   const mediaConsent=mediaPermissions(path.join(app.getPath('userData'),'media-permissions.json'));
   let microphoneAllowed=mediaConsent.has('audio'),cameraAllowed=mediaConsent.has('video');
@@ -64,7 +71,7 @@ if(!app.requestSingleInstanceLock())app.quit();else{
    try{const sources=await desktopCapturer.getSources({types:['screen','window'],thumbnailSize:{width:320,height:180},fetchWindowIcons:true}),selected=await pickScreen(win,sources);if(!request.frame.isDestroyed()&&selected)callback({video:selected});else callback({});}catch{callback({});}
   });
   spellingDictionary=ignoredSpelling(session.defaultSession,path.join(app.getPath('userData'),'ignored-spelling.json'));
-  Menu.setApplicationMenu(null);createWindow();tray=new Tray(path.join(root,'icons/icon-192.png'));tray.setToolTip('VLN');
+  Menu.setApplicationMenu(null);createWindow();desktopReady=true;tray=new Tray(path.join(root,'icons/icon-192.png'));tray.setToolTip('VLN');
   tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть VLN',click:show},{label:'Проверить обновления',click:()=>{show();updates.check(true);}},{label:'Журнал авторизации',click:()=>{sessionLog.write('log-open');shell.showItemInFolder(sessionLog.file);}},{type:'separator'},{label:'Выйти',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',show);
   const idleFile=path.join(app.getPath('userData'),'update-settings.json');let idleInstall=false;try{idleInstall=JSON.parse(fs.readFileSync(idleFile,'utf8')).idleInstall===true;}catch{}
   const {autoUpdater}=require('electron-updater');updates=createUpdates({idleInstall,idleSeconds:()=>powerMonitor.getSystemIdleTime(),saveIdleInstall:value=>{const temp=idleFile+'.tmp';fs.writeFileSync(temp,JSON.stringify({idleInstall:value}),{mode:0o600});fs.renameSync(temp,idleFile);},updater:autoUpdater,version:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',publish:state=>{if(!win.isDestroyed())win.webContents.send('desktop:update-state',state);},inCall:()=>activeCall||transfers.size>0,isSessionBusy:()=>sessionRefresh?.pending()===true,install:()=>{quitting=true;autoUpdater.quitAndInstall(true,true);}});

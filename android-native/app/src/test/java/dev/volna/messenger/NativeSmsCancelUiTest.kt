@@ -55,6 +55,22 @@ class NativeSmsCancelUiTest {
    assertEquals(0,joined)
   } finally { compose.runOnUiThread { activity.pause().stop().destroy() } }
  }
+ @Test fun invitationInMessageUsesExplicitApplicationIntentWithoutBrowser(){
+  val url=BuildConfig.API_BASE_URL+"/app?invite="+"a".repeat(48)
+  val activity=Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+  try {
+   compose.runOnUiThread { activity.get().setContent { VolnaTheme(NativeAppearance(theme="dark"),updateSystemBars=false) {
+    NativeLinkedText("[Вступить]($url)")
+   } } }
+   compose.onNodeWithText("Вступить").performTouchInput { click(center) }
+   compose.runOnIdle {
+    val intent=org.robolectric.Shadows.shadowOf(activity.get()).nextStartedActivity
+    assertNotNull(intent)
+    assertEquals(MainActivity::class.java.name,intent.component?.className)
+    assertEquals(url,intent.dataString)
+   }
+  } finally { compose.runOnUiThread { activity.pause().stop().destroy() } }
+ }
  private fun checkCancel(waiting:Boolean){
   val context=RuntimeEnvironment.getApplication();val monitor=Monitor();var returned=0;var stored=0
   val model=NativeSmsAuthViewModel(context,null,SavedStateHandle(),Repo(waiting),monitor,{android.os.SystemClock.elapsedRealtime()},{stored++})
