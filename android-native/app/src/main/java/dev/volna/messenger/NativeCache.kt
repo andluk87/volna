@@ -86,6 +86,6 @@ internal object NativeAccounts {
         (0 until rows.length()).map { i -> rows.getJSONObject(i).let { NativeAccount(NativeCodec.user(it.getJSONObject("user")), NativeCredentials.access(it.getJSONObject("user").getLong("id"))) } }
     }.getOrDefault(emptyList()).filter { it.token.isNotBlank() }
     @Synchronized fun remember(context: Context, user: VolnaUser, token: String) = save(context, list(context).filter { it.user.id != user.id } + NativeAccount(user, token))
-    @Synchronized fun remove(context: Context, id: Long) { NativeNotificationConversation.removeAccount(context, id); NativeCredentials.remove(id); save(context, list(context).filter { it.user.id != id }) }
+    @Synchronized fun remove(context: Context, id: Long) { NativeSystemContacts.disable(context, id); NativeNotificationConversation.removeAccount(context, id); NativeCredentials.remove(id); save(context, list(context).filter { it.user.id != id }) }
     private fun save(context: Context, accounts: List<NativeAccount>) { context.getSharedPreferences("volna-accounts", 0).edit().putString("accounts", JSONArray(accounts.takeLast(5).map { JSONObject().put("user", NativeCodec.user(it.user)) }).toString()).apply() }
 }

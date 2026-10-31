@@ -103,9 +103,11 @@ internal object NativeContactSync {
             store.prefs.edit().putString("pending", "[]").apply()
             if (queue.length() > 0) book = api.contactRequest("/contacts/book", token)
             store.save(book)
+            NativeSystemContacts.update(context, account, book)
             if (!store.prefs.getBoolean("enabled", false)) return@withContext
             if (!book.optBoolean("enabled") || store.prefs.getLong("epoch", 0) != book.optLong("epoch")) {
                 store.prefs.edit().putBoolean("enabled", false).remove("snapshot").apply()
+                NativeSystemContacts.update(context, account, book)
                 throw IllegalStateException("Синхронизация выключена или книга удалена на другом устройстве. Включите её заново")
             }
             if (!scan || context.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return@withContext
@@ -124,7 +126,9 @@ internal object NativeContactSync {
                 version = api.contactRequest("/contacts/sync", token, data).getLong("version")
             }
             store.prefs.edit().putString("snapshot", snapshot.toString()).putLong("last_sync", System.currentTimeMillis()).apply()
-            store.save(api.contactRequest("/contacts/book", token))
+            val refreshed = api.contactRequest("/contacts/book", token)
+            store.save(refreshed)
+            NativeSystemContacts.update(context, account, refreshed)
         }
     }
 }
@@ -135,6 +139,14 @@ internal fun NativeContactSyncHost(account: Long, token: String, api: NativeApi)
     val context = LocalContext.current; val store = remember(account) { NativeContactBook(context, account) }
     var revision by remember(account) { mutableStateOf(0) }
     val lifecycle = (context as? ComponentActivity)?.lifecycle
+    val systemPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { revision++ }
+    LaunchedEffect(account, revision) {
+        if (MainActivity.isVisible && store.prefs.getBoolean("enabled", false) && !store.prefs.getBoolean("system_contacts_permission_requested", false) &&
+            listOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS).any { context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }) {
+            store.prefs.edit().putBoolean("system_contacts_permission_requested", true).apply()
+            systemPermission.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS))
+        }
+    }
     DisposableEffect(account, lifecycle) {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) { override fun onChange(selfChange: Boolean) { revision++ } }
         var registered = false
@@ -172,7 +184,7 @@ internal fun NativeAccountContactsScreen(account: Long, token: String, api: Nati
     var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }; var found by remember { mutableStateOf(emptyList<VolnaUser>()) }
     fun load(scan: Boolean = false) { if (busy) return; scope.launch { busy = true; try { NativeContactSync.refresh(context, account, token, api, scan); book = store.cached(); error = "" } catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message.orEmpty(); book = store.cached() } finally { busy = false } } }
     fun enable() { scope.launch { busy = true; try { val settings = withContext(Dispatchers.IO) { api.contactRequest("/contacts/settings", token, JSONObject().put("enabled", true)) }; store.prefs.edit().putLong("epoch", settings.getLong("epoch")).putBoolean("enabled", true).apply(); busy = false; load(true) } catch (problem: Exception) { error = problem.message.orEmpty(); busy = false } } }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (it) enable() else error = "Доступ к контактам не предоставлен. Можно добавлять контакты вручную или разрешить доступ в настройках Android" }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { if (it[Manifest.permission.READ_CONTACTS] == true || context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) enable() else error = "Доступ к контактам не предоставлен. Можно добавлять контакты вручную или разрешить доступ в настройках Android" }
     LaunchedEffect(account, token) { load(); while (true) { delay(15000); book = store.cached() } }
     LaunchedEffect(query) { found = emptyList(); if (query.trim().length >= 2) { delay(500); try { found = withContext(Dispatchers.IO) { api.searchPeople(token, query.trim()) } } catch (cancelled: CancellationException) { throw cancelled } catch (problem: Exception) { error = problem.message.orEmpty() } } }
     val rows = book.optJSONArray("contacts") ?: JSONArray()
@@ -238,8 +250,9 @@ internal fun NativeAccountContactsScreen(account: Long, token: String, api: Nati
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         NativeText("Контакты и синхронизация", Modifier.padding(16.dp), fontSize = 20.sp)
         NativeText("Разрешите доступ к контактам, чтобы находить знакомых в VLN и синхронизировать телефонную книгу между вашими устройствами. На сервер передаются имена и номера; свои названия видите только вы.", Modifier.padding(horizontal = 16.dp), fontSize = 13.sp, color = Muted)
-        Row(Modifier.padding(16.dp)) { NativeText("Синхронизировать контакты", Modifier.weight(1f)); Switch(store.prefs.getBoolean("enabled", false), { enabled -> if (enabled) { if (context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) enable() else permission.launch(Manifest.permission.READ_CONTACTS) } else scope.launch { try { withContext(Dispatchers.IO) { api.contactRequest("/contacts/settings", token, JSONObject().put("enabled", false)) }; store.prefs.edit().putBoolean("enabled", false).apply(); load() } catch (problem: Exception) { error = problem.message.orEmpty() } } }) }
-        if (context.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }) { NativeText("Настройки доступа Android") }
+        Row(Modifier.padding(16.dp)) { NativeText("Синхронизировать контакты", Modifier.weight(1f)); Switch(store.prefs.getBoolean("enabled", false), { enabled -> if (enabled) { if (listOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS).all { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) enable() else { store.prefs.edit().putBoolean("system_contacts_permission_requested", true).apply(); permission.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)) } } else scope.launch { try { withContext(Dispatchers.IO) { api.contactRequest("/contacts/settings", token, JSONObject().put("enabled", false)) }; store.prefs.edit().putBoolean("enabled", false).apply(); load() } catch (problem: Exception) { error = problem.message.orEmpty() } } }) }
+        NativeText("У найденных пользователей в контактах телефона автоматически появляется «Волна» с действием «Написать в Волне». Для этого нужен доступ Android к чтению и изменению контактов. Исходные имена и номера сохраняются.", Modifier.padding(horizontal = 16.dp), fontSize = 12.sp, color = Muted)
+        if (listOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS).any { context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }) TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }) { NativeText("Настройки доступа Android") }
         TextButton(onClick = { load(true) }, enabled = !busy) { NativeText("Синхронизировать сейчас / найти контакты в VLN") }
         NativeText("Последняя синхронизация: ${store.prefs.getLong("last_sync", 0).takeIf { it > 0 }?.let { java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it)) } ?: "ещё не выполнена"}", Modifier.padding(horizontal = 16.dp), fontSize = 12.sp, color = Muted)
         NativeText("Кто может найти меня по номеру", Modifier.padding(16.dp))
