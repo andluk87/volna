@@ -46,9 +46,9 @@ class ModelRuntime:
         with self._lock:
             if self._thread is not None:
                 return
-            self._thread = threading.Thread(target=self._load, name="whisper-loader", daemon=True)
+            self._thread = threading.Thread(target=self._load, name="asr-loader", daemon=True)
             if self.fallback_factory:
-                self._fallback_thread = threading.Thread(target=self._load_fallback, name="whisper-cached-fallback", daemon=True)
+                self._fallback_thread = threading.Thread(target=self._load_fallback, name="asr-cached-fallback", daemon=True)
                 self._fallback_thread.start()
             self._thread.start()
 
@@ -62,9 +62,9 @@ class ModelRuntime:
                     return
                 self._model = model
                 self._active_name = self.fallback_name
-            print("[whisper] cached_fallback_ready", flush=True)
+            print("[asr] cached_fallback_ready", flush=True)
         except Exception as error:
-            print(f"[whisper] cached_fallback_unavailable type={type(error).__name__}", flush=True)
+            print(f"[asr] cached_fallback_unavailable type={type(error).__name__}", flush=True)
 
     def _load(self):
         while not self._stop.is_set():
@@ -82,7 +82,7 @@ class ModelRuntime:
                 with self._lock:
                     self._state = "failed"
                     self._error = summary
-                print(f"[whisper] model_load_failed {json.dumps(summary)} retry_seconds={self.retry_seconds}", flush=True)
+                print(f"[asr] model_load_failed {json.dumps(summary)} retry_seconds={self.retry_seconds}", flush=True)
                 if self._stop.wait(self.retry_seconds):
                     return
             else:
@@ -93,7 +93,7 @@ class ModelRuntime:
                     self._active_name = self.primary_name
                     self._state = "ready"
                     self._error = None
-                print("[whisper] model_ready", flush=True)
+                print("[asr] model_ready", flush=True)
                 return
 
     def snapshot(self):

@@ -54,11 +54,14 @@ services:
       context: .
       dockerfile: docker/transcription.Dockerfile
     environment:
+      ASR_ENGINE: ${ASR_ENGINE:-gigaam}
+      ASR_CPU_THREADS: ${ASR_CPU_THREADS:-auto}
+      GIGAAM_MODEL_DIR: ${GIGAAM_MODEL_DIR:-}
       WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
-      WHISPER_FALLBACK_MODEL: ${WHISPER_FALLBACK_MODEL:-base}
+      WHISPER_FALLBACK_MODEL: ${WHISPER_FALLBACK_MODEL:-off}
       WHISPER_CPU_THREADS: ${WHISPER_CPU_THREADS:-8}
       WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float32}
-      WHISPER_BEAM_SIZE: ${WHISPER_BEAM_SIZE:-5}
+      WHISPER_BEAM_SIZE: ${WHISPER_BEAM_SIZE:-10}
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ru}
       HF_HOME: /models/huggingface
       OMP_NUM_THREADS: ${WHISPER_CPU_THREADS:-8}

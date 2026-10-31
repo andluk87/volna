@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'docker'))
 import uvicorn
-from transcription_service import create_app, load_model, MODEL_NAME, BEAM_SIZE
+from transcription_service import create_app, load_model, PRIMARY_MODEL, BEAM_SIZE, ENGINE
 
 
 @contextmanager
@@ -60,6 +60,21 @@ def request(base, path, audio=None, mime='audio/ogg'):
 
 
 class HTTPTest(unittest.TestCase):
+    def test_gigaam_profile_never_silently_loads_old_base_fallback(self):
+        with patch('transcription_service.ENGINE', 'gigaam'), \
+                patch('transcription_service.LANGUAGE', 'ru'), \
+                patch('transcription_service.FALLBACK_MODEL', 'base'), \
+                patch('transcription_service.load_gigaam', return_value=object()) as primary, \
+                patch('transcription_service.load_model', side_effect=AssertionError('Unexpected downgrade')) as fallback:
+            with running_app(None) as (base, runtime):
+                deadline = time.monotonic() + 3
+                while not runtime.snapshot()['ready'] and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue(runtime.snapshot()['ready'])
+                self.assertEqual(runtime.snapshot()['state'], 'ready')
+                primary.assert_called_once()
+                fallback.assert_not_called()
+
     def test_complete_cache_avoids_network_and_partial_cache_resumes_download(self):
         for complete in (True, False):
             with self.subTest(complete=complete), tempfile.TemporaryDirectory() as directory:
@@ -158,8 +173,8 @@ class HTTPTest(unittest.TestCase):
         with running_app(FakeModel) as (base, runtime):
             self.assertEqual(request(base, '/ready')[0], 200)
             health = request(base, '/health')[1]
-            self.assertEqual(health['model'], MODEL_NAME)
-            self.assertEqual(health['beam_size'], BEAM_SIZE)
+            self.assertEqual(health['model'], PRIMARY_MODEL)
+            self.assertEqual(health['beam_size'], BEAM_SIZE if ENGINE == 'whisper' else None)
             status, body = request(base, '/transcribe', b'voice data')
             self.assertEqual(status, 200)
             self.assertEqual(body, {'text': 'Привет.'})
