@@ -52,18 +52,25 @@ class GigaAMTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             for name in FILES:
                 (Path(directory) / name).write_bytes(b'weight')
-            with patch('huggingface_hub.snapshot_download', return_value=directory) as download:
+            with patch('huggingface_hub.hf_hub_download', side_effect=lambda filename,**kw: str(Path(directory)/filename)) as download:
                 self.assertEqual(model_directory(root='/cache'), directory)
-                self.assertEqual(download.call_count, 1)
+                self.assertEqual(download.call_count, len(FILES))
                 self.assertTrue(download.call_args.kwargs['local_files_only'])
             self.assertEqual(model_directory(local_directory=directory), directory)
             (Path(directory) / FILES[1]).unlink()
             with self.assertRaises(FileNotFoundError):
                 model_directory(local_directory=directory)
-            with patch('huggingface_hub.snapshot_download', return_value=directory) as download:
+            calls=[]
+            def fetch(filename, **options):
+                calls.append(options)
+                path=Path(directory)/filename
+                if not options.get('local_files_only'):
+                    path.write_bytes(b'resumed weights')
+                return str(path)
+            with patch('huggingface_hub.hf_hub_download', side_effect=fetch):
                 model_directory(root='/cache')
-                self.assertEqual(download.call_count, 2)
-                self.assertNotIn('local_files_only', download.call_args.kwargs)
+            self.assertEqual(len(calls), len(FILES)+1)
+            self.assertEqual(sum(not c.get('local_files_only') for c in calls), 1)
 
     def test_auto_threads_respect_container_cpu_quota_and_explicit_setting(self):
         with patch('transcription_gigaam.os.sched_getaffinity', return_value=set(range(32))), \

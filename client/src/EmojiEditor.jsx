@@ -1,10 +1,10 @@
+import {editorContent as content} from './editor-content.mjs';
 import {appendStandardEmojiText} from './StandardEmojiText';
 import React,{useRef,useState,useEffect,useLayoutEffect,forwardRef,useImperativeHandle} from 'react';
 import {cachedEmojiBlob} from './EmojiAsset';
 import {request} from './api';
 import {replaceText} from '../../shared/emoji-text.mjs';
 
-function content(root){let text='',entities=[];function visit(node){if(node.nodeType===3){text+=node.data;return;}if(node.nodeType!==1)return;if(node.dataset?.emojiId){const fallback=node.dataset.fallback;entities.push({id:node.dataset.emojiId,start:text.length,length:fallback.length,attachment_id:node.dataset.file||undefined,mime:'image/png'});text+=fallback;return;}if(node.tagName==='BR'){if(!node.dataset.editorTail)text+='\n';return;}for(const child of node.childNodes)visit(child);}for(const child of root.childNodes)visit(child);return {text,entities};}
 function pointOffset(root,node,offset){const range=document.createRange();range.selectNodeContents(root);try{range.setEnd(node,offset);}catch{return 0;}return content(range.cloneContents()).text.length;}
 function selectionOffsets(root){const selection=window.getSelection();if(!selection?.rangeCount||!root.contains(selection.anchorNode)||!root.contains(selection.focusNode))return [0,0];const a=pointOffset(root,selection.anchorNode,selection.anchorOffset),b=pointOffset(root,selection.focusNode,selection.focusOffset);return [Math.min(a,b),Math.max(a,b)];}
 function select(root,start,end){let offset=0,points=[];function visit(node){if(node.nodeType===3){points.push({start:offset,end:offset+node.data.length,node});offset+=node.data.length;return;}if(node.dataset?.emojiId){points.push({start:offset,end:offset+node.dataset.fallback.length,node,atomic:true});offset+=node.dataset.fallback.length;return;}for(const child of node.childNodes)visit(child);}visit(root);const locate=pos=>{for(const p of points){if(pos<=p.end){if(p.atomic){const index=[...p.node.parentNode.childNodes].indexOf(p.node);return [p.node.parentNode,index+(pos>p.start?1:0)];}return [p.node,Math.max(0,Math.min(p.node.data.length,pos-p.start))];}}return [root,root.childNodes.length];};const range=document.createRange();range.setStart(...locate(start));range.setEnd(...locate(end));const s=window.getSelection();s.removeAllRanges();s.addRange(range);}

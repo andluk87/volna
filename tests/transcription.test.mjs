@@ -67,3 +67,9 @@ test('transcription distinguishes delayed download, full disk and unknown 503 fr
   const transcribe=createTranscriber({fetchImpl:async()=>new Response(JSON.stringify({detail}),{status:503})});await assert.rejects(transcribe({bytes:Buffer.from('x')}),e=>e.status===503&&e.message.includes(phrase));
  }
 });
+
+test('transcription reports model-file progress, initialization and unreachable network without private details',async()=>{
+ for(const [detail,phrase] of [[{state:'loading',download:{stage:'downloading',completed_files:2,total_files:6,bytes_on_disk:10485760}},'файлов 2/6 · на диске 10 МБ'],[{state:'loading',download:{stage:'initializing'}},'Веса модели загружены'],[{state:'failed',error:{errno:101,private:'secret'}},'не имеет доступа к сети']]){
+  const transcribe=createTranscriber({fetchImpl:async()=>new Response(JSON.stringify({detail}),{status:503})});await assert.rejects(transcribe({bytes:Buffer.from('x')}),e=>e.status===503&&e.message.includes(phrase)&&!e.message.includes('secret'));
+ }
+});

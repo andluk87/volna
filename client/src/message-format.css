@@ -4,7 +4,7 @@
 .format-toolbar button:nth-child(2){font-style:italic}.format-toolbar button:nth-child(3){text-decoration:underline}.format-toolbar button:nth-child(4){text-decoration:line-through}.format-toolbar button:nth-child(5),.format-toolbar button:nth-child(6){font-family:ui-monospace,monospace}
 .format-toolbar small{margin-left:auto;color:var(--muted);font-size:10px}
 .message-text .formatted-paragraph{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
-.message-text .formatted-paragraph+.formatted-paragraph{margin-top:4px}
+.message-text .formatted-paragraph+.formatted-paragraph{margin-top:0}
 .message-text .formatted-quote{margin:5px 0;padding:5px 9px;border-left:3px solid var(--accent);border-radius:0 7px 7px 0;background:#00000012;color:inherit;white-space:pre-wrap}
 .message-text .inline-code,.formatted-code pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
 .message-text .inline-code{padding:1px 4px;border-radius:4px;background:#00000020;font-size:.92em}

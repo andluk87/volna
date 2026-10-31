@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from transcription_runtime import ModelRuntime
-from transcription_gigaam import MODEL as GIGAAM_MODEL, cpu_threads, load_gigaam
+from transcription_gigaam import MODEL as GIGAAM_MODEL, cpu_threads, load_gigaam, download_status
 
 MODEL_NAME = os.getenv("WHISPER_MODEL", "large-v3")
 FALLBACK_MODEL = os.getenv("WHISPER_FALLBACK_MODEL", "off").strip()
@@ -107,7 +107,7 @@ def create_app(model_factory=None, retry_seconds=60):
     @app.get("/health")
     async def health():
         # Docker checks HTTP service liveness, not completion of a model download.
-        return {"ok": True, "engine": ENGINE, "model": PRIMARY_MODEL, "beam_size": BEAM_SIZE if ENGINE == "whisper" else None, "language": LANGUAGE or "auto", "device": "cpu", "compute_type": "float32" if ENGINE == "gigaam" else COMPUTE_TYPE, "cpu_threads": ASR_THREADS if ENGINE == "gigaam" else THREADS, **runtime.snapshot()}
+        return {"ok": True, "engine": ENGINE, "model": PRIMARY_MODEL, "beam_size": BEAM_SIZE if ENGINE == "whisper" else None, "language": LANGUAGE or "auto", "device": "cpu", "compute_type": "float32" if ENGINE == "gigaam" else COMPUTE_TYPE, "cpu_threads": ASR_THREADS if ENGINE == "gigaam" else THREADS, **runtime.snapshot(), **({"download": download_status()} if ENGINE == "gigaam" else {})}
 
     @app.get("/ready")
     async def ready():
@@ -123,7 +123,7 @@ def create_app(model_factory=None, retry_seconds=60):
             raise HTTPException(status_code=415, detail="Unsupported audio format")
         model, active_name = runtime.get_model_with_name()
         if model is None:
-            raise HTTPException(status_code=503, detail=runtime.snapshot())
+            raise HTTPException(status_code=503, detail={**runtime.snapshot(), **({"download": download_status()} if ENGINE == "gigaam" else {})})
         payload = await file.read(MAX_AUDIO_BYTES + 1)
         if not payload:
             raise HTTPException(status_code=400, detail="Audio file is empty")

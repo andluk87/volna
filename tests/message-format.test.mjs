@@ -5,7 +5,7 @@ import {parseInline,parseMessage,formatSelection,highlightCode} from '../client/
 test('message formatter recognizes fenced code, quotes and paragraphs without losing text',()=>{
  const source='Обычный текст\n\n```js\nconst x = 1;\n```\n> цитата';
  assert.deepEqual(parseMessage(source),[
-  {type:'paragraph',text:'Обычный текст'},
+  {type:'paragraph',text:'Обычный текст\n'},
   {type:'code',text:'const x = 1;',language:'js'},
   {type:'quote',text:'цитата'}
  ]);
@@ -48,4 +48,9 @@ test('syntax highlighting preserves source and never interprets markup',()=>{
 
 test('menu formatting works across lines without losing custom emoji positions',()=>{
  const value='first\n😀';const edit=formatSelection(value,[{id:'a'.repeat(32),start:6,length:2}],0,value.length,'spoiler');assert.equal(edit.text,'||first||\n||😀||');assert.equal(edit.entities[0].start,12);assert.deepEqual(parseInline(edit.text).filter(p=>p.type==='spoiler').map(p=>p.text),['first','😀']);
+});
+
+test('plain messages preserve blank lines, indentation, repeated spaces and tabs',()=>{
+ for(const source of ['Первая строка\n\nВторая строка\n\n\nТретья', '  Отступ  между словами\n \n\tСледующая строка  \n', '**Жирный**\n\nОбычный текст'])assert.deepEqual(parseMessage(source),[{type:'paragraph',text:source}]);
+ assert.deepEqual(parseMessage('Строка\r\n\r\nДальше'),[{type:'paragraph',text:'Строка\n\nДальше'}]);
 });

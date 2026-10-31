@@ -59,20 +59,19 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   function insert(chat,uid,data){
     canPublish(chat,uid);
     const interactive=interactivePayload(data);if(interactive&&(data.attachment_id||data.expression_id))throw error(400,'Опрос или список отправляется отдельно от вложения');
-    const cid=clientId(data.client_id),rawText=String(data.text||interactive?.poll?.question||interactive?.checklist?.title||''),text=rawText.trim(),reply=data.reply_to||null,source=data.forward_source||null,quote=replyQuote(data.reply_quote);
+    const cid=clientId(data.client_id),rawText=String(data.text||interactive?.poll?.question||interactive?.checklist?.title||''),text=rawText,reply=data.reply_to||null,source=data.forward_source||null,quote=replyQuote(data.reply_quote);
     if(data.expression_id&&(typeof data.expression_id!=='string'||!/^[a-f0-9]{32}$/.test(data.expression_id)))throw error(400,'Некорректный элемент набора');
     const expression=data.expression_id?expressions()?.getItem(data.expression_id,uid):null;
     if(expression?.kind==='emoji')throw error(400,'Пользовательский эмодзи вставляется в текст');
     const attachment=expression?.attachment_id||data.attachment_id||null;
-    const shift=rawText.length-rawText.trimStart().length;
     if(data.emoji_entities!==undefined&&!Array.isArray(data.emoji_entities))throw error(400,'Некорректные пользовательские эмодзи');
-    const entities=expressions()?.entities(text,data.emoji_entities?.map(e=>({...e,start:e?.start-shift})),uid,!!source)||[];
+    const entities=expressions()?.entities(text,data.emoji_entities,uid,!!source)||[];
     if(attachment&&(typeof attachment!=='string'||!/^[a-f0-9]{48}$/.test(attachment)))throw error(400,'Некорректный файл');
     if(quote&&!reply)throw error(400,'Цитата требует исходного сообщения');
     if(reply&&(!Number.isSafeInteger(reply)||reply<1))throw error(400,'Некорректный ответ');
     const existing=db.prepare('SELECT * FROM messages WHERE sender_id=? AND client_id=?').get(uid,cid);
     if(existing){if(existing.id<=cutoff(existing.chat_id,uid))throw Object.assign(error(409,'Сообщение относится к очищенной истории. Отправьте его заново'),{code:'HISTORY_CLEARED'});if(JSON.stringify(interactivePayload(existing.interactive?JSON.parse(existing.interactive):{}))!==JSON.stringify(interactive))throw error(409,'Идентификатор уже использован');if(existing.chat_id!==chat||existing.forward_source!==source||(!source&&(existing.text!==text||existing.attachment_id!==attachment||existing.reply_to!==reply||(existing.reply_quote||null)!==(quote?JSON.stringify(quote):null)||existing.expression_id!==(expression?.id||null)||JSON.stringify(expressions()?.hydrateEntities(existing.id)||[])!==JSON.stringify(entities))))throw error(409,'Идентификатор уже использован');return {row:existing,created:false};}
-    if(text.length>4000||(!text&&!attachment))throw error(400,'Введите текст до 4000 символов или прикрепите файл');
+    if(text.length>4000||(!text.trim()&&!attachment))throw error(400,'Введите текст до 4000 символов или прикрепите файл');
     if(reply){const quoted=get(reply);if(!quoted||quoted.deleted_at||quoted.id<=cutoff(quoted.chat_id,uid)||(!quote&&quoted.chat_id!==chat))throw error(400,'Сообщение для ответа недоступно');member(quoted.chat_id,uid);if(quote&&!validQuote(quoted.text,quote))throw error(400,'Цитата не совпадает с исходным сообщением');}
     if(attachment){const file=db.prepare('SELECT * FROM attachments WHERE id=?').get(attachment);
       if(!file||file.admin_blocked)throw error(404,'Файл не найден');
@@ -183,9 +182,9 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     const album=path.match(/^\/api\/chats\/(\d+)\/album$/);
     if(album&&method==='POST'){
       const chat=Number(album[1]),data=await body(req);canPublish(chat,uid);
-      const cid=clientId(data.client_id),ids=data.attachment_ids,rawText=String(data.text||''),text=rawText.trim(),reply=data.reply_to||null;
+      const cid=clientId(data.client_id),ids=data.attachment_ids,rawText=String(data.text||''),text=rawText,reply=data.reply_to||null;
       if(cid.length>48||!Array.isArray(ids)||ids.length<2||ids.length>10||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'||!/^[a-f0-9]{48}$/.test(id)))throw error(400,'Альбом: от 2 до 10 разных фото или видео');
-      if(data.emoji_entities!==undefined&&!Array.isArray(data.emoji_entities))throw error(400,'Некорректные пользовательские эмодзи');const shift=rawText.length-rawText.trimStart().length,emoji=expressions()?.entities(text,data.emoji_entities?.map(e=>({...e,start:e?.start-shift})),uid)||[];
+      if(data.emoji_entities!==undefined&&!Array.isArray(data.emoji_entities))throw error(400,'Некорректные пользовательские эмодзи');const emoji=expressions()?.entities(text,data.emoji_entities,uid)||[];
       const key=uid+':'+cid,previous=db.prepare('SELECT * FROM messages WHERE album_id=? ORDER BY id').all(key);
       if(previous.length){
         if(JSON.stringify(expressions()?.hydrateEntities(previous[0].id)||[])!==JSON.stringify(emoji)||previous.length!==ids.length||previous.some((m,i)=>m.chat_id!==chat||m.attachment_id!==ids[i]||m.text!==(i===0?text:'')||m.reply_to!==reply||(m.reply_quote||null)!==(data.reply_quote?JSON.stringify(replyQuote(data.reply_quote)):null)))throw error(409,'Идентификатор альбома уже использован');
@@ -297,10 +296,9 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
         if(row.interactive)throw error(400,'Опросы и списки нельзя изменять как текст');
         canPublish(row.chat_id,uid);
         if(row.sender_id!==uid)throw error(403,'Можно изменять только свои сообщения');
-        const text=String(data.text||'').trim();if(text.length>4000||(!text&&!row.attachment_id))throw error(400,'Введите текст до 4000 символов');
-        const shift=String(data.text||'').length-String(data.text||'').trimStart().length;
+        const text=String(data.text||'');if(text.length>4000||(!text.trim()&&!row.attachment_id))throw error(400,'Введите текст до 4000 символов');
         if(data.emoji_entities!==undefined&&!Array.isArray(data.emoji_entities))throw error(400,'Некорректные пользовательские эмодзи');
-        const entities=expressions()?.entities(text,data.emoji_entities?.map(e=>({...e,start:e?.start-shift})),uid,false,new Set((expressions()?.hydrateEntities(row.id)||[]).map(e=>e.id)))||[];
+        const entities=expressions()?.entities(text,data.emoji_entities,uid,false,new Set((expressions()?.hydrateEntities(row.id)||[]).map(e=>e.id)))||[];
         db.exec('BEGIN IMMEDIATE');try{db.prepare('UPDATE messages SET text=?,edited_at=? WHERE id=?').run(text,new Date().toISOString(),row.id);expressions()?.recordEntities(row.id,entities);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}
       }else if(action==='delete'){
         if(row.sender_id!==uid&&!canModerate(row.chat_id,uid))throw error(403,'Можно удалять только свои сообщения');

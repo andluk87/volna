@@ -1,5 +1,5 @@
 export function parseMessage(text=''){
- const lines=String(text).split('\n'),blocks=[];let paragraph=[],quote=[],code=null;
+ const lines=String(text).replace(/\r\n?/g,'\n').split('\n'),blocks=[];let paragraph=[],quote=[],code=null;
  const flushParagraph=()=>{if(paragraph.length){blocks.push({type:'paragraph',text:paragraph.join('\n')});paragraph=[];}};
  const flushQuote=()=>{if(quote.length){blocks.push({type:'quote',text:quote.join('\n')});quote=[];}};
  for(const line of lines){
@@ -7,7 +7,8 @@ export function parseMessage(text=''){
   if(fence){if(code){blocks.push({type:'code',text:code.lines.join('\n'),language:code.language});code=null;}else{flushParagraph();flushQuote();code={language:fence[1],lines:[]};}continue;}
   if(code){code.lines.push(line);continue;}
   if(/^> ?/.test(line)){flushParagraph();quote.push(line.replace(/^> ?/,''));continue;}
-  flushQuote();if(!line.trim()){flushParagraph();continue;}paragraph.push(line);
+  // Empty and whitespace-only lines belong to the message, not layout margins.
+  flushQuote();paragraph.push(line);
  }
  if(code)blocks.push({type:'code',text:['```'+code.language,...code.lines].join('\n'),language:''});
  flushParagraph();flushQuote();return blocks;

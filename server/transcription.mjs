@@ -23,7 +23,8 @@ export function createTranscriber({endpoint=process.env.WHISPER_URL||'http://tra
           const body=await response.json().catch(()=>null);
           const detail=body?.detail;let message='Локальный сервис распознавания временно недоступен';
           if(detail?.state==='loading')message=detail.loading_seconds>=300?'Загрузка модели задерживается. Проверьте доступ к хранилищу моделей и свободное место на сервере':'Локальная модель распознавания ещё загружается';
-          if(detail?.state==='failed')message=detail.error?.errno===28?'Недостаточно места на сервере для модели распознавания':detail.error?.errno===13?'Сервис распознавания не имеет доступа к кэшу моделей':'Не удалось загрузить модель распознавания. Проверьте журнал контейнера transcription';
+          if(detail?.state==='failed')message=detail.error?.errno===101?'Контейнер распознавания не имеет доступа к сети для загрузки модели. Загрузите веса с хоста через scripts/prefetch-asr.sh':detail.error?.errno===28?'Недостаточно места на сервере для модели распознавания':detail.error?.errno===13?'Сервис распознавания не имеет доступа к кэшу моделей':'Не удалось загрузить модель распознавания. Проверьте журнал контейнера transcription';
+          if(detail?.state==='loading'&&detail.download){const d=detail.download;if(d.stage==='initializing')message='Веса модели загружены, запускается локальное распознавание';else if(Number.isSafeInteger(d.completed_files)&&Number.isSafeInteger(d.total_files)&&d.completed_files>=0&&d.total_files>0&&d.total_files<=100){message+=' · файлов '+d.completed_files+'/'+d.total_files;if(Number.isFinite(d.bytes_on_disk)&&d.bytes_on_disk>0)message+=' · на диске '+Math.round(d.bytes_on_disk/1048576)+' МБ';}}
           throw Object.assign(new Error(message),{status:503});
         }
         throw Object.assign(new Error('Локальное распознавание временно недоступно'),{status:502});

@@ -1,5 +1,6 @@
 """Russian speech recognition on CPU. Only model weights are downloaded, never audio."""
 import os
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -24,24 +25,64 @@ def cpu_threads(value="auto"):
     return max(1, min(16, count))
 
 
+_download_lock = threading.Lock()
+_download = {"stage": "starting", "current_file": None}
+_download_root = Path("/models/huggingface/hub")
+
+
+def download_status():
+    with _download_lock:
+        status = dict(_download)
+        root = _download_root / "models--istupakov--gigaam-v3-onnx"
+    cached = root / "snapshots" / REVISION
+    complete = sum((cached / name).is_file() for name in FILES)
+    written = 0
+    for path in (root / "blobs").glob("*"):
+        try:
+            if path.is_file():
+                stat = path.stat()
+                written += stat.st_blocks * 512
+        except OSError:
+            pass
+    return {**status, "completed_files": complete, "total_files": len(FILES),
+            "bytes_on_disk": written}
+
+
+def _stage(stage, filename=None):
+    with _download_lock:
+        _download.update(stage=stage, current_file=filename)
+
+
 def model_directory(root="/models", local_directory=""):
+    global _download_root
     if local_directory:
         path = Path(local_directory)
         if not all((path / name).is_file() and (path / name).stat().st_size for name in FILES[:-1]):
             raise FileNotFoundError("Incomplete local GigaAM model")
         return str(path)
-    from huggingface_hub import snapshot_download
+    from huggingface_hub import hf_hub_download
     from huggingface_hub.errors import LocalEntryNotFoundError
-    options = dict(repo_id=REPOSITORY, revision=REVISION, allow_patterns=list(FILES),
-                   cache_dir=str(Path(root) / "huggingface" / "hub"), max_workers=2)
-    try:
-        path = snapshot_download(**options, local_files_only=True)
-        if all((Path(path) / name).is_file() and (Path(path) / name).stat().st_size for name in FILES[:-1]):
-            return path
-    except LocalEntryNotFoundError:
-        pass
-    print("[asr] downloading GigaAM full-precision weights into persistent cache", flush=True)
-    return snapshot_download(**options)
+    with _download_lock:
+        _download_root = Path(root) / "huggingface" / "hub"
+    options = dict(repo_id=REPOSITORY, revision=REVISION, cache_dir=str(_download_root))
+    paths = []
+    # Exact filenames avoid the repository-listing API and its metadata request.
+    # Each finished file is immediately reusable after a connection failure.
+    for name in FILES:
+        _stage("checking-cache", name)
+        try:
+            path = hf_hub_download(filename=name, **options, local_files_only=True)
+        except LocalEntryNotFoundError:
+            path = None
+        if path is None or not Path(path).is_file() or Path(path).stat().st_size == 0:
+            _stage("downloading", name)
+            print(f"[asr] downloading_file name={name}", flush=True)
+            path = hf_hub_download(filename=name, **options, etag_timeout=10)
+        if not Path(path).is_file() or Path(path).stat().st_size == 0:
+            raise FileNotFoundError("Incomplete downloaded GigaAM file")
+        paths.append(Path(path))
+        print(f"[asr] cached_file name={name} bytes={paths[-1].stat().st_size}", flush=True)
+    return str(paths[0].parent)
 
 
 class GigaAMModel:
@@ -82,7 +123,9 @@ def load_gigaam(threads, root="/models", local_directory=""):
     options.inter_op_num_threads = 1
     options.add_session_config_entry("session.intra_op.allow_spinning", "0")
     directory = model_directory(root, local_directory)
+    _stage("initializing")
     print(f"[asr] loading model={MODEL} precision=float32 device=cpu cpu_threads={threads}", flush=True)
     model = onnx_asr.load_model(MODEL, directory, quantization=None,
                                providers=["CPUExecutionProvider"], sess_options=options)
+    _stage("ready")
     return GigaAMModel(model)

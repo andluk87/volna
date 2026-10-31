@@ -61,12 +61,12 @@ test('expressions: private packs and media are isolated; sending is idempotent a
  assert.equal((await request('/files/'+item.attachment_id,a.token)).status,200);
 });
 
-test('expressions: custom emoji retain UTF-16 offsets through trim, edit, retry and authorized forwarding',async t=>{
+test('expressions: custom emoji retain UTF-16 offsets with whitespace, edit, retry and authorized forwarding',async t=>{
  const {app,request,users:[a,b,c],create}=await fixture(t);
  const p=await create(a,'emoji',false,'👍🏽'),item=p.items[0],ab=(await request('/chats',a.token,{user_id:b.user.id})).data.id;
  const payload={text:'  Я 👍🏽!  ',emoji_entities:[{id:item.id,start:4,length:4}],client_id:randomUUID()};
  const first=await request(`/chats/${ab}/messages`,a.token,payload);
- assert.equal(first.status,201);assert.equal(first.data.text,'Я 👍🏽!');assert.equal(first.data.emoji_entities[0].start,2);assert.equal(first.data.emoji_entities[0].length,4);assert.equal(first.data.emoji_entities[0].attachment_id,item.attachment_id);
+ assert.equal(first.status,201);assert.equal(first.data.text,payload.text);assert.equal(first.data.emoji_entities[0].start,4);assert.equal(first.data.emoji_entities[0].length,4);assert.equal(first.data.emoji_entities[0].attachment_id,item.attachment_id);
  assert.equal((await request(`/chats/${ab}/messages`,a.token,payload)).status,200);
  assert.equal((await request('/files/'+item.attachment_id,b.token)).status,200);assert.equal((await request('/files/'+item.attachment_id,c.token)).status,404);
  const bc=(await request('/chats',b.token,{user_id:c.user.id})).data.id;

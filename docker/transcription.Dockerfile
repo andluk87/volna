@@ -1,5 +1,6 @@
 FROM python:3.11-slim
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 HF_HOME=/models/huggingface
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 HF_HOME=/models/huggingface \
+    HF_HUB_DISABLE_XET=1 HF_HUB_ETAG_TIMEOUT=10 HF_HUB_DOWNLOAD_TIMEOUT=30
 WORKDIR /app
 COPY docker/transcription-requirements.txt ./requirements.txt
 RUN --mount=type=secret,id=proxy_ca \
