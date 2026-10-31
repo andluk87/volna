@@ -24,15 +24,16 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+    <!-- Companion apps may decode application/activity icons as bitmaps without adaptive-icon support. -->
     <application
         android:name=".VolnaApplication"
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
+        android:icon="@drawable/volna_launcher" android:roundIcon="@drawable/volna_launcher"
         android:label="VLN"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <activity
-            android:name=".MainActivity" android:icon="@mipmap/ic_launcher" android:supportsPictureInPicture="true"
+            android:name=".MainActivity" android:icon="@drawable/volna_launcher" android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
