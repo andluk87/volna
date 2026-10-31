@@ -1,3 +1,4 @@
+import {loginCodeMessages} from './login-code-messages.mjs';
 import {profilePosts} from './profile-posts.mjs';
 import {accountAppearance} from './appearance.mjs';
 import {createNewsChannel} from './news.mjs';
@@ -48,6 +49,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   initAdminSchema(db);
   const streams = new Map(), limits = new Map();
   let newsService;
+  let loginCodeService;
   const userById = (id,own=false) => {
     const row=db.prepare('SELECT id,username,name,bio,avatar_id,avatar_hidden,phone,last_seen,first_name,last_name,profile_setup_required FROM users WHERE id=?').get(id);
     if(!row)return;
@@ -81,7 +83,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   };
   const presenceChanged=uid=>{const viewers=db.prepare("SELECT DISTINCT other.user_id FROM members me JOIN members other ON me.chat_id=other.chat_id JOIN chats c ON c.id=me.chat_id WHERE c.kind='direct' AND me.user_id=? AND other.user_id<>?").all(uid,uid).map(row=>row.user_id).filter(id=>contactService?.canSeePresence(id,uid));publish(viewers,{type:'chats'});};
   let pushService;
-  const broadcast = (chat, event) => {const users=db.prepare('SELECT user_id FROM members WHERE chat_id=?').all(chat).map(x=>x.user_id);if(['message','message-update'].includes(event.type)){for(const uid of users)publish([uid],{...event,notify:topicNotification(db,chat,uid,event.message.text,event.message.reply_to),silent:topicNotificationMode(db,chat,uid)==='silent'});if(event.type==='message')pushService?.message(chat,event.message);}else publish(users,event);};
+  const broadcast = (chat, event) => {const users=db.prepare('SELECT user_id FROM members WHERE chat_id=?').all(chat).map(x=>x.user_id);if(['message','message-update'].includes(event.type)){for(const uid of users)publish([uid],{...event,notify:event.notify===false?false:topicNotification(db,chat,uid,event.message.text,event.message.reply_to),silent:topicNotificationMode(db,chat,uid)==='silent'});if(event.type==='message')pushService?.message(chat,event.message);}else publish(users,event);};
   const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(contactService?.personalize(res.volnaViewer,data)||data)); };
   const body = async req => {
     if(req.volnaParsedBody){const data=req.volnaParsedBody;delete req.volnaParsedBody;return data;}
@@ -94,17 +96,18 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
     if (++item.count > max) throw fail(429, 'Слишком много запросов. Подождите минуту');
   };
   const disconnect=(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();};
-  const phoneService=phoneAuth({db,smsOptions,json,body,userById,auth,disconnect,loginCheck:(uid)=>{if(uid&&db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(uid)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');if(!uid&&!readAdminSettings(db).registration_enabled)throw fail(403,'Регистрация новых пользователей временно закрыта');},...phoneAuthOptions});
+  const phoneService=phoneAuth({db,smsOptions,json,body,userById,auth,disconnect,onLoginCode:event=>loginCodeService?.deliver(event),onChallengeChanged:()=>loginCodeService?.refresh(),loginCheck:(uid)=>{if(uid&&db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(uid)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');if(!uid&&!readAdminSettings(db).registration_enabled)throw fail(403,'Регистрация новых пользователей временно закрыта');},...phoneAuthOptions});
   const handleAppearance = accountAppearance({db,body,json});
   const handleFolders = folders({db,body,json,publish});
   const handleProfiles = profiles({db,uploads,auth,publish,userById,json,body});
   usernameService=usernames({db,body,json,userById,publish,uploads});
   const handlePosts=profilePosts({db,auth,body,json,userById,publish});
   let expressionService;
-  const handleMessaging = messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions:()=>expressionService});
+  const handleMessaging = messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions:()=>expressionService,serviceMessages:()=>loginCodeService});
   expressionService=expressions({db,uploads,body,json,member,publish});
   handleMessaging.cleanupUnused();
   const handleCommunities = communities({db,member,broadcast,publish,json,body,userById,online:id=>!!streams.get(id)?.size});
+  loginCodeService=loginCodeMessages({db,broadcast,hydrate:row=>handleMessaging.hydrate(row,{serviceContent:true}),clock:phoneAuthOptions.clock||Date.now});
   const handleTopics=topics({db,body,json,member,broadcast,publish});
   let callService;
   pushService = notifications({db,auth,body,json,sender:pushSender,callReceipt:id=>callService?.receipt(id),contactDisplay:(uid,id,name)=>contactService?.display(uid,id,name)||name});
@@ -115,6 +118,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   const adminService=createAdminServer({db,smsOptions,uploads,json,body,publish,broadcast,hydrate:handleMessaging.hydrate,userById,disconnectUser:uid=>{for(const stream of streams.get(uid)||[])stream.end();},cleanupFiles:handleMessaging.cleanupUnused,callService,...adminOptions});
   if(newsEnabled)newsService=createNewsChannel({db,uploads});
   const cleanup = setInterval(() => {
+    loginCodeService.refresh();
     const now = Date.now(); for (const [key, entry] of limits) if (entry.until < now) limits.delete(key);
     phoneService.cleanup(); adminService.cleanup();
     for (const list of streams.values()) for (const res of list) if (res.sessionExpires < now) res.end();

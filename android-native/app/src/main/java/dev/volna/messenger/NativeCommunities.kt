@@ -31,17 +31,18 @@ import java.util.UUID
 
 @Composable
 fun CommunityEntryDialog(mode: String, token: String, api: NativeApi, onDismiss: () -> Unit, onOpen: (Long) -> Unit) {
+    val joining = mode == "join" || mode.startsWith("join:")
     val scope = rememberCoroutineScope()
     var kind by remember { mutableStateOf(if (mode == "create-channel") "channel" else "group") }
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var invite by remember { mutableStateOf("") }
+    var invite by remember(mode) { mutableStateOf(mode.takeIf { it.startsWith("join:") }?.substringAfter(":").orEmpty()) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     val clientId = remember { UUID.randomUUID().toString() }
-    AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, title = { NativeText(if (mode == "join") "Войти по приглашению" else "Создать сообщество") }, text = {
+    AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, title = { NativeText(if (joining) "Войти по приглашению" else "Создать сообщество") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
-            if (mode == "join") {
+            if (joining) {
                 NativeText("Вставьте код или ссылку приглашения", color = Muted, fontSize = 12.sp)
                 NativeField(invite, { invite = it }, "Приглашение")
             } else {
@@ -57,9 +58,9 @@ fun CommunityEntryDialog(mode: String, token: String, api: NativeApi, onDismiss:
         scope.launch {
             try {
                 val id = withContext(Dispatchers.IO) {
-                    if (mode == "join") {
+                    if (joining) {
                         val raw = invite.trim()
-                        val code = if (raw.matches(Regex("[a-f0-9]{48}"))) raw else Uri.parse(raw).getQueryParameter("invite") ?: Uri.parse(raw).getQueryParameter("token") ?: raw
+                        val code = nativeCommunityInvite(raw, BuildConfig.API_BASE_URL) ?: error("Проверьте ссылку приглашения: нужен полный адрес этого сервера или код из 48 символов")
                         api.joinCommunity(token, code)
                     } else api.createCommunity(token, kind, title.trim(), description.trim(), clientId)
                 }
@@ -67,7 +68,7 @@ fun CommunityEntryDialog(mode: String, token: String, api: NativeApi, onDismiss:
             } catch (problem: Exception) { error = problem.message ?: "Не удалось открыть сообщество" }
             finally { busy = false }
         }
-    }) { NativeText(if (busy) "Подождите…" else if (mode == "join") "Войти" else "Создать") } }, dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { NativeText("Отмена") } })
+    }) { NativeText(if (busy) "Подождите…" else if (joining) "Войти" else "Создать") } }, dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { NativeText("Отмена") } })
 }
 
 private data class MemberCommand(val action: String, val member: VolnaMember?, val role: String? = null)

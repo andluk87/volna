@@ -75,10 +75,10 @@ private class SmsPhoneTransformation(private val country: String) : VisualTransf
 
 @Composable
 internal fun NativeSmsLogin(api: NativeApi, update: VolnaUpdate?, updateBusy: Boolean, updateStatus: String,
-    onUpdate: () -> Unit, onSignedIn: (VolnaSession) -> Unit) {
+    onUpdate: () -> Unit, onCancel: (() -> Unit)? = null, modelOverride: NativeSmsAuthViewModel? = null, onSignedIn: (VolnaSession) -> Unit) {
     val context = LocalContext.current
     val loginKey = rememberSaveable { UUID.randomUUID().toString() }
-    val model: NativeSmsAuthViewModel = viewModel(key = "sms-$loginKey", factory = viewModelFactory {
+    val model: NativeSmsAuthViewModel = modelOverride ?: viewModel(key = "sms-$loginKey", factory = viewModelFactory {
         initializer { NativeSmsAuthViewModel(context.applicationContext, api, createSavedStateHandle()) }
     })
     val state by model.state.collectAsState()
@@ -98,16 +98,18 @@ internal fun NativeSmsLogin(api: NativeApi, update: VolnaUpdate?, updateBusy: Bo
     DisposableEffect(owner, model) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) model.resume() }
         owner.lifecycle.addObserver(observer)
-        onDispose { owner.lifecycle.removeObserver(observer) }
+        onDispose { owner.lifecycle.removeObserver(observer); model.back() }
     }
     val otpDescription = stringResource(R.string.sms_auth_otp_accessibility)
     val codeScreen = state.challenge.isNotBlank()
-    BackHandler(enabled = codeScreen || state.busy) { model.back() }
+    fun leave() { model.back(); keyboard?.hide(); onCancel?.invoke() }
+    fun back() { if (codeScreen || state.busy) model.back() else leave() }
+    BackHandler(enabled = onCancel != null || codeScreen || state.busy) { back() }
     val focus = remember { FocusRequester() }
     LaunchedEffect(codeScreen) { if (codeScreen) { focus.requestFocus(); keyboard?.show() } }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (codeScreen || state.busy) IconButton(onClick = { model.back() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.sms_auth_change_number)) }
+            if (onCancel != null || codeScreen || state.busy) IconButton(onClick = { back() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, if (codeScreen || state.busy) stringResource(R.string.sms_auth_change_number) else "Вернуться в аккаунт") }
         }
         Column(Modifier.widthIn(max = 440.dp).fillMaxWidth().padding(horizontal = 28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Box(Modifier.size(100.dp).background(Accent.copy(alpha = .12f), CircleShape), contentAlignment = Alignment.Center) {
@@ -116,6 +118,7 @@ internal fun NativeSmsLogin(api: NativeApi, update: VolnaUpdate?, updateBusy: Bo
             Spacer(Modifier.height(4.dp))
             NativeText(if (codeScreen) stringResource(R.string.sms_auth_code_title) else stringResource(R.string.sms_auth_phone_title), fontSize = 25.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
             NativeText(if (codeScreen) stringResource(R.string.sms_auth_sent_description, state.maskedPhone) else stringResource(R.string.sms_auth_phone_description), color = Muted, textAlign = TextAlign.Center, lineHeight = 22.sp)
+            if (codeScreen) NativeText("Если вы уже вошли в этот аккаунт на другом устройстве, проверьте чат «Волна — коды входа».", color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
             Spacer(Modifier.height(2.dp))
             if (!codeScreen) {
                 OutlinedButton(onClick = { countrySearch = ""; countryPicker = true }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(12.dp)) {
@@ -168,6 +171,7 @@ internal fun NativeSmsLogin(api: NativeApi, update: VolnaUpdate?, updateBusy: Bo
             if (state.error.isNotBlank()) NativeText(state.error, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
             if (!codeScreen) NativeText(stringResource(R.string.sms_auth_privacy), color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
 
+            if (onCancel != null) TextButton(onClick = { leave() }) { NativeText("Вернуться в аккаунт") }
             Spacer(Modifier.height(28.dp))
         }
     }

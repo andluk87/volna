@@ -54,6 +54,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="volna" android:host="login" />
                 <data android:scheme="volna" android:host="profile" />
+                <data android:scheme="volna" android:host="invite" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

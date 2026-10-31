@@ -36,3 +36,5 @@
 .qr-login{margin:auto;text-align:center;max-width:440px}.login-qr{width:250px;height:250px;margin:24px auto;background:white;border-radius:20px;padding:14px;display:grid;place-items:center;color:#101820}.login-qr svg{width:100%;height:100%}.qr-login>a{display:block;margin:15px}.qr-login>small{display:block;line-height:1.5;color:var(--muted)}
 
 .call-panel.call-minimized{touch-action:none;cursor:grab}.call-panel.call-minimized:active{cursor:grabbing}.call-panel .call-mini-drag{flex:0 0 24px;width:24px;padding:0;background:transparent;font-size:23px;cursor:grab}.call-mini-main{cursor:inherit}
+
+.invite-open-app a.primary{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;margin:12px 0;padding:14px 22px;border-radius:12px;font-weight:600}

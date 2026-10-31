@@ -8,12 +8,12 @@ import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 const error=(status,message)=>Object.assign(new Error(message),{status});
 const emojis=['👍','❤️','😂','🔥','🎉','😢','👏','😍','🤔','😮','🙏','💯','👎','🥰','🤣','😎','😭','🤝','💪','👋','✨','💙','😡','🤗'];
-export function messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions=()=>null}) {
+export function messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions=()=>null,serviceMessages=()=>null}) {
   mkdirSync(uploads,{recursive:true});
   db.exec('CREATE TABLE IF NOT EXISTS chat_visibility(user_id INTEGER NOT NULL REFERENCES users(id),chat_id INTEGER NOT NULL REFERENCES chats(id),hidden_before INTEGER NOT NULL DEFAULT 0,deleted INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(user_id,chat_id))');
   const cutoff=(chat,uid)=>db.prepare('SELECT hidden_before FROM chat_visibility WHERE user_id=? AND chat_id=?').get(uid,chat)?.hidden_before||0;
   const visibleHydrate=(row,uid)=>{
-    const result=hydrate(row);if(!result?.reply)return result;
+    const result=hydrate(row,{serviceContent:true});if(!result?.reply)return result;
     const sourceChat=result.reply.chat_id;
     if(sourceChat===row.chat_id&&result.reply.id<=cutoff(sourceChat,uid))return {...result,reply:null,reply_to:null,reply_quote:null};
     const accessible=!!db.prepare('SELECT 1 FROM members m JOIN chats c ON c.id=m.chat_id WHERE m.chat_id=? AND m.user_id=? AND c.admin_deleted=0').get(sourceChat,uid)&&result.reply.id>cutoff(sourceChat,uid);
@@ -41,13 +41,13 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   const canPublish=(chat,uid)=>{const c=permission(chat,uid);if(c.admin_locked||c.parent_locked)throw error(403,'Отправка сообщений в этом чате ограничена администратором');if(c.topic_closed&&!['owner','admin'].includes(c.role))throw error(403,'Тема закрыта для сообщений участников');if((c.kind==='channel'||c.kind==='group'&&c.posting_policy==='admins')&&!['admin','owner'].includes(c.role))throw error(403,'Публиковать могут только администраторы');return c;};
   const canModerate=(chat,uid)=>{const c=permission(chat,uid);return ['group','channel'].includes(c.kind)&&['admin','owner'].includes(c.role);};
   const get=id=>db.prepare('SELECT * FROM messages WHERE id=?').get(id);
-  const hydrate=row=>{
+  const hydrate=(row,options)=>{
     if(!row)return null;
     const topic=db.prepare("SELECT c.parent_id,c.title,c.general_name,c.topics_enabled,(SELECT title FROM chats WHERE id=c.parent_id) AS group_title FROM chats c WHERE c.id=?").get(row.chat_id);row={...row,group_id:topic?.parent_id||row.chat_id,topic_id:topic?.parent_id||topic?.topics_enabled?row.chat_id:null,message_thread_id:topic?.parent_id||topic?.topics_enabled?row.chat_id:null,topic_name:topic?.parent_id?topic.title:topic?.topics_enabled?topic.general_name:null,group_name:topic?.parent_id?topic.group_title:topic?.title||null};
     if(row.deleted_at)return {...row,text:'',attachment_id:null,expression_id:null,emoji_entities:[],reply_to:null,reply_quote:null,forwarded_name:null,attachment:null,reply:null,reactions:[],pinned:false,poll:null,checklist:null,interactive:null};
     const reply=row.reply_to?get(row.reply_to):null;
     const sender=userById(row.sender_id);
-    return {...row,reply_quote:!reply||reply.deleted_at?null:row.reply_quote,...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_name:sender?.name||'Пользователь',sender_username:sender?.username||'',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
+    return {...row,text:options?.serviceContent===true?(serviceMessages()?.text(row)??row.text):row.text,reply_quote:!reply||reply.deleted_at?null:row.reply_quote,...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_name:sender?.name||'Пользователь',sender_username:sender?.username||'',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
       reply:reply?{id:reply.id,sender_id:reply.sender_id,name:userById(reply.sender_id)?.name,text:reply.deleted_at?'Сообщение удалено':row.reply_quote?JSON.parse(row.reply_quote).text:reply.text||'Вложение',quote:!reply.deleted_at&&row.reply_quote?JSON.parse(row.reply_quote):null,chat_id:reply.chat_id,can_jump:reply.chat_id===row.chat_id,deleted:!!reply.deleted_at}:null,
       reactions:db.prepare('SELECT r.emoji,r.user_id,u.name FROM reactions r JOIN users u ON u.id=r.user_id WHERE r.message_id=? ORDER BY r.emoji,r.rowid').all(row.id).map(reaction=>({...reaction,avatar_url:userById(reaction.user_id)?.avatar_url||null})),
       pinned:!!db.prepare('SELECT 1 FROM pins WHERE message_id=?').get(row.id)};

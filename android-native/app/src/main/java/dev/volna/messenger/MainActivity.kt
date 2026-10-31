@@ -99,6 +99,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
@@ -143,6 +144,7 @@ class MainActivity : ComponentActivity() {
     private val incomingShare = mutableStateOf<NativeIncomingShare?>(null)
     private var incomingShareSource: Intent? = null
     private val authReturn = mutableStateOf<String?>(null)
+    private val openInviteRequest = mutableStateOf<String?>(null)
     private val openChatRequest = mutableStateOf<Long?>(null)
     private val openMessageRequest = mutableStateOf<Long?>(null)
     private val openAccountRequest = mutableStateOf<Long?>(null)
@@ -158,6 +160,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         configureCallPip()
         authReturn.value = intent?.dataString
+        openInviteRequest.value = nativeCommunityInvite(intent?.dataString, BuildConfig.API_BASE_URL)
         if (intent?.getBooleanExtra("open_call", false) == true) NativeCalls.minimize(false)
         openChatRequest.value = intent?.getLongExtra("chat_id", 0L)?.takeIf { it > 0 } ?: nativeLinkedTopicChat(intent?.dataString, BuildConfig.API_BASE_URL)
         openMessageRequest.value = intent?.getLongExtra("message_id", 0L)?.takeIf { it > 0 }
@@ -166,8 +169,8 @@ class MainActivity : ComponentActivity() {
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
         setContent { NativeEmojiProvider {
             Box(Modifier.fillMaxSize()) {
-                VolnaNativeApp(authReturn.value, openChatRequest.value, openMessageRequest.value, openAccountRequest.value,
-                    incomingShare.value, { incomingShare.value = null; incomingShareSource = null; setIntent(Intent(this@MainActivity, MainActivity::class.java)) }) { openChatRequest.value = null; openMessageRequest.value = null; openAccountRequest.value = null }
+                VolnaNativeApp(authReturn.value, openChatRequest.value, openMessageRequest.value, openAccountRequest.value, openInviteRequest.value,
+                    incomingShare.value, { incomingShare.value = null; incomingShareSource = null; setIntent(Intent(this@MainActivity, MainActivity::class.java)) }) { openChatRequest.value = null; openMessageRequest.value = null; openAccountRequest.value = null; openInviteRequest.value = null }
                 if (NativeCallLayout.inPip) { val state by NativeCalls.state.collectAsState(); val account = getSharedPreferences("volna-native", MODE_PRIVATE).getLong("user_id", 0); VolnaTheme(rememberNativeCallAppearance(account)) { NativeCallScreen(state, NativeCredentials.access(account), standalone = true, pip = true) } }
             }
         } }
@@ -186,6 +189,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         NativeIncomingShare.parse(intent)?.let { incomingShare.value = it; incomingShareSource = Intent(intent) }
         authReturn.value = intent.dataString
+        openInviteRequest.value = nativeCommunityInvite(intent.dataString, BuildConfig.API_BASE_URL)
         if (intent.getBooleanExtra("open_call", false)) NativeCalls.minimize(false)
         openChatRequest.value = intent.getLongExtra("chat_id", 0L).takeIf { it > 0 } ?: nativeLinkedTopicChat(intent.dataString, BuildConfig.API_BASE_URL)
         openMessageRequest.value = intent.getLongExtra("message_id", 0L).takeIf { it > 0 }
@@ -196,7 +200,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessageId: Long?, openAccountId: Long?, externalIncomingShare: NativeIncomingShare?, consumeExternalShare: () -> Unit, onIntentConsumed: () -> Unit) {
+private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessageId: Long?, openAccountId: Long?, openInvite: String?, externalIncomingShare: NativeIncomingShare?, consumeExternalShare: () -> Unit, onIntentConsumed: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val api = remember { NativeApi(BuildConfig.API_BASE_URL) }
     val cache = remember { NativeCache(context) }
@@ -230,6 +234,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     val scope = rememberCoroutineScope()
     val homeState = rememberSaveableStateHolder()
     var token by remember { mutableStateOf(NativeCredentials.access(prefs.getLong("user_id",0))) }
+    var addingAccount by rememberSaveable { mutableStateOf(false) }
     var me by remember { mutableStateOf(NativeAccounts.list(context).firstOrNull { it.user.id == prefs.getLong("user_id", 0) }?.user) }
     NativeContactSyncHost(me?.id ?: 0, token, api)
     val cloudAppearanceError = NativeCloudAppearance(me?.id ?: 0, token, api) { appearance = NativeAppearance.load(appearancePrefs); themeRevision++ }
@@ -508,6 +513,11 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     }
 
     LaunchedEffect(token) { NativeCalls.configure(context, token) }
+    LaunchedEffect(openInvite, token, addingAccount, me?.id, me?.profileSetupRequired) {
+        if (openInvite != null && token.isNotBlank() && !addingAccount && me != null && me?.profileSetupRequired != true) {
+            communityEntry = "join:$openInvite"; onIntentConsumed()
+        }
+    }
     LaunchedEffect(authReturnUrl, token) {
         if (!authReturnUrl.isNullOrBlank() && authReturnUrl.startsWith("volna://profile/") && token.isNotBlank()) {
             try { val nick=android.net.Uri.parse(authReturnUrl).path.orEmpty().trim('/');if(nick.matches(Regex("[a-zA-Z0-9_]{4,32}"))){val user=withContext(Dispatchers.IO){api.publicProfile(nick)};profileTargetId=user.id} } catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(problem:Exception){error=problem.message.orEmpty()};onIntentConsumed()
@@ -645,11 +655,29 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             }
             Box(Modifier.weight(1f)) {
             when {
-                token.isBlank() -> NativeSmsLogin(api, updateAvailable, updateBusy, updateStatus,
-                    { installUpdate(updateAvailable) }) { session ->
-                        prefs.edit().remove("token").putLong("user_id",session.user.id).apply()
-                        NativeAccounts.remember(context,session.user,session.token);me=session.user;token=session.token
+                addingAccount || token.isBlank() -> {
+                    val returnAccount = NativeAccounts.list(context).firstOrNull { it.user.id == me?.id } ?: NativeAccounts.list(context).firstOrNull()
+                    NativeSmsLogin(api, updateAvailable, updateBusy, updateStatus,
+                        { installUpdate(updateAvailable) }, onCancel = returnAccount?.let { account -> {
+                            addingAccount = false
+                            if (token.isBlank()) {
+                                prefs.edit().putLong("user_id", account.user.id).apply()
+                                me = account.user; token = account.token; error = ""
+                            }
+                        } }) { session ->
+                        NativeAccounts.remember(context, session.user, session.token)
+                        addingAccount = false
+                        if (callState.call != null && token.isNotBlank()) error = "Аккаунт добавлен. Завершите звонок перед переключением"
+                        else {
+                            MessagingService.stop(context); selectedChat = null; messages.clear(); chats.clear()
+                            profileTargetId = null; manageCommunity = null; topicsGroup = null; galleryChat = null
+                            attachmentPreview = null; photoReply = null; photoGallery = emptyList(); photoShare = null
+                            forwardTargetMessage = null; attachmentBatch = null; query = ""; qrOpen = false; error = ""
+                            prefs.edit().remove("token").putLong("user_id", session.user.id).apply()
+                            me = session.user; token = session.token
+                        }
                     }
+                }
                 me?.profileSetupRequired == true -> NativeInitialProfile(me!!, token, api) { updated -> me = updated; NativeAccounts.remember(context, updated, token); scope.launch(Dispatchers.IO) { cache.saveMe(updated) } }
                 selectedChat == null -> homeState.SaveableStateProvider("home-${me?.id ?: 0}") { ChatListScreen(
                     user = me, chats = chats.filter { it.parentId == 0L }, query = query, people = people, token = token,
@@ -661,8 +689,10 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     onSearchMessage = { message -> selectedChat = chats.firstOrNull { it.id == message.chatId }; messages.clear(); focusMessageId = message.id },
                     onSwitchAccount = { account ->
                         if (callState.call != null || attachmentSending) error = "Завершите звонок или дождитесь отправки перед переключением аккаунта"
+                        else if (account == null) addingAccount = true
                         else {
-                            MessagingService.stop(context); selectedChat = null; messages.clear(); chats.clear(); me = account?.user
+                            addingAccount = false
+                            MessagingService.stop(context); selectedChat = null; messages.clear(); chats.clear(); me = account.user
                             profileTargetId = null; manageCommunity = null; topicsGroup = null; galleryChat = null; attachmentPreview = null; photoReply = null; photoGallery = emptyList(); photoShare = null; forwardTargetMessage = null; attachmentBatch = null
                             prefs.edit().remove("token").putLong("user_id", account?.user?.id ?: 0).apply()
                             token = account?.token.orEmpty(); error = ""; query = ""; qrOpen = false

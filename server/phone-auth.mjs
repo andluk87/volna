@@ -15,7 +15,7 @@ export function normalizePhone(value){
 }
 export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,smsOptions={},clock=Date.now,
   codeGenerator=()=>String(randomInt(0,1000000)).padStart(6,'0'),trustProxy=process.env.AUTH_TRUST_PROXY==='1',
-  loginCheck=()=>{},logger=event=>console.info('[sms]',JSON.stringify(event)),
+  loginCheck=()=>{},onLoginCode=()=>{},onChallengeChanged=()=>{},logger=event=>console.info('[sms]',JSON.stringify(event)),
   referenceStart=Number(process.env.SMS_REFERENCE_START||0),smsReady,appHashes=androidSmsHashes()}){
   const sms=createSmsRouter({db,...smsOptions});sender??=sms.send;const isSmsReady=()=>typeof smsReady==='function'?smsReady():smsReady??sms.ready();
   if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='phone_verified_at'))db.exec('ALTER TABLE users ADD COLUMN phone_verified_at INTEGER NOT NULL DEFAULT 0');
@@ -89,7 +89,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
     if(['/api/auth/sms/status','/api/auth/sms/cancel'].includes(path)&&post){
       const data=await body(req),row=db.prepare('SELECT * FROM sms_challenges WHERE id=?').get(String(data.challenge_id||''));
       if(!row)throw fail(404,'Попытка входа не найдена','CHALLENGE_NOT_FOUND');
-      if(path.endsWith('/cancel')){db.prepare("UPDATE sms_challenges SET status='cancelled' WHERE id=? AND status IN ('created','sent')").run(row.id);json(res,200,{status:'cancelled'});}else json(res,200,challengeInfo(row));return true;
+      if(path.endsWith('/cancel')){db.prepare("UPDATE sms_challenges SET status='cancelled' WHERE id=? AND status IN ('created','sent')").run(row.id);try{onChallengeChanged();}catch{}json(res,200,{status:'cancelled'});}else json(res,200,challengeInfo(row));return true;
     }
     if(path==='/api/auth/sms/request'&&post){
       if(!isSmsReady())throw fail(503,'Отправка SMS пока не настроена');
@@ -138,6 +138,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
         const provider=await sender(challenge);
         db.prepare("UPDATE sms_challenges SET status='sent',provider_id=? WHERE id=? AND status='created'").run(provider?.id||'',challenge.id);
         log({event:'accepted',reference:challenge.reference,provider:challenge.provider});
+        if(!changing&&existingUser)try{onLoginCode({userId:existingUser.id,challengeId:challenge.id,code:challenge.code});}catch{log({event:'device-code-delivery-failed',reference:challenge.reference});}
         json(res,200,v1?{success:true,...challengeInfo(db.prepare('SELECT * FROM sms_challenges WHERE id=?').get(challenge.id))}:{success:true,sms_session_id:challenge.id,expires_in:300,resend_after:60});
       }catch(e){const networkCodes=['ECONNREFUSED','ECONNRESET','ENOTFOUND','EAI_AGAIN','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'];const diagnostic=e.smsDiagnostic||{kind:['AbortError','TimeoutError'].includes(e.name)?'timeout':networkCodes.includes(e.cause?.code)?e.cause.code:'provider-unavailable'};log({event:'failed',reference:challenge.reference,provider:challenge.provider,...diagnostic});db.prepare("UPDATE sms_challenges SET status='failed' WHERE id=?").run(challenge.id);audit('sms-failed',req);throw fail(503,'Не удалось отправить SMS. Повторите позже',v1?'SMS_UNAVAILABLE':undefined,challengeInfo(db.prepare('SELECT * FROM sms_challenges WHERE id=?').get(challenge.id)).resend_available_at);}
       return true;
@@ -171,6 +172,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
         db.prepare("UPDATE sms_challenges SET status='verified',used=? WHERE id=?").run(clock(),row.id);
         return issue(user.id,'android',req);
       });
+      try{onChallengeChanged();}catch{}
       if(result.error)throw result.error;json(res,200,result);return true;
     }
     if(path==='/api/auth/refresh'&&post){

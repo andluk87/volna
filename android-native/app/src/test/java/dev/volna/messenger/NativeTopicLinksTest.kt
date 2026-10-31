@@ -7,6 +7,14 @@ class NativeTopicLinksTest {
   assertEquals(42L,nativeLinkedTopicChat("https://volna.example/app?chat=42",base))
   for(value in listOf("https://other.example/app?chat=42","http://volna.example/app?chat=42","https://evil@volna.example/app?chat=42","https://volna.example:9999/app?chat=42","https://volna.example/app?chat=-1","https://volna.example/app?chat=42&chat=43","https://volna.example/app?chat=no","https://volna.example/profile?chat=42"))assertNull(value,nativeLinkedTopicChat(value,base))
  }
+ @Test fun groupInvitationsOpenFromHttpsAndAppLinksButRejectOtherServersOrAmbiguousCodes() {
+  val base="https://volna.example";val token="a".repeat(48)
+  assertEquals(token,nativeCommunityInvite("$base/app?invite=$token",base))
+  assertEquals(token,nativeCommunityInvite("$base/app?token=$token",base))
+  assertEquals(token,nativeCommunityInvite("volna://invite/$token",base))
+  assertEquals(token,nativeCommunityInvite(token,base))
+  for(value in listOf("https://evil.example/app?invite=$token","$base/app?invite=$token&invite=$token","volna://login/$token","volna://evil@invite/$token","volna://invite/$token?x=1","$base/app?invite=short"))assertNull(value,nativeCommunityInvite(value,base))
+ }
  @Test fun forumStateSurvivesChatCache() {
   val chat=VolnaChat(42,"Форум","","","",0,false,0,kind="group",topicsEnabled=true)
   assertEquals(chat,NativeCodec.chats(org.json.JSONArray().put(NativeCodec.chat(chat))).single())
