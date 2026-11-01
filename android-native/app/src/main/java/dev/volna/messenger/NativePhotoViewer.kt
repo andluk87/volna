@@ -80,9 +80,9 @@ internal fun saveMediaToGallery(context: android.content.Context, source: File, 
 }
 
 @Composable
-internal fun NativePhotoViewer(initial: VolnaMessage, gallery: List<VolnaMessage>, token: String, api: NativeApi, onEditedReady: (File) -> Unit, canDelete: (VolnaMessage) -> Boolean, onAction: (VolnaMessage, String) -> Unit, onDismiss: () -> Unit, canReply: (VolnaMessage) -> Boolean = { true }, onDelete: suspend (VolnaMessage) -> VolnaMessage = { withContext(Dispatchers.IO) { api.deleteMessage(token,it.id) } }) {
+internal fun NativePhotoViewer(initial: VolnaMessage, gallery: List<VolnaMessage>, token: String, api: NativeApi, onEditedReady: (File) -> Unit, canDelete: (VolnaMessage) -> Boolean, onAction: (VolnaMessage, String) -> Unit, onDismiss: () -> Unit, albumOnly: Boolean = true, canReply: (VolnaMessage) -> Boolean = { true }, onDelete: suspend (VolnaMessage) -> VolnaMessage = { withContext(Dispatchers.IO) { api.deleteMessage(token,it.id) } }) {
     val context = LocalContext.current; val scope = rememberCoroutineScope()
-    val window = remember(initial.id, token) { NativeMediaWindow(initial,gallery,token,api) }
+    val window = remember(initial.id, token) { NativeMediaWindow(initial,gallery,token,api,scopeAlbum=albumOnly) }
     val photos = window.items; val selected = window.selected; val index = window.index; val message = window.current ?: initial
     val video = message.attachmentMime?.startsWith("video/") == true
     var panels by remember { mutableStateOf(true) }; var information by remember { mutableStateOf(false) }; var attempt by remember { mutableStateOf(0) }

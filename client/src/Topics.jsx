@@ -5,7 +5,7 @@ import MessageText from './MessageText';
 import Attachment from './Attachment';
 import './topics.css';
 export default function Topics({group,token,revision,onSelect,onClose,onChanged}){
- const [info,setInfo]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[editor,setEditor]=useState(null),[name,setName]=useState(''),[description,setDescription]=useState(''),[icon,setIcon]=useState(''),[creation,setCreation]=useState(messageId),[confirm,setConfirm]=useState(null),[view,setView]=useState(()=>group.topics_enabled===0?'feed':'topics'),[copied,setCopied]=useState(null);
+ const [info,setInfo]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[editor,setEditor]=useState(()=>group.createTopic?{}:null),[name,setName]=useState(''),[description,setDescription]=useState(''),[icon,setIcon]=useState(''),[creation,setCreation]=useState(messageId),[confirm,setConfirm]=useState(null),[view,setView]=useState(()=>group.topics_enabled===0?'feed':'topics'),[copied,setCopied]=useState(null);
  const load=useCallback(()=>request(`/groups/${group.id}/topics`,token).then(v=>{setInfo(v);setError('');}).catch(e=>setError(e.message)),[group.id,token]);useEffect(()=>{load();},[load,revision]);
  const admin=['owner','admin'].includes(info?.role||group.role);
  async function act(path,data,method){if(busy)return false;setBusy(true);setError('');try{await request(`/groups/${group.id}/topics`+path,token,data,undefined,method);await load();await onChanged();return true;}catch(e){setError(e.message);return false;}finally{setBusy(false);}}

@@ -148,8 +148,9 @@ class MainActivity : ComponentActivity() {
     private val openChatRequest = mutableStateOf<Long?>(null)
     private val openMessageRequest = mutableStateOf<Long?>(null)
     private val openAccountRequest = mutableStateOf<Long?>(null)
-    override fun onStart() { super.onStart(); isVisible = true }
-    override fun onStop() { isVisible = false; super.onStop() }
+    override fun onStart() { super.onStart(); isVisible = true; NativeForegroundPresence.visible(hasWindowFocus()) }
+    override fun onStop() { isVisible = false; NativeForegroundPresence.visible(false); super.onStop() }
+    override fun onWindowFocusChanged(hasFocus: Boolean) { super.onWindowFocusChanged(hasFocus); NativeForegroundPresence.visible(hasFocus && isVisible) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState?.getBoolean("share_handled", false) != true) {
@@ -235,6 +236,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
     val homeState = rememberSaveableStateHolder()
     var token by remember { mutableStateOf(NativeCredentials.access(prefs.getLong("user_id",0))) }
     var addingAccount by rememberSaveable { mutableStateOf(false) }
+    DisposableEffect(token,addingAccount) { NativeForegroundPresence.session(if(addingAccount) "" else token); onDispose { NativeForegroundPresence.session("") } }
     var me by remember { mutableStateOf(NativeAccounts.list(context).firstOrNull { it.user.id == prefs.getLong("user_id", 0) }?.user) }
     NativeContactSyncHost(me?.id ?: 0, token, api)
     val cloudAppearanceError = NativeCloudAppearance(me?.id ?: 0, token, api) { appearance = NativeAppearance.load(appearancePrefs); themeRevision++ }
@@ -861,6 +863,10 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     },
                     voicePlayback = voicePlayback,
                     onMessageAction = { message, action, value ->
+                        if (action == "clear-transcript") {
+                            listOf(messages,messageSearchResults,pinnedMessages).forEach { rows -> val at=rows.indexOfFirst { it.id==message.id };if(at>=0)rows[at]=rows[at].copy(transcript=null) }
+                            return@ChatRoomScreen
+                        }
                         val chatId = selectedChat!!.id
                         val session = token
                         if (action == "transcribe") transcribingMessages.add(message.id)
@@ -936,7 +942,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
             }, { manageCommunity = null; selectedChat = null; messages.clear() }, onOpenAttachment = { photoGallery = messages.toList(); attachmentPreview = it }) }
             galleryChat?.let { chat -> AttachmentGallery(chat, token, api, { photo, gallery -> photoGallery = gallery; attachmentPreview = photo }, { galleryChat = null }) }
             attachmentPreview?.let { message ->
-                if (isTimelineMedia(message)) NativePhotoViewer(message, photoGallery, token, api,
+                if (isTimelineMedia(message)) NativePhotoViewer(message, photoGallery, token, api, albumOnly = galleryChat == null,
                     onEditedReady = { file -> photoShare = NativeIncomingShare(UUID.randomUUID().toString(), "", listOf(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))); attachmentPreview = null },
                     canReply = { photo -> chats.firstOrNull { it.id == photo.chatId }?.canSend == true },
                     canDelete = { it.senderId == me?.id || chats.firstOrNull { chat -> chat.id == it.chatId }?.role in listOf("owner", "admin") },

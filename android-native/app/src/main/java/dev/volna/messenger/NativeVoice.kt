@@ -298,17 +298,19 @@ internal class NativeVoicePlayback(context: Context, private val onError: (Strin
 }
 
 @Composable
-internal fun NativeVoiceMessage(message: VolnaMessage, token: String, playback: NativeVoicePlayback, onPlay: () -> Unit, transcribing: Boolean, onTranscribe: () -> Unit, isMine: Boolean = false, onRetranscribe: ()->Unit = onTranscribe) {
+internal fun NativeVoiceMessage(message: VolnaMessage, token: String, playback: NativeVoicePlayback, onPlay: () -> Unit, transcribing: Boolean, onTranscribe: () -> Unit, isMine: Boolean = false, onRetranscribe: ()->Unit = onTranscribe, onTranscriptConsumed: ()->Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var metadata by remember(message.attachmentId, token) { mutableStateOf<NativeVoiceData?>(null) }
-    var showTranscript by remember(message.id) { mutableStateOf(false) }
-    var requestedTranscript by remember(message.id) { mutableStateOf(false) }
+    var showTranscript by remember(message.id,token) { mutableStateOf(false) }
+    var requestedTranscript by remember(message.id,token) { mutableStateOf(false) }
+    var localTranscript by remember(message.id,token) { mutableStateOf<String?>(null) }
     LaunchedEffect(message.attachmentId, token) {
         if (message.attachmentSize <= 5L * 1024 * 1024) try { metadata = NativeVoiceRepository.load(context, token, message) }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { /* The play button can retry and show a useful error. */ }
     }
-    LaunchedEffect(message.transcript) { if (requestedTranscript && !message.transcript.isNullOrBlank()) { showTranscript = true; requestedTranscript = false } }
+    DisposableEffect(message.id,token) { onDispose { onTranscriptConsumed() } }
+    LaunchedEffect(message.transcript) { if (requestedTranscript && !message.transcript.isNullOrBlank()) { localTranscript=message.transcript;showTranscript = true; requestedTranscript = false;onTranscriptConsumed() } }
     val selected = playback.messageId == message.id
     val duration = if (selected && playback.durationMs > 0) playback.durationMs else metadata?.durationMs ?: 0
     val position = if (selected) playback.positionMs.coerceIn(0, duration.coerceAtLeast(0)) else 0
@@ -348,13 +350,13 @@ internal fun NativeVoiceMessage(message: VolnaMessage, token: String, playback: 
                 NativeText(if (playback.speed == 1.5f) "1.5×" else "${playback.speed.toInt()}×", color = waveColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
             if (message.attachmentName.orEmpty().startsWith("Голосовое-")) Box(Modifier.align(Alignment.Top).padding(top = 2.dp).width(36.dp).height(26.dp).clip(RoundedCornerShape(8.dp)).background(waveColor.copy(alpha = .16f)).semantics { contentDescription = "Расшифровать голосовое" }.clickable(enabled = !transcribing, onClickLabel = "Расшифровать голосовое") {
-                if (!message.transcript.isNullOrBlank()) showTranscript = !showTranscript else { requestedTranscript = true; onTranscribe() }
+                if (showTranscript) { showTranscript=false;localTranscript=null;onTranscriptConsumed() } else { requestedTranscript = true; onTranscribe() }
             }, contentAlignment = Alignment.Center) {
                 if (transcribing) CircularProgressIndicator(Modifier.size(18.dp), color = waveColor, strokeWidth = 2.dp)
                 else Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.ArrowForward, null, tint = waveColor, modifier = Modifier.size(13.dp)); NativeText("А", color = waveColor, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
             }
         }
-        if (showTranscript && !message.transcript.isNullOrBlank()) { NativeText(message.transcript.orEmpty(), color = TextMain, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp)); TextButton(onClick=onRetranscribe,enabled=!transcribing){NativeText(if(transcribing)"Распознаём…" else "Распознать заново",fontSize=12.sp,color=Accent)} }
+        if (showTranscript && !localTranscript.isNullOrBlank()) NativeText(localTranscript.orEmpty(), color = TextMain, fontSize = 14.sp, lineHeight = 19.sp, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
     }
 }
 

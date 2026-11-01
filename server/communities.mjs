@@ -1,9 +1,10 @@
+import {communityFeatures} from './community-features.mjs';
 import {applyCallPreviews} from './call-chat-events.mjs';
 import {randomBytes,createHash} from 'node:crypto';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const MAX_MEMBERS=300;
-export function communities({db,member,broadcast,publish,json,body,userById,online=()=>false}){
+export function communities({db,member,broadcast,publish,json,body,userById,online=()=>false,hydrate=row=>row}){
  db.exec('BEGIN IMMEDIATE');
  try{
   const chatColumns=new Set(db.prepare('PRAGMA table_info(chats)').all().map(c=>c.name));
@@ -25,6 +26,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
   if(db.prepare('PRAGMA user_version').get().user_version<3)db.exec('PRAGMA user_version=3');
   db.exec('COMMIT');
  }catch(e){db.exec('ROLLBACK');throw e;}
+ const features=communityFeatures({db,broadcast,hydrate});
  const current=(chat,uid)=>{
   member(chat,uid);const c=db.prepare('SELECT * FROM chats WHERE id=?').get(chat);if(c.parent_id)throw fail(400,'Используйте управление подтемами основной группы');if(!['group','channel'].includes(c.kind))throw fail(400,'Это не группа или канал');
   const role=db.prepare('SELECT role FROM members WHERE chat_id=? AND user_id=?').get(chat,uid).role;return {...c,role};
@@ -36,7 +38,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
  const notice=chat=>broadcast(chat,{type:'community',chat_id:chat});
  const details=c=>{
   const canManage=['admin','owner'].includes(c.role);
-  return {id:c.id,kind:c.kind,title:c.title,description:c.description,role:c.role,posting_policy:c.kind==='channel'?'admins':c.posting_policy,member_count:count(c.id),max_members:MAX_MEMBERS,
+  return {id:c.id,kind:c.kind,title:c.title,description:c.description,role:c.role,topics_enabled:!!c.topics_enabled,topic_layout:c.topic_layout,welcome_message:canManage?c.welcome_message:undefined,allowed_reactions:c.allowed_reactions===null?null:JSON.parse(c.allowed_reactions),posting_policy:c.kind==='channel'?'admins':c.posting_policy,member_count:count(c.id),max_members:MAX_MEMBERS,
    members:c.kind==='group'||canManage?db.prepare("SELECT u.id,u.username,u.name,m.role FROM members m JOIN users u ON u.id=m.user_id WHERE m.chat_id=? ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,u.name,u.id").all(c.id):[],
    banned:canManage?db.prepare('SELECT u.id,u.username,u.name FROM community_bans b JOIN users u ON u.id=b.user_id WHERE b.chat_id=?').all(c.id):[],
    invite:canManage?db.prepare('SELECT expires,uses,max_uses FROM community_invites WHERE chat_id=?').get(c.id)||null:null};
@@ -44,7 +46,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
  return async(req,res,url,uid)=>{
   const path=url.pathname,method=req.method;
   if(path==='/api/chats'&&method==='GET'){
-   let rows=db.prepare(`SELECT c.id,c.kind,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,c.topics_enabled,c.general_name,(SELECT title FROM chats WHERE id=c.parent_id) AS parent_name,me.role,me.last_read,
+   let rows=db.prepare(`SELECT c.id,c.kind,c.parent_id,c.title AS topic_name,c.topic_closed,c.topic_icon,c.topics_enabled,c.general_name,COALESCE((SELECT topic_layout FROM chats WHERE id=c.parent_id),c.topic_layout) AS topic_layout,COALESCE((SELECT allowed_reactions FROM chats WHERE id=c.parent_id),c.allowed_reactions) AS allowed_reactions,(SELECT title FROM chats WHERE id=c.parent_id) AS parent_name,me.role,me.last_read,
     COALESCE((SELECT MAX(last_read) FROM members WHERE chat_id=c.id AND user_id<>?),me.last_read) AS peer_read,
     COALESCE((SELECT MAX(MAX(last_read,last_delivered)) FROM members WHERE chat_id=c.id AND user_id<>me.user_id),me.last_read) AS peer_delivered,
     CASE WHEN c.kind IN ('group','channel') THEN c.id ELSE COALESCE(peer.id,?) END AS peer_id,
@@ -69,7 +71,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
    rows=applyCallPreviews(db,uid,rows);
    const topicUnread=new Map(),latestTopic=new Map();for(const row of rows)if(row.parent_id){topicUnread.set(row.parent_id,(topicUnread.get(row.parent_id)||0)+row.unread);if(row.last_at&&row.last_at>(latestTopic.get(row.parent_id)?.last_at||''))latestTopic.set(row.parent_id,row);}
    const contactIds=new Set(db.prepare("SELECT linked FROM account_contacts WHERE owner=? AND deleted=0 AND linked IS NOT NULL").all(uid).map(c=>c.linked));
-   const result=rows.map(row=>{const topic=latestTopic.get(row.id);return {...row,is_contact:contactIds.has(row.peer_id),...(topic&&topic.last_at>(row.last_at||'')?{last_at:topic.last_at,last_id:topic.last_id,last_sender_id:topic.last_sender_id,last_text:topic.topic_name+': '+(topic.last_text||'Вложение'),peer_read:topic.peer_read,peer_delivered:topic.peer_delivered}:{}),unread:row.unread+(topicUnread.get(row.id)||0),peer_online:row.kind==='direct'&&online(row.peer_id),peer_last_seen:row.kind==='direct'?userById(row.peer_id)?.last_seen??null:null};});
+   const result=rows.map(row=>{const topic=latestTopic.get(row.id);return {...row,allowed_reactions:row.allowed_reactions===null?null:JSON.parse(row.allowed_reactions),is_contact:contactIds.has(row.peer_id),...(topic&&topic.last_at>(row.last_at||'')?{last_at:topic.last_at,last_id:topic.last_id,last_sender_id:topic.last_sender_id,last_text:topic.topic_name+': '+(topic.last_text||'Вложение'),peer_read:topic.peer_read,peer_delivered:topic.peer_delivered}:{}),unread:row.unread+(topicUnread.get(row.id)||0),peer_online:row.kind==='direct'&&online(row.peer_id),peer_last_seen:row.kind==='direct'?userById(row.peer_id)?.last_seen??null:null};});
    result.sort((a,b)=>b.saved-a.saved||b.pinned-a.pinned||(b.last_at||'').localeCompare(a.last_at||'')||b.id-a.id);json(res,200,result);return true;
   }
   const historyMatch=path.match(/^\/api\/chats\/(\d+)\/(clear-history|delete-chat)$/);
@@ -99,7 +101,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
    if(db.prepare("SELECT COUNT(*) n FROM members m JOIN chats c ON c.id=m.chat_id WHERE m.user_id=? AND m.role='owner' AND c.parent_id IS NULL").get(uid).n>=100)throw fail(400,'Лимит — 100 сообществ на владельца');
    db.exec('BEGIN IMMEDIATE');let id;
    try{const result=db.prepare('INSERT INTO chats(pair,kind,title,description,created_by) VALUES(?,?,?,?,?)').run(pair,data.kind,title,description,uid);id=Number(result.lastInsertRowid);db.prepare("INSERT INTO members(chat_id,user_id,role) VALUES(?,?,'owner')").run(id,uid);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}
-   notice(id);json(res,201,{id});return true;
+   features.record(id,uid,'created');notice(id);json(res,201,{id});return true;
   }
   if(path==='/api/invites/join'&&method==='POST'){
    const data=await body(req);const token=String(data.token||'').trim();if(!/^[a-f0-9]{48}$/.test(token))throw fail(400,'Некорректный код приглашения');
@@ -111,30 +113,36 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
    if(invite.uses>=invite.max_uses)throw fail(410,'Лимит приглашения исчерпан');
    if(count(chat)>=MAX_MEMBERS)throw fail(409,'Лимит — 300 участников');
    db.exec('BEGIN IMMEDIATE');try{db.prepare('INSERT INTO members(chat_id,user_id) VALUES(?,?)').run(chat,uid);db.prepare('UPDATE community_invites SET uses=uses+1 WHERE chat_id=?').run(chat);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}
-   notice(chat);json(res,200,{id:chat});return true;
+   features.record(chat,uid,'joined');features.welcome(chat,uid);notice(chat);json(res,200,{id:chat});return true;
   }
-  const match=path.match(/^\/api\/communities\/(\d+)(?:\/(settings|invite|revoke-invite|add|remove|unban|role|transfer|leave))?$/);
+  const match=path.match(/^\/api\/communities\/(\d+)(?:\/(settings|invite|revoke-invite|add|remove|unban|role|transfer|leave|audit))?$/);
   if(!match)return false;
   const chat=Number(match[1]),action=match[2];
   // Read authorization again AFTER the asynchronous body read: a user may be removed while uploading it.
   const data=method==='POST'?await body(req):{};
   const c=current(chat,uid);
+  if(method==='GET'&&action==='audit'){admin(c);json(res,200,features.audit(chat));return true;}
   if(method==='GET'&&!action){json(res,200,details(c));return true;}
   if(method!=='POST')return false;
   if(action==='leave'){
    if(c.role==='owner')throw fail(409,'Сначала передайте владение другому участнику');
-   db.prepare('DELETE FROM members WHERE chat_id=? AND user_id=?').run(chat,uid);publish([uid],{type:'removed',chat_id:chat});notice(chat);json(res,200,{ok:true});return true;
+   features.record(chat,uid,'left');db.prepare('DELETE FROM members WHERE chat_id=? AND user_id=?').run(chat,uid);publish([uid],{type:'removed',chat_id:chat});notice(chat);json(res,200,{ok:true});return true;
   }
   admin(c);
   if(action==='settings'){
-   const {title,description}=fields(data);
+   const {title,description}=fields({...data,title:data.title??c.title,description:data.description??c.description});const extra=features.settings(data,c);const topics=data.topic_settings||{};
+   if(data.topic_settings!==undefined&&(typeof data.topic_settings!=='object'||Array.isArray(data.topic_settings)||data.topic_settings===null||c.kind!=='group'))throw fail(400,'Некорректные настройки тем');
+   if(topics.layout!==undefined&&!['tabs','list'].includes(topics.layout))throw fail(400,'Выберите вкладки или список');
+   if(topics.enabled!==undefined&&typeof topics.enabled!=='boolean'||topics.create_policy!==undefined&&!['owner','admins','all'].includes(topics.create_policy)||topics.manage_policy!==undefined&&!['owner','admins'].includes(topics.manage_policy))throw fail(400,'Некорректные права тем');
+   if(c.role!=='owner'&&(['enabled','create_policy','manage_policy'].some(key=>topics[key]!==undefined)||topics.layout!==undefined&&c.topic_manage_policy!=='admins'))throw fail(403,'Настройки тем меняет владелец');
+
    if(data.posting_policy!==undefined&&!['all','admins'].includes(data.posting_policy))throw fail(400,'Некорректные разрешения сообщений');
-   db.prepare('UPDATE chats SET title=?,description=?,posting_policy=COALESCE(?,posting_policy) WHERE id=?').run(title,description,data.posting_policy??null,chat);
+   db.prepare('UPDATE chats SET title=?,description=?,posting_policy=COALESCE(?,posting_policy),welcome_message=?,allowed_reactions=?,topic_layout=?,topics_enabled=?,topic_create_policy=?,topic_manage_policy=? WHERE id=?').run(title,description,data.posting_policy??null,extra.welcome,extra.reactions,topics.layout??c.topic_layout,topics.enabled===undefined?c.topics_enabled:Number(topics.enabled),topics.create_policy??c.topic_create_policy,topics.manage_policy??c.topic_manage_policy,chat);
   }
   else if(action==='invite'){
    const token=randomBytes(24).toString('hex'),expires=Date.now()+7*86400000;
    db.prepare('INSERT INTO community_invites(chat_id,token_hash,expires) VALUES(?,?,?) ON CONFLICT(chat_id) DO UPDATE SET token_hash=excluded.token_hash,expires=excluded.expires,uses=0').run(chat,hash(token),expires);
-   notice(chat);json(res,200,{token,expires,max_uses:100});return true;
+   features.record(chat,uid,'invite');notice(chat);json(res,200,{token,expires,max_uses:100});return true;
   }else if(action==='revoke-invite'){db.prepare('DELETE FROM community_invites WHERE chat_id=?').run(chat);}
   else{
    const target=Number(data.user_id);if(!Number.isSafeInteger(target)||target<1||!userById(target))throw fail(400,'Пользователь не найден');
@@ -143,7 +151,7 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
     if(membership){json(res,200,{ok:true});return true;}
     if(db.prepare('SELECT 1 FROM community_bans WHERE chat_id=? AND user_id=?').get(chat,target))throw fail(409,'Сначала снимите исключение пользователя');
     if(count(chat)>=MAX_MEMBERS)throw fail(409,'Лимит — 300 участников');
-    db.prepare('INSERT INTO members(chat_id,user_id) VALUES(?,?)').run(chat,target);
+    db.prepare('INSERT INTO members(chat_id,user_id) VALUES(?,?)').run(chat,target);features.welcome(chat,target);
    }else if(action==='unban'){db.prepare('DELETE FROM community_bans WHERE chat_id=? AND user_id=?').run(chat,target);}
    else if(action==='remove'){
     if(!membership)throw fail(404,'Участник не найден');
@@ -158,6 +166,6 @@ export function communities({db,member,broadcast,publish,json,body,userById,onli
     db.exec('BEGIN IMMEDIATE');try{db.prepare("UPDATE members SET role='admin' WHERE chat_id=? AND user_id=?").run(chat,uid);db.prepare("UPDATE members SET role='owner' WHERE chat_id=? AND user_id=?").run(chat,target);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}
    }else return false;
   }
-  notice(chat);json(res,200,{ok:true});return true;
+  features.record(chat,uid,action,Number.isSafeInteger(Number(data.user_id))?Number(data.user_id):null);notice(chat);json(res,200,{ok:true});return true;
  };
 }

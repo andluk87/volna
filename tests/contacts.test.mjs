@@ -109,9 +109,11 @@ test('contacts: operation retries never overwrite a newer name and operation met
  const meta=JSON.stringify(app.db.prepare('SELECT * FROM contact_operations').all());assert.ok(!meta.includes(b.user.phone));assert.ok(!meta.includes('Первое'));assert.ok(!meta.includes('Второе'));
 });
 
-test('contacts: online privacy masks an active SSE connection independently from phone discovery',async t=>{
+test('contacts: online privacy masks foreground presence independently from phone discovery',async t=>{
  const {app,req,users:[a,b,c]}=await fixture(t);const controller=new AbortController();t.after(()=>controller.abort());
  const response=await globalThis.fetch(`http://127.0.0.1:${app.server.address().port}/api/events`,{headers:{Authorization:'Bearer '+b.token},signal:controller.signal});await response.body.getReader().read();
+ assert.equal((await req(`/users/${b.user.id}`,a.token)).data.online,false);
+ await req('/presence',b.token,{client:'foreground_window_01',visible:true,sequence:1});
  assert.equal((await req(`/users/${b.user.id}`,a.token)).data.online,true);
  await req('/contacts/settings',b.token,{presence:'contacts'});assert.equal((await req(`/users/${b.user.id}`,a.token)).data.online,false);
  await req('/contacts/settings',a.token,{discovery:'nobody'});const hidden=await manual(req,b,a.user.phone,'Личный контакт');assert.equal(hidden.data.linked_user_id,null);
@@ -119,10 +121,12 @@ test('contacts: online privacy masks an active SSE connection independently from
  await req('/contacts/settings',b.token,{presence:'nobody'});assert.equal((await req(`/users/${b.user.id}`,a.token)).data.online,false);controller.abort();
 });
 
-test('presence stays online until the last account connection closes and then records last_seen',async t=>{
- const {app,req,users:[a,b]}=await fixture(t);await req('/chats',a.token,{user_id:b.user.id});const controllers=[new AbortController(),new AbortController()];t.after(()=>controllers.forEach(c=>c.abort()));
- for(const controller of controllers){const response=await globalThis.fetch(`http://127.0.0.1:${app.server.address().port}/api/events`,{headers:{Authorization:'Bearer '+b.token},signal:controller.signal});await response.body.getReader().read();}
- controllers[0].abort();assert.equal((await req(`/users/${b.user.id}`,a.token)).data.online,true);
- controllers[1].abort();let user;for(let attempt=0;attempt<20;attempt++){user=(await req(`/users/${b.user.id}`,a.token)).data;if(!user.online)break;await new Promise(resolve=>setTimeout(resolve,10));}
- assert.equal(user.online,false);assert.ok(user.last_seen>Date.now()-5000);await req('/contacts/settings',b.token,{presence:'nobody'});assert.equal((await req(`/users/${b.user.id}`,a.token)).data.last_seen,null);
+test('presence counts visible windows, ignores SSE and rejects stale foreground updates',async t=>{
+ const {app,req,users:[a,b]}=await fixture(t);await req('/chats',a.token,{user_id:b.user.id});
+ const update=(client,visible,sequence)=>req('/presence',b.token,{client,visible,sequence});
+ await update('foreground_window_01',true,1);await update('foreground_window_02',true,1);
+ await update('foreground_window_01',false,2);assert.equal((await req(`/users/${b.user.id}`,a.token)).data.online,true);
+ await update('foreground_window_02',false,2);await update('foreground_window_02',true,1);
+ const user=(await req(`/users/${b.user.id}`,a.token)).data;assert.equal(user.online,false);assert.ok(user.last_seen>Date.now()-5000);
+ await req('/contacts/settings',b.token,{presence:'nobody'});assert.equal((await req(`/users/${b.user.id}`,a.token)).data.last_seen,null);
 });

@@ -1,5 +1,6 @@
 const {createSessionLog}=require('./session-log.cjs');
 const {photoPayload}=require('./photo-files.cjs');
+const {mediaFullscreen}=require('./media-fullscreen.cjs');
 const {windowChromeOptions,applyWindowChrome}=require('./window-chrome.cjs');
 const {mediaPermissions}=require('./media-permissions.cjs');
 const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage,screen,powerMonitor,nativeImage}=require('electron');
@@ -75,6 +76,7 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть VLN',click:show},{label:'Проверить обновления',click:()=>{show();updates.check(true);}},{label:'Журнал авторизации',click:()=>{sessionLog.write('log-open');shell.showItemInFolder(sessionLog.file);}},{type:'separator'},{label:'Выйти',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',show);
   const idleFile=path.join(app.getPath('userData'),'update-settings.json');let idleInstall=false;try{idleInstall=JSON.parse(fs.readFileSync(idleFile,'utf8')).idleInstall===true;}catch{}
   const {autoUpdater}=require('electron-updater');updates=createUpdates({idleInstall,idleSeconds:()=>powerMonitor.getSystemIdleTime(),saveIdleInstall:value=>{const temp=idleFile+'.tmp';fs.writeFileSync(temp,JSON.stringify({idleInstall:value}),{mode:0o600});fs.renameSync(temp,idleFile);},updater:autoUpdater,version:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',publish:state=>{if(!win.isDestroyed())win.webContents.send('desktop:update-state',state);},inCall:()=>activeCall||transfers.size>0,isSessionBusy:()=>sessionRefresh?.pending()===true,install:()=>{quitting=true;autoUpdater.quitAndInstall(true,true);}});
+  ipc('desktop:media-fullscreen',(value,event)=>mediaFullscreen(BrowserWindow.fromWebContents(event.sender),value));
   ipc('desktop:save-photo',async(value,event)=>{const photo=photoPayload(value);const result=await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender),{title:'Сохранить фото',defaultPath:path.join(app.getPath('pictures'),photo.name)});if(result.canceled||!result.filePath)return {saved:false};await fs.promises.writeFile(result.filePath,photo.bytes);if(photo.reveal)shell.showItemInFolder(result.filePath);return {saved:true};});
   ipc('desktop:window-theme',(theme,event)=>applyWindowChrome(BrowserWindow.fromWebContents(event.sender),theme,process.platform));
   ipc('desktop:editor-focus',(value,event)=>{editorFocus.set(event.sender,value===true);});
@@ -112,7 +114,7 @@ if(!app.requestSingleInstanceLock())app.quit();else{
    const settings=notificationPreferences;if(!settings.allAccounts&&value.accountId!==selectedAccountId)return false;if(settings.respectFocus&&await systemFocusState()===true)return false;
    if(settings.trayFlash)win.flashFrame(true);
    if(settings.enabled){if(settings.useNative&&Notification.isSupported()){const notification=new Notification({title:String(value.title||'VLN').slice(0,80),body:String(value.body||'Новое сообщение').slice(0,500),silent:true,icon:path.join(root,'icons/icon-192.png')});notification.on('click',()=>{show();win.webContents.send('desktop:open-chat',{chatId:value.chatId,accountId:value.accountId});});notification.show();}else messageToasts.push(value);}
-   if(settings.sound&&settings.volume>0&&Date.now()-lastSound>700){lastSound=Date.now();messageToasts.playSound(settings.volume);}return true;
+   if(value.silent!==true&&settings.sound&&settings.volume>0&&Date.now()-lastSound>700){lastSound=Date.now();messageToasts.playSound(settings.volume);}return true;
   });
   ipc('desktop:call',(value,event)=>{if(event.sender!==win.webContents)return;activeCall=value?.active===true;if(!activeCall)lastIncoming='';if(!value?.incoming&&callNotification){callNotification.close();callNotification=undefined;win.flashFrame(false);}if(value?.incoming&&value.id!==lastIncoming&&typeof value.id==='string'){callNotification?.close();lastIncoming=value.id;if(win.isMinimized())win.restore();win.showInactive();win.flashFrame(true);const notification=new Notification({title:'Входящий звонок · VLN',body:String(value.name||'Собеседник').slice(0,80),timeoutType:'never',icon:path.join(root,'icons/icon-192.png')});callNotification=notification;notification.on('click',()=>{show();win.webContents.send('desktop:show-call');});notification.show();}});
   setInterval(()=>updates.tickIdle(),30_000).unref();setTimeout(()=>updates.check(),5_000).unref();setInterval(()=>updates.check(),6*60*60*1000).unref();

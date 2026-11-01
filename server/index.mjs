@@ -1,3 +1,4 @@
+import {createPresence} from './presence.mjs';
 import {loginCodeMessages} from './login-code-messages.mjs';
 import {profilePosts} from './profile-posts.mjs';
 import {accountAppearance} from './appearance.mjs';
@@ -48,12 +49,13 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   for(const [name,type] of Object.entries({first_name:"TEXT NOT NULL DEFAULT ''",last_name:"TEXT NOT NULL DEFAULT ''",profile_setup_required:'INTEGER NOT NULL DEFAULT 0'}))if(!profileColumns.has(name))db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   initAdminSchema(db);
   const streams = new Map(), limits = new Map();
+  let presenceService;
   let newsService;
   let loginCodeService;
   const userById = (id,own=false) => {
     const row=db.prepare('SELECT id,username,name,bio,avatar_id,avatar_hidden,phone,last_seen,first_name,last_name,profile_setup_required FROM users WHERE id=?').get(id);
     if(!row)return;
-    const user={id:row.id,username:row.username,name:row.name,bio:row.bio,online:!!streams.get(row.id)?.size,last_seen:row.last_seen};
+    const user={id:row.id,username:row.username,name:row.name,bio:row.bio,online:presenceService?.online(row.id)||false,last_seen:row.last_seen};
     if(own){user.phone=row.phone;user.first_name=row.first_name;user.last_name=row.last_name;user.profile_setup_required=!!row.profile_setup_required;}
     user.avatar_url=row.avatar_hidden?null:row.avatar_id?`/api/files/${row.avatar_id}`:null;
     return usernameService?.decorate(user)||user;
@@ -82,8 +84,9 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
     }
   };
   const presenceChanged=uid=>{const viewers=db.prepare("SELECT DISTINCT other.user_id FROM members me JOIN members other ON me.chat_id=other.chat_id JOIN chats c ON c.id=me.chat_id WHERE c.kind='direct' AND me.user_id=? AND other.user_id<>?").all(uid,uid).map(row=>row.user_id).filter(id=>contactService?.canSeePresence(id,uid));publish(viewers,{type:'chats'});};
+  presenceService=createPresence({db,onChange:presenceChanged});
   let pushService;
-  const broadcast = (chat, event) => {const users=db.prepare('SELECT user_id FROM members WHERE chat_id=?').all(chat).map(x=>x.user_id);if(['message','message-update'].includes(event.type)){for(const uid of users)publish([uid],{...event,notify:event.notify===false?false:topicNotification(db,chat,uid,event.message.text,event.message.reply_to),silent:topicNotificationMode(db,chat,uid)==='silent'});if(event.type==='message')pushService?.message(chat,event.message);}else publish(users,event);};
+  const broadcast = (chat, event) => {const users=db.prepare('SELECT user_id FROM members WHERE chat_id=?').all(chat).map(x=>x.user_id);if(['message','message-update'].includes(event.type)){for(const uid of users)publish([uid],{...event,notify:event.notify===false?false:topicNotification(db,chat,uid,event.message.text,event.message.reply_to),silent:event.message.silent===1||topicNotificationMode(db,chat,uid)==='silent'});if(event.type==='message')pushService?.message(chat,event.message);}else publish(users,event);};
   const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(contactService?.personalize(res.volnaViewer,data)||data)); };
   const body = async req => {
     if(req.volnaParsedBody){const data=req.volnaParsedBody;delete req.volnaParsedBody;return data;}
@@ -95,7 +98,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
     if (!item || item.until < now) { item = { count: 0, until: now + 60000 }; limits.set(key, item); }
     if (++item.count > max) throw fail(429, 'Слишком много запросов. Подождите минуту');
   };
-  const disconnect=(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();};
+  const disconnect=(uid,token)=>{presenceService?.removeSession(token);for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();};
   const phoneService=phoneAuth({db,smsOptions,json,body,userById,auth,disconnect,onLoginCode:event=>loginCodeService?.deliver(event),onChallengeChanged:()=>loginCodeService?.refresh(),loginCheck:(uid)=>{if(uid&&db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(uid)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');if(!uid&&!readAdminSettings(db).registration_enabled)throw fail(403,'Регистрация новых пользователей временно закрыта');},...phoneAuthOptions});
   const handleAppearance = accountAppearance({db,body,json});
   const handleFolders = folders({db,body,json,publish});
@@ -103,17 +106,17 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   usernameService=usernames({db,body,json,userById,publish,uploads});
   const handlePosts=profilePosts({db,auth,body,json,userById,publish});
   let expressionService;
-  const handleMessaging = messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions:()=>expressionService,serviceMessages:()=>loginCodeService});
+  const handleMessaging = messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions:()=>expressionService,serviceMessages:()=>loginCodeService,isOnline:id=>presenceService.online(id),canSeePresence:(uid,id)=>contactService?.canSeePresence(uid,id)||false,publish});
   expressionService=expressions({db,uploads,body,json,member,publish});
   handleMessaging.cleanupUnused();
-  const handleCommunities = communities({db,member,broadcast,publish,json,body,userById,online:id=>!!streams.get(id)?.size});
+  const handleCommunities = communities({db,member,broadcast,publish,json,body,userById,hydrate:handleMessaging.hydrate,online:id=>presenceService?.online(id)||false});
   loginCodeService=loginCodeMessages({db,broadcast,hydrate:row=>handleMessaging.hydrate(row,{serviceContent:true}),clock:phoneAuthOptions.clock||Date.now});
   const handleTopics=topics({db,body,json,member,broadcast,publish});
   let callService;
   pushService = notifications({db,auth,body,json,sender:pushSender,callReceipt:id=>callService?.receipt(id),contactDisplay:(uid,id,name)=>contactService?.display(uid,id,name)||name});
   callService = calls({db,auth,body,json,userById,onRing:pushService.call,onEnd:pushService.endCall,onEvent:(users,event)=>publish(users,event),onChange:(chat,users)=>publish(users,{type:'chats',chat_id:chat,call_history:true})});
-  mobileService=mobile({db,auth,body,json,userById,online:id=>!!streams.get(id)?.size,
-    disconnect:(uid,token)=>{for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();}});
+  mobileService=mobile({db,auth,body,json,userById,online:id=>presenceService?.online(id)||false,
+    disconnect:(uid,token)=>{presenceService?.removeSession(token);for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();}});
   contactService=contacts({db,body,json,publish,userById});
   const adminService=createAdminServer({db,smsOptions,uploads,json,body,publish,broadcast,hydrate:handleMessaging.hydrate,userById,disconnectUser:uid=>{for(const stream of streams.get(uid)||[])stream.end();},cleanupFiles:handleMessaging.cleanupUnused,callService,...adminOptions});
   if(newsEnabled)newsService=createNewsChannel({db,uploads});
@@ -142,13 +145,14 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
       res.volnaViewer=uid;
       adminService.guard(req,url,session);
       if(await handleFolders(req,res,url,uid))return;
+      if(path==='/api/presence'&&method==='POST'){limit('presence:'+uid,180);const data=await body(req);auth(req);return json(res,200,presenceService.update(uid,session.token,data));}
       if (path === '/api/me' && method === 'GET') {
         const user=userById(uid,true);
         return json(res, 200, user);
       }
       if (path === '/api/logout' && method === 'POST') {
         res.setHeader('Set-Cookie',['volna.refresh=; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=0',`volna.refresh.${uid}=; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=0`,'volna.account=; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=0']);
-        db.prepare('DELETE FROM sessions WHERE token=?').run(session.token);
+        presenceService.removeSession(session.token);db.prepare('DELETE FROM sessions WHERE token=?').run(session.token);
         for (const stream of streams.get(uid) || []) if (stream.sessionToken === session.token) stream.end();
         return json(res, 200, { ok: true });
       }
@@ -156,9 +160,9 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
         const list = streams.get(uid) || new Set(); if (list.size >= 8) throw fail(429, 'Слишком много подключений');
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
         res.sessionToken = session.token; res.sessionExpires = session.expires;
-        list.add(res); streams.set(uid, list);if(list.size===1)presenceChanged(uid); db.prepare('UPDATE users SET last_seen=? WHERE id=?').run(Date.now(),uid);res.write('data: {"type":"ready"}\n\n');
+        list.add(res); streams.set(uid, list);res.write('data: {"type":"ready"}\n\n');
         const heartbeat = setInterval(() => { if (!res.write(': heartbeat\n\n')) res.end(); }, 20000);
-        res.on('close', () => { clearInterval(heartbeat); list.delete(res); if (!list.size) {streams.delete(uid);db.prepare('UPDATE users SET last_seen=? WHERE id=?').run(Date.now(),uid);presenceChanged(uid);} }); return;
+        res.on('close', () => { clearInterval(heartbeat); list.delete(res); if (!list.size) {streams.delete(uid);} }); return;
       }
       limit(`user:${uid}`, 240);
       if(await handleAppearance(req,res,url,uid))return;
@@ -230,7 +234,7 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
     } catch(e) { if(req.aborted&&e.code==='ECONNRESET'&&req.method==='POST'&&req.url?.split('?')[0]==='/api/uploads')return; if (!e.status) console.error(e); if (!res.headersSent) json(res, e.status || 500, { error: e.status ? e.message : 'Ошибка сервера', ...(e.status&&e.code?{code:e.code}:{}),...(e.status&&e.retry_at?{retry_at:e.retry_at,server_time:Date.now()}:{}),...(e.status&&e.suggestions?{suggestions:e.suggestions}:{}) }); else res.end(); }
   });
   server.requestTimeout = 120000; server.headersTimeout = 15000;
-  return { server, adminServer:adminService.server, db, push:pushService, close: async () => { await adminService.close();callService.close();contactService.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close(); } };
+  return { server, adminServer:adminService.server, db, push:pushService, close: async () => { await adminService.close();callService.close();contactService.close();presenceService.close();handleMessaging.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close(); } };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const app = createApp(); app.server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => console.log('Volna API listening on :'+(process.env.PORT || 3000)));

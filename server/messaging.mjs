@@ -1,3 +1,5 @@
+import {scheduledMessages} from './scheduled-messages.mjs';
+import {chatCalendar} from './chat-calendar.mjs';
 import {replyQuote,validQuote} from '../shared/reply-quote.mjs';
 import {chatMedia} from './chat-media.mjs';
 import {interactivePayload} from '../shared/interactive.mjs';
@@ -8,7 +10,7 @@ import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 const error=(status,message)=>Object.assign(new Error(message),{status});
 const emojis=['👍','❤️','😂','🔥','🎉','😢','👏','😍','🤔','😮','🙏','💯','👎','🥰','🤣','😎','😭','🤝','💪','👋','✨','💙','😡','🤗'];
-export function messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions=()=>null,serviceMessages=()=>null}) {
+export function messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions=()=>null,serviceMessages=()=>null,isOnline=()=>false,canSeePresence=()=>false,publish=()=>{}}) {
   mkdirSync(uploads,{recursive:true});
   db.exec('CREATE TABLE IF NOT EXISTS chat_visibility(user_id INTEGER NOT NULL REFERENCES users(id),chat_id INTEGER NOT NULL REFERENCES chats(id),hidden_before INTEGER NOT NULL DEFAULT 0,deleted INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(user_id,chat_id))');
   const cutoff=(chat,uid)=>db.prepare('SELECT hidden_before FROM chat_visibility WHERE user_id=? AND chat_id=?').get(uid,chat)?.hidden_before||0;
@@ -23,7 +25,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   db.exec('BEGIN IMMEDIATE');
   try {
     const columns=new Set(db.prepare('PRAGMA table_info(messages)').all().map(x=>x.name));
-    for(const [name,type] of Object.entries({interactive:'TEXT',expression_id:'TEXT',album_id:'TEXT',attachment_id:'TEXT',reply_to:'INTEGER',reply_quote:'TEXT',edited_at:'TEXT',deleted_at:'TEXT',forwarded_name:'TEXT',forward_source:'INTEGER',transcript:'TEXT'}))
+    for(const [name,type] of Object.entries({interactive:'TEXT',expression_id:'TEXT',album_id:'TEXT',attachment_id:'TEXT',reply_to:'INTEGER',reply_quote:'TEXT',edited_at:'TEXT',deleted_at:'TEXT',forwarded_name:'TEXT',forward_source:'INTEGER',transcript:'TEXT',silent:'INTEGER NOT NULL DEFAULT 0',effect:'TEXT'}))
       if(!columns.has(name))db.exec(`ALTER TABLE messages ADD COLUMN ${name} ${type}`);
     db.exec(`CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,mime TEXT NOT NULL,size INTEGER NOT NULL,created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS reactions(message_id INTEGER NOT NULL REFERENCES messages(id),user_id INTEGER NOT NULL REFERENCES users(id),emoji TEXT NOT NULL,PRIMARY KEY(message_id,user_id,emoji));
@@ -32,6 +34,8 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       CREATE INDEX IF NOT EXISTS messages_attachment ON messages(attachment_id);
       COMMIT;`);
   }catch(e){db.exec('ROLLBACK');throw e;}
+  // Transcriptions are private per-request UI results, never part of message history.
+  db.prepare('UPDATE messages SET transcript=NULL WHERE transcript IS NOT NULL').run();
   if(db.prepare('PRAGMA user_version').get().user_version<6)db.exec('PRAGMA user_version=6');
   db.function('casefold',{deterministic:true},value=>String(value||'').toLocaleLowerCase('ru-RU'));
   const permission=(chat,uid)=>{
@@ -47,7 +51,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(row.deleted_at)return {...row,text:'',attachment_id:null,expression_id:null,emoji_entities:[],reply_to:null,reply_quote:null,forwarded_name:null,attachment:null,reply:null,reactions:[],pinned:false,poll:null,checklist:null,interactive:null};
     const reply=row.reply_to?get(row.reply_to):null;
     const sender=userById(row.sender_id);
-    return {...row,text:options?.serviceContent===true?(serviceMessages()?.text(row)??row.text):row.text,reply_quote:!reply||reply.deleted_at?null:row.reply_quote,...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_name:sender?.name||'Пользователь',sender_username:sender?.username||'',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
+    return {...row,transcript:null,text:options?.serviceContent===true?(serviceMessages()?.text(row)??row.text):row.text,reply_quote:!reply||reply.deleted_at?null:row.reply_quote,...(row.interactive?JSON.parse(row.interactive):{}),emoji_entities:expressions()?.hydrateEntities(row.id)||[],expression:row.expression_id?db.prepare('SELECT i.id,i.pack_id,p.kind FROM expression_items i JOIN expression_packs p ON p.id=i.pack_id WHERE i.id=?').get(row.expression_id):null,sender_name:sender?.name||'Пользователь',sender_username:sender?.username||'',attachment:row.attachment_id?db.prepare('SELECT id,name,mime,size FROM attachments WHERE id=?').get(row.attachment_id):null,
       reply:reply?{id:reply.id,sender_id:reply.sender_id,name:userById(reply.sender_id)?.name,text:reply.deleted_at?'Сообщение удалено':row.reply_quote?JSON.parse(row.reply_quote).text:reply.text||'Вложение',quote:!reply.deleted_at&&row.reply_quote?JSON.parse(row.reply_quote):null,chat_id:reply.chat_id,can_jump:reply.chat_id===row.chat_id,deleted:!!reply.deleted_at}:null,
       reactions:db.prepare('SELECT r.emoji,r.user_id,u.name FROM reactions r JOIN users u ON u.id=r.user_id WHERE r.message_id=? ORDER BY r.emoji,r.rowid').all(row.id).map(reaction=>({...reaction,avatar_url:userById(reaction.user_id)?.avatar_url||null})),
       pinned:!!db.prepare('SELECT 1 FROM pins WHERE message_id=?').get(row.id)};
@@ -59,6 +63,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   function insert(chat,uid,data){
     canPublish(chat,uid);
     const interactive=interactivePayload(data);if(interactive&&(data.attachment_id||data.expression_id))throw error(400,'Опрос или список отправляется отдельно от вложения');
+    if(data.silent!==undefined&&typeof data.silent!=='boolean'||data.effect!==undefined&&!['👍','👎','❤️','🔥','🎉','💩','🥰'].includes(data.effect))throw error(400,'Некорректные параметры сообщения');
     const cid=clientId(data.client_id),rawText=String(data.text||interactive?.poll?.question||interactive?.checklist?.title||''),text=rawText,reply=data.reply_to||null,source=data.forward_source||null,quote=replyQuote(data.reply_quote);
     if(data.expression_id&&(typeof data.expression_id!=='string'||!/^[a-f0-9]{32}$/.test(data.expression_id)))throw error(400,'Некорректный элемент набора');
     const expression=data.expression_id?expressions()?.getItem(data.expression_id,uid):null;
@@ -70,7 +75,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(quote&&!reply)throw error(400,'Цитата требует исходного сообщения');
     if(reply&&(!Number.isSafeInteger(reply)||reply<1))throw error(400,'Некорректный ответ');
     const existing=db.prepare('SELECT * FROM messages WHERE sender_id=? AND client_id=?').get(uid,cid);
-    if(existing){if(existing.id<=cutoff(existing.chat_id,uid))throw Object.assign(error(409,'Сообщение относится к очищенной истории. Отправьте его заново'),{code:'HISTORY_CLEARED'});if(JSON.stringify(interactivePayload(existing.interactive?JSON.parse(existing.interactive):{}))!==JSON.stringify(interactive))throw error(409,'Идентификатор уже использован');if(existing.chat_id!==chat||existing.forward_source!==source||(!source&&(existing.text!==text||existing.attachment_id!==attachment||existing.reply_to!==reply||(existing.reply_quote||null)!==(quote?JSON.stringify(quote):null)||existing.expression_id!==(expression?.id||null)||JSON.stringify(expressions()?.hydrateEntities(existing.id)||[])!==JSON.stringify(entities))))throw error(409,'Идентификатор уже использован');return {row:existing,created:false};}
+    if(existing){if(existing.id<=cutoff(existing.chat_id,uid))throw Object.assign(error(409,'Сообщение относится к очищенной истории. Отправьте его заново'),{code:'HISTORY_CLEARED'});if(JSON.stringify(interactivePayload(existing.interactive?JSON.parse(existing.interactive):{}))!==JSON.stringify(interactive))throw error(409,'Идентификатор уже использован');if(existing.chat_id!==chat||existing.forward_source!==source||(!source&&(existing.silent!==Number(data.silent||false)||(existing.effect||null)!==(data.effect||null)||existing.text!==text||existing.attachment_id!==attachment||existing.reply_to!==reply||(existing.reply_quote||null)!==(quote?JSON.stringify(quote):null)||existing.expression_id!==(expression?.id||null)||JSON.stringify(expressions()?.hydrateEntities(existing.id)||[])!==JSON.stringify(entities))))throw error(409,'Идентификатор уже использован');return {row:existing,created:false};}
     if(text.length>4000||(!text.trim()&&!attachment))throw error(400,'Введите текст до 4000 символов или прикрепите файл');
     if(reply){const quoted=get(reply);if(!quoted||quoted.deleted_at||quoted.id<=cutoff(quoted.chat_id,uid)||(!quote&&quoted.chat_id!==chat))throw error(400,'Сообщение для ответа недоступно');member(quoted.chat_id,uid);if(quote&&!validQuote(quoted.text,quote))throw error(400,'Цитата не совпадает с исходным сообщением');}
     if(attachment){const file=db.prepare('SELECT * FROM attachments WHERE id=?').get(attachment);
@@ -78,7 +83,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       if(!source&&!expression&&(file.owner_id!==uid||db.prepare('SELECT 1 FROM messages WHERE attachment_id=?').get(attachment)))throw error(403,'Файл уже отправлен или принадлежит другому пользователю');
     }
     const result=db.prepare('INSERT INTO messages(chat_id,sender_id,text,client_id,created_at,attachment_id,reply_to,forwarded_name,forward_source,expression_id) VALUES(?,?,?,?,?,?,?,?,?,?)').run(chat,uid,text,cid,new Date().toISOString(),attachment,reply,data.forwarded_name||null,source,expression?.id||data.forward_expression_id||null);
-    const messageId=Number(result.lastInsertRowid);
+    const messageId=Number(result.lastInsertRowid);db.prepare('UPDATE messages SET silent=?,effect=? WHERE id=?').run(data.silent?1:0,data.effect||null,messageId);
     if(quote)db.prepare('UPDATE messages SET reply_quote=? WHERE id=?').run(JSON.stringify(quote),messageId);
     if(interactive)db.prepare('UPDATE messages SET interactive=? WHERE id=?').run(JSON.stringify(interactive),messageId);
     expressions()?.recordEntities(messageId,entities);
@@ -86,13 +91,16 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(!source)for(const id of new Set(entities.map(e=>e.id)))expressions()?.usage(uid,id,true);
     return {row:get(messageId),created:true};
   }
+  const scheduled=scheduledMessages({db,member,canPublish,isOnline,canSeePresence,publish:(users,event)=>{if(event.scheduledDelivery)broadcast(event.message.chat_id,{type:'message',message:event.message});else publish(users,event);},send:(chat,uid,data)=>{
+   const ids=data.attachment_ids||[data.attachment_id||null],messages=[];for(let i=0;i<ids.length;i++){const result=insert(chat,uid,{...data,attachment_ids:undefined,attachment_id:ids[i],text:i===0?data.text:'',emoji_entities:i===0?data.emoji_entities:[],client_id:ids.length>1?data.client_id+'-'+i:data.client_id});if(ids.length>1)db.prepare('UPDATE messages SET album_id=? WHERE id=?').run(uid+':'+data.client_id,result.row.id);if(result.created)messages.push(hydrate(get(result.row.id)));}return messages;
+  }});
   const cleanupUnused=()=>{
     // Startup must initialize expressions before collecting unreferenced files.
     const expressionService=expressions();
     if(!expressionService)return;
     const unused=db.prepare('SELECT id FROM attachments WHERE created_at<? AND NOT EXISTS (SELECT 1 FROM messages WHERE attachment_id=attachments.id) AND NOT EXISTS (SELECT 1 FROM users WHERE avatar_id=attachments.id) AND NOT EXISTS (SELECT 1 FROM profile_posts WHERE attachment_id=attachments.id AND deleted=0)').all(Date.now()-86400000);
     for(const file of unused){
-      if(expressionService.fileUsed(file.id))continue;
+      if(expressionService.fileUsed(file.id)||db.prepare('SELECT 1 FROM scheduled_files WHERE file=?').get(file.id))continue;
       // Let SQLite reject any additional references before touching the file.
       db.exec('SAVEPOINT attachment_cleanup');
       try{db.prepare('DELETE FROM attachments WHERE id=?').run(file.id);}
@@ -110,6 +118,9 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   const pendingTranscriptions=new Map();let activeTranscriptions=0;
   const handle=async(req,res,url,uid)=>{
     const path=url.pathname,method=req.method;
+    const schedulePath=path.match(/^\/api\/chats\/(\d+)\/scheduled$/),scheduleItem=path.match(/^\/api\/scheduled\/(\d+)(?:\/(send))?$/);
+    if(schedulePath){const chat=Number(schedulePath[1]);if(method==='GET'){json(res,200,scheduled.list(uid,chat));return true;}if(method==='POST'){const data=await body(req);json(res,201,scheduled.create(chat,uid,data));return true;}}
+    if(scheduleItem){if(method==='DELETE'){scheduled.cancel(uid,Number(scheduleItem[1]));json(res,200,{ok:true});return true;}if(method==='POST'&&scheduleItem[2]==='send'){await body(req);scheduled.sendNow(uid,Number(scheduleItem[1]));json(res,200,{ok:true});return true;}}
     if(path==='/api/search/messages'&&method==='GET'){
       const q=(url.searchParams.get('q')||'').trim().slice(0,200),before=Number(url.searchParams.get('before')||Number.MAX_SAFE_INTEGER);
       if(!Number.isSafeInteger(before)||before<1)throw error(400,'Некорректный курсор');
@@ -146,7 +157,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(discard&&method==='POST'){
       const file=db.prepare('SELECT * FROM attachments WHERE id=? AND owner_id=?').get(discard[1],uid);
       if(!file||file.admin_blocked)throw error(404,'Файл не найден');
-      if(db.prepare('SELECT 1 FROM messages WHERE attachment_id=?').get(file.id)||db.prepare('SELECT 1 FROM users WHERE avatar_id=?').get(file.id)||db.prepare('SELECT 1 FROM profile_posts WHERE attachment_id=? AND deleted=0').get(file.id)||expressions()?.fileUsed(file.id))throw error(409,'Файл уже используется');
+      if(db.prepare('SELECT 1 FROM scheduled_files WHERE file=?').get(file.id)||db.prepare('SELECT 1 FROM messages WHERE attachment_id=?').get(file.id)||db.prepare('SELECT 1 FROM users WHERE avatar_id=?').get(file.id)||db.prepare('SELECT 1 FROM profile_posts WHERE attachment_id=? AND deleted=0').get(file.id)||expressions()?.fileUsed(file.id))throw error(409,'Файл уже используется');
       try{unlinkSync(join(uploads,file.id));}catch(e){if(e.code!=='ENOENT')throw e;}
       db.prepare('DELETE FROM attachments WHERE id=?').run(file.id);json(res,200,{ok:true});return true;
     }
@@ -179,6 +190,8 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
         LEFT JOIN users u ON u.id=other.user_id ORDER BY saved DESC,COALESCE(last_at,'') DESC,c.id DESC`).all(uid,uid,uid,uid);
       json(res,200,rows);return true;
     }
+    const calendar=path.match(/^\/api\/chats\/(\d+)\/calendar$/);
+    if(calendar&&method==='GET'){const chat=Number(calendar[1]);member(chat,uid);json(res,200,chatCalendar({db,uid,chat,params:url.searchParams,hydrate:row=>visibleHydrate(row,uid)}));return true;}
     const album=path.match(/^\/api\/chats\/(\d+)\/album$/);
     if(album&&method==='POST'){
       const chat=Number(album[1]),data=await body(req);canPublish(chat,uid);
@@ -195,7 +208,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
         for(let i=0;i<ids.length;i++){
           const file=db.prepare('SELECT mime FROM attachments WHERE id=?').get(ids[i]);
           if(!file||!file.mime.match(/^(image|video)\//))throw error(400,'В альбоме могут быть только фото и видео');
-          const result=insert(chat,uid,{client_id:cid+'-'+i,text:i===0?rawText:'',emoji_entities:i===0?data.emoji_entities:[],attachment_id:ids[i],reply_to:reply,reply_quote:data.reply_quote});
+          const result=insert(chat,uid,{client_id:cid+'-'+i,text:i===0?rawText:'',emoji_entities:i===0?data.emoji_entities:[],silent:data.silent,effect:i===0?data.effect:undefined,attachment_id:ids[i],reply_to:reply,reply_quote:data.reply_quote});
           if(!result.created)throw error(409,'Идентификатор уже использован');
           db.prepare('UPDATE messages SET album_id=? WHERE id=?').run(key,result.row.id);rows.push(get(result.row.id));
         }
@@ -208,12 +221,14 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       const chat=Number(messages[1]),action=messages[2];member(chat,uid);
       if(method==='GET'){
         const hidden=cutoff(chat,uid);
+        if(action==='media'&&url.searchParams.has('album_id')){const album=url.searchParams.get('album_id');if(!album||album.length>160)throw error(400,'Некорректный альбом');const rows=db.prepare('SELECT * FROM messages WHERE chat_id=? AND album_id=? AND id>? AND deleted_at IS NULL ORDER BY id LIMIT 10').all(chat,album,hidden);json(res,200,rows.map(row=>visibleHydrate(row,uid)));return true;}
         if(action==='media'&&(url.searchParams.has('direction')||url.searchParams.has('anchorMediaId')||url.searchParams.has('cursor')||['photo','video','photo_video'].includes(url.searchParams.get('type')))){json(res,200,mediaPage(chat,uid,url.searchParams));return true;}
         if(action==='messages'&&url.searchParams.get('forum')==='1'){
           const group=db.prepare('SELECT kind,parent_id FROM chats WHERE id=?').get(chat);if(group.kind!=='group'||group.parent_id)throw error(400,'Общая лента доступна только для основной группы');
           const before=Number(url.searchParams.get('before')||Number.MAX_SAFE_INTEGER);if(!Number.isSafeInteger(before)||before<1)throw error(400,'Некорректный курсор');
+          const after=Number(url.searchParams.get('after')||0);if(!Number.isSafeInteger(after)||after<0)throw error(400,'Некорректный курсор');
           const q=(url.searchParams.get('q')||'').trim().slice(0,200);
-          const rows=db.prepare(`SELECT m.* FROM messages m JOIN chats c ON c.id=m.chat_id JOIN members me ON me.chat_id=c.id AND me.user_id=? LEFT JOIN chat_visibility v ON v.chat_id=c.id AND v.user_id=? WHERE (c.id=? OR c.parent_id=?) AND c.topic_deleted=0 AND c.admin_deleted=0 AND m.id>COALESCE(v.hidden_before,0) AND m.id<? AND m.deleted_at IS NULL AND (?='' OR instr(casefold(m.text),casefold(?))>0) ORDER BY m.id DESC LIMIT 50`).all(uid,uid,chat,chat,before,q,q).reverse();
+          const rows=db.prepare(`SELECT m.* FROM messages m JOIN chats c ON c.id=m.chat_id JOIN members me ON me.chat_id=c.id AND me.user_id=? LEFT JOIN chat_visibility v ON v.chat_id=c.id AND v.user_id=? WHERE (c.id=? OR c.parent_id=?) AND c.topic_deleted=0 AND c.admin_deleted=0 AND m.id>COALESCE(v.hidden_before,0) AND m.id<? AND m.id>? AND m.deleted_at IS NULL AND (?='' OR instr(casefold(m.text),casefold(?))>0) ORDER BY m.id ${after?'ASC':'DESC'} LIMIT 50`).all(uid,uid,chat,chat,before,after,q,q);if(!after)rows.reverse();
           json(res,200,rows.map(row=>visibleHydrate(row,uid)));return true;
         }
         let rows;
@@ -233,12 +248,12 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
             const around=Number(url.searchParams.get('around'));
             if(!Number.isSafeInteger(around)||around<=hidden||!db.prepare('SELECT 1 FROM messages WHERE id=? AND chat_id=?').get(around,chat))throw error(404,'Сообщение не найдено');
             rows=[...db.prepare('SELECT * FROM messages WHERE chat_id=? AND id>? AND id<=? ORDER BY id DESC LIMIT 25').all(chat,hidden,around).reverse(),...db.prepare('SELECT * FROM messages WHERE chat_id=? AND id>? ORDER BY id LIMIT 25').all(chat,around)];
-          }else rows=db.prepare('SELECT * FROM messages WHERE chat_id=? AND id>? AND id<? ORDER BY id DESC LIMIT 50').all(chat,hidden,before).reverse();
+          }else if(url.searchParams.has('after')){const after=Number(url.searchParams.get('after'));if(!Number.isSafeInteger(after)||after<1)throw error(400,'Некорректный курсор');rows=db.prepare('SELECT * FROM messages WHERE chat_id=? AND id>? ORDER BY id LIMIT 50').all(chat,Math.max(hidden,after));}else rows=db.prepare('SELECT * FROM messages WHERE chat_id=? AND id>? AND id<? ORDER BY id DESC LIMIT 50').all(chat,hidden,before).reverse();
         }
         json(res,200,rows.map(row=>visibleHydrate(row,uid)));return true;
       }
       if(action==='messages'&&method==='POST'){
-        const data=await body(req);const result=insert(chat,uid,{text:data.text,client_id:data.client_id,attachment_id:data.attachment_id,reply_to:data.reply_to,reply_quote:data.reply_quote,expression_id:data.expression_id,emoji_entities:data.emoji_entities,poll:data.poll,checklist:data.checklist});
+        const data=await body(req);const result=insert(chat,uid,{text:data.text,client_id:data.client_id,attachment_id:data.attachment_id,reply_to:data.reply_to,reply_quote:data.reply_quote,expression_id:data.expression_id,emoji_entities:data.emoji_entities,poll:data.poll,checklist:data.checklist,silent:data.silent,effect:data.effect});
         const message=hydrate(result.row);if(result.created)broadcast(chat,{type:'message',message});json(res,result.created?201:200,message);return true;
       }
     }
@@ -256,7 +271,6 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
         if(options.force!==undefined&&typeof options.force!=='boolean')throw error(400,'Некорректный режим распознавания');
         const current=get(row.id);if(!current||current.deleted_at)throw error(410,'Сообщение удалено');
         if(row.id<=cutoff(row.chat_id,uid))throw error(404,'Сообщение не найдено');
-        if(current.transcript&&!options.force&&!pendingTranscriptions.has(row.id)){json(res,200,{transcript:current.transcript});return true;}
         if(!transcriber)throw error(503,'Распознавание на сервере не настроено');
         let job=pendingTranscriptions.get(row.id);
         if(!job){
@@ -267,13 +281,12 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
               const bytes=readFileSync(join(uploads,file.id));
               const transcript=await transcriber({bytes,name:file.name,mime:file.mime});
               const latest=get(row.id);if(!latest||latest.deleted_at)throw error(410,'Сообщение удалено');
-              db.prepare('UPDATE messages SET transcript=? WHERE id=?').run(transcript,row.id);
-              const updated=get(row.id);changed(updated);return transcript;
+              return transcript;
             }finally{activeTranscriptions--;pendingTranscriptions.delete(row.id);}
           })();
           pendingTranscriptions.set(row.id,job);
         }
-        const transcript=await job;json(res,200,{transcript});return true;
+        const transcript=await job;authorized(row.id,uid);if(row.id<=cutoff(row.chat_id,uid))throw error(404,'Сообщение не найдено');res.setHeader('Cache-Control','no-store');json(res,200,{transcript});return true;
       }
       const data=await body(req);
       row=authorized(Number(messageMatch[1]),uid);
@@ -312,6 +325,8 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
           db.prepare('UPDATE attachments SET size=0 WHERE id=?').run(row.attachment_id);
         }
       }else if(action==='react'){
+        const policy=db.prepare('SELECT allowed_reactions FROM chats WHERE id=COALESCE((SELECT parent_id FROM chats WHERE id=?),?)').get(row.chat_id,row.chat_id)?.allowed_reactions;
+        if(data.active&&policy!==null&&policy!==undefined&&!JSON.parse(policy).includes(data.emoji))throw error(403,'Эта реакция отключена в настройках группы');
         if(!isEmoji(data.emoji)||typeof data.active!=='boolean')throw error(400,'Некорректная реакция');
         if(data.active&&!db.prepare('SELECT 1 FROM reactions WHERE message_id=? AND user_id=? AND emoji=?').get(row.id,uid,data.emoji)){const userMax=Math.max(20,Math.min(100,Number(process.env.EMOJI_REACTIONS_PER_USER)||20)),messageMax=Math.max(userMax,Math.min(100,Number(process.env.EMOJI_REACTION_TYPES)||100));if(db.prepare('SELECT count(*) n FROM reactions WHERE message_id=? AND user_id=?').get(row.id,uid).n>=userMax)throw error(400,'Достигнут лимит реакций пользователя');if(!db.prepare('SELECT 1 FROM reactions WHERE message_id=? AND emoji=?').get(row.id,data.emoji)&&db.prepare('SELECT count(DISTINCT emoji) n FROM reactions WHERE message_id=?').get(row.id).n>=messageMax)throw error(400,'Достигнут лимит типов реакций');}const result=data.active?db.prepare('INSERT OR IGNORE INTO reactions VALUES(?,?,?)').run(row.id,uid,data.emoji):db.prepare('DELETE FROM reactions WHERE message_id=? AND user_id=? AND emoji=?').run(row.id,uid,data.emoji);
         if(result.changes)reactionEvent={user_id:uid,emoji:data.emoji,active:data.active};
@@ -329,6 +344,6 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     }
     return false;
   };
-  handle.cleanupUnused=cleanupUnused;handle.hydrate=hydrate;
+  handle.cleanupUnused=cleanupUnused;handle.hydrate=hydrate;handle.close=scheduled.close;handle.scheduledTick=scheduled.tick;
   return handle;
 }

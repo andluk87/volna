@@ -17,14 +17,15 @@ import org.robolectric.RobolectricTestRunner
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class NativeTranscriptionUiTest {
  @get:Rule val compose=createEmptyComposeRule()
- @Test fun cachedTranscriptCanBeReplacedWithoutInvokingTheCachedAction(){
+ @Test fun transcriptIsRequestedAfreshAndClearedOnCollapse(){
   val activity=Robolectric.buildActivity(ComponentActivity::class.java).setup().visible();val playback=NativeVoicePlayback(activity.get()){}
-  var forced=0;var cached=0;var busy by mutableStateOf(false)
-  val message=VolnaMessage(1,1,"Имя","","2026-10-30T00:00:00Z",false,"Голосовое-1.m4a",attachmentId="a".repeat(48),attachmentMime="audio/mp4",attachmentSize=6*1024*1024,transcript="Ранее распознанный текст")
-  try{compose.runOnUiThread{activity.get().setContent{VolnaTheme(NativeAppearance(theme="dark"),updateSystemBars=false){NativeVoiceMessage(message,"test",playback,{},busy,{cached++},onRetranscribe={forced++})}}}
-   compose.onNodeWithContentDescription("Расшифровать голосовое").performClick();compose.onNodeWithText("Ранее распознанный текст").assertIsDisplayed();assertEquals(0,cached)
-   compose.onNodeWithText("Распознать заново").performClick();assertEquals(1,forced)
-   compose.runOnIdle{busy=true};compose.onNodeWithText("Распознаём…").assertIsNotEnabled()
+  var calls=0;var consumed=0
+  var message by mutableStateOf(VolnaMessage(1,1,"Имя","","2026-10-30T00:00:00Z",false,"Голосовое-1.m4a",attachmentId="a".repeat(48),attachmentMime="audio/mp4",attachmentSize=6*1024*1024))
+  try{compose.runOnUiThread{activity.get().setContent{VolnaTheme(NativeAppearance(theme="dark"),updateSystemBars=false){NativeVoiceMessage(message,"test",playback,{},false,{calls++;message=message.copy(transcript="Текст $calls")},onTranscriptConsumed={consumed++;message=message.copy(transcript=null)})}}}
+   compose.onNodeWithContentDescription("Расшифровать голосовое").performClick();compose.onNodeWithText("Текст 1").assertIsDisplayed();assertEquals(1,calls)
+   compose.runOnIdle{assertNull(message.transcript);assertTrue(consumed>0)}
+   compose.onNodeWithContentDescription("Расшифровать голосовое").performClick();compose.onNodeWithText("Текст 1").assertDoesNotExist()
+   compose.onNodeWithContentDescription("Расшифровать голосовое").performClick();compose.onNodeWithText("Текст 2").assertIsDisplayed();assertEquals(2,calls)
   }finally{playback.close();compose.runOnUiThread{activity.pause().stop().destroy()}}
  }
 }

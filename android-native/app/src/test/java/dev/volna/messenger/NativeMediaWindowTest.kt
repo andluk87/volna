@@ -18,6 +18,11 @@ class NativeMediaWindowTest {
   val denied=NativeMediaWindow(message(2),emptyList(),"test",NativeApi("https://example.invalid")){_,_->throw NativeApiException(403,"Denied")};denied.load();assertTrue(denied.denied);assertTrue(denied.items.isEmpty())
   val offline=NativeMediaWindow(message(2),listOf(message(1)),"test",NativeApi("https://example.invalid")){_,_->throw java.io.IOException("Offline")};offline.load();assertFalse(offline.denied);assertEquals(2,offline.items.size);assertEquals(2L,offline.current!!.id)
  }
+ @Test fun albumScopeNeverIncludesOtherMessagesOrLiveMedia()=runBlocking {
+  val first=message(1).copy(albumId="album");val second=message(2).copy(albumId="album");val other=message(3).copy(albumId="other")
+  val repo=NativeMediaWindow(first,listOf(first,second,other),"test",NativeApi("https://example.invalid"),scopeAlbum=true){_,_->NativeMediaPage(listOf(first,second),null,null,false,false)}
+  assertEquals(listOf(1L,2L),repo.items.map{it.id});repo.load();repo.update(other);assertEquals(listOf(1L,2L),repo.items.map{it.id});assertTrue(repo.complete)
+ }
  @Test fun panBoundsPreventPortraitImagesFromBeingDraggedIntoBlankSpace() {
   assertEquals(0f,nativePanLimit(400f,800f,.25f,2f).x,.01f);assertEquals(400f,nativePanLimit(400f,800f,.25f,2f).y,.01f)
  }

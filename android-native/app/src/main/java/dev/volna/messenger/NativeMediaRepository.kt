@@ -11,8 +11,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 internal data class NativeMediaPage(val items: List<VolnaMessage>, val before: String?, val after: String?, val hasBefore: Boolean, val hasAfter: Boolean)
 internal fun isTimelineMedia(m: VolnaMessage) = !m.deleted && m.expressionKind == null && (m.attachmentMime?.startsWith("image/") == true || m.attachmentMime?.startsWith("video/") == true)
-internal class NativeMediaWindow(initial: VolnaMessage, seed: List<VolnaMessage>, private val token: String, private val api: NativeApi, private val fetchPage: (suspend (String,String?) -> NativeMediaPage)? = null) {
-    var items by mutableStateOf((seed + initial).filter { it.chatId == initial.chatId && isTimelineMedia(it) }.distinctBy { it.id }.sortedBy { it.id }); private set
+internal class NativeMediaWindow(initial: VolnaMessage, seed: List<VolnaMessage>, private val token: String, private val api: NativeApi, private val scopeAlbum: Boolean = false, private val fetchPage: (suspend (String,String?) -> NativeMediaPage)? = null) {
+    var items by mutableStateOf((seed + initial).filter { it.chatId == initial.chatId && (!scopeAlbum || initial.albumId == null || it.albumId == initial.albumId) && isTimelineMedia(it) }.distinctBy { it.id }.sortedBy { it.id }); private set
     var selected by mutableStateOf(initial.id)
     var before by mutableStateOf<String?>(null); private set
     var after by mutableStateOf<String?>(null); private set
@@ -26,6 +26,7 @@ internal class NativeMediaWindow(initial: VolnaMessage, seed: List<VolnaMessage>
     private val removed = mutableSetOf<Long>()
     private val chat = initial.chatId
     private val anchor = initial.id
+    private val album = initial.albumId.takeIf { scopeAlbum }
     val index get() = items.indexOfFirst { it.id == selected }
     val current get() = items.firstOrNull { it.id == selected }
     val complete get() = ready && !hasBefore && !hasAfter
@@ -34,7 +35,7 @@ internal class NativeMediaWindow(initial: VolnaMessage, seed: List<VolnaMessage>
         pending.add(direction); loading = true
         try {
             val cursor=if(direction=="before")before else if(direction=="after")after else null
-            val page = if(fetchPage!=null)fetchPage.invoke(direction,cursor) else withContext(Dispatchers.IO) { api.mediaPage(token, chat, if(direction=="around") selected else anchor, direction,cursor) }
+            val page = if(fetchPage!=null)fetchPage.invoke(direction,cursor) else withContext(Dispatchers.IO) { if (album != null) api.albumMedia(token, chat, album) else api.mediaPage(token, chat, if(direction=="around") selected else anchor, direction,cursor) }
             val rows = page.items.filter { it.id !in removed }
             items = (if (direction == "around") rows else items + rows).distinctBy { it.id }.sortedBy { it.id }
             if (direction != "after") { before = page.before; hasBefore = page.hasBefore }
@@ -46,7 +47,7 @@ internal class NativeMediaWindow(initial: VolnaMessage, seed: List<VolnaMessage>
         finally { pending.remove(direction); loading = pending.isNotEmpty() }
     }
     fun update(m: VolnaMessage) {
-        if (m.chatId != chat) return
+        if (m.chatId != chat || album != null && m.albumId != album) return
         if (!isTimelineMedia(m)) { remove(m.id); return }
         // Keep the loaded range contiguous; new messages outside it are fetched through the cursor.
         if (items.any { it.id == m.id } || !hasAfter) items = (items.filter { it.id != m.id } + m).sortedBy { it.id }

@@ -35,14 +35,15 @@ export function notifications({db,auth,body,json,contactDisplay=(uid,id,name)=>n
   const member=row&&db.prepare('SELECT last_read FROM members WHERE chat_id=? AND user_id=?').get(job.chat_id,row.user_id);
   if(!row||row.session_expires<=Date.now()||job.expires<=Date.now()||!member){remove(job.id);return;}
   if(job.kind==='message'&&db.prepare('SELECT muted FROM chat_preferences WHERE user_id=? AND chat_id=?').get(row.user_id,job.chat_id)?.muted){remove(job.id);return;}
-  let title='VLN',text=job.kind==='call'?'Входящий аудиозвонок. Откройте VLN, чтобы ответить.':'Новое сообщение';
+  let silent=false;let title='VLN',text=job.kind==='call'?'Входящий аудиозвонок. Откройте VLN, чтобы ответить.':'Новое сообщение';
   if(job.kind==='message'){
    const m=db.prepare('SELECT m.*,u.name FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=? AND m.chat_id=?').get(job.message_id,job.chat_id);
    if(!m||m.deleted_at||member.last_read>=m.id||!topicNotification(db,job.chat_id,row.user_id,m.text,m.reply_to)){remove(job.id);return;}
+   silent=m.silent===1;
    if(row.preview){const chat=db.prepare(`SELECT c.kind,CASE WHEN c.parent_id IS NOT NULL THEN (SELECT title FROM chats WHERE id=c.parent_id)||' › '||c.title ELSE c.title END AS title FROM chats c WHERE c.id=?`).get(job.chat_id);title=chat.kind==='direct'?contactDisplay(row.user_id,m.sender_id,m.name):chat.title;text=m.text?.slice(0,160)||'Новое вложение';}
   }
   try{
-   await sender(JSON.parse(row.subscription),JSON.stringify({title,body:text,tag:row.user_id+':'+job.topic,account_id:row.user_id,chat_id:job.chat_id,expires:job.expires,kind:job.kind,...(job.kind==='call'?{call_id:job.topic.slice(5),ring_receipt:callReceipt(job.topic.slice(5))}:{})}),{vapidDetails:{subject,publicKey:keys.public_key,privateKey:keys.private_key},TTL:Math.max(1,Math.floor((job.expires-Date.now())/1000)),urgency:'high',topic:hash(row.user_id+':'+job.topic).slice(0,32),timeout:10000});
+   await sender(JSON.parse(row.subscription),JSON.stringify({title,body:text,tag:row.user_id+':'+job.topic,account_id:row.user_id,chat_id:job.chat_id,expires:job.expires,kind:job.kind,silent,...(job.kind==='call'?{call_id:job.topic.slice(5),ring_receipt:callReceipt(job.topic.slice(5))}:{})}),{vapidDetails:{subject,publicKey:keys.public_key,privateKey:keys.private_key},TTL:Math.max(1,Math.floor((job.expires-Date.now())/1000)),urgency:'high',topic:hash(row.user_id+':'+job.topic).slice(0,32),timeout:10000});
    if(!closed)db.prepare('DELETE FROM push_jobs WHERE id=? AND message_id IS ? AND expires=?').run(job.id,job.message_id,job.expires);
   }catch(e){if(closed)return;if(e.statusCode===404||e.statusCode===410)db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(row.id);else if(job.attempts>=5)remove(job.id);else db.prepare('UPDATE push_jobs SET attempts=attempts+1,next_at=? WHERE id=? AND message_id IS ?').run(Date.now()+Math.min(300000,5000*2**job.attempts),job.id,job.message_id);}
  }

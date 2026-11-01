@@ -1,6 +1,7 @@
 const {contextBridge,ipcRenderer}=require('electron');
 const listen=(channel,callback)=>{const fn=(_event,value)=>callback(value);ipcRenderer.on(channel,fn);return()=>ipcRenderer.removeListener(channel,fn);};
 contextBridge.exposeInMainWorld('volnaDesktop',{
+ mediaFullscreen:value=>ipcRenderer.invoke('desktop:media-fullscreen',value),
  takeInvite:()=>ipcRenderer.invoke('desktop:take-invite'),consumeInvite:code=>ipcRenderer.invoke('desktop:consume-invite',code),onInvite:callback=>listen('desktop:invite',callback),
  sessionDiagnostic:value=>ipcRenderer.invoke('desktop:session-diagnostic',value),openSessionLog:()=>ipcRenderer.invoke('desktop:session-log'),
  savePhoto:value=>ipcRenderer.invoke('desktop:save-photo',value),

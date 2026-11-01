@@ -299,6 +299,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
     fun pin(token: String, id: Long, pinned: Boolean) = parseMessage(call("/messages/$id/pin", "POST", token, JSONObject().put("pinned", pinned)))
     fun forward(token: String, messageId: Long, chatId: Long, clientId: String = UUID.randomUUID().toString().replace("-", "")): VolnaMessage = parseMessage(call("/messages/$messageId/forward", "POST", token,
         JSONObject().put("chat_id", chatId).put("client_id", clientId)))
+    fun presence(token: String, client: String, visible: Boolean, sequence: Long) { call("/presence", "POST", token, JSONObject().put("client",client).put("visible",visible).put("sequence",sequence)) }
     fun transcribe(token: String, id: Long, force: Boolean = false): String = call("/messages/$id/transcribe", "POST", token, JSONObject().put("force",force)).optString("transcript")
 
     fun upload(token: String, fileName: String, mime: String, bytes: ByteArray): String {
@@ -351,6 +352,10 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         } catch (error: Exception) { partial.delete(); throw error }
     }
 
+    internal fun albumMedia(token: String, chatId: Long, album: String): NativeMediaPage {
+        val rows = arrayCall("/chats/$chatId/media?album_id=" + java.net.URLEncoder.encode(album, "UTF-8"), token)
+        return NativeMediaPage((0 until rows.length()).map { parseMessage(rows.getJSONObject(it)) }, null, null, false, false)
+    }
     internal fun mediaPage(token: String, chatId: Long, anchor: Long?, direction: String = "around", cursor: String? = null, type: String = "photo_video"): NativeMediaPage {
         val query = "type=$type&limit=40&direction=$direction&" + if (cursor != null) "cursor=" + java.net.URLEncoder.encode(cursor, "UTF-8") else if(anchor!=null) "anchorMediaId=m$anchor" else ""
         val data = call("/chats/$chatId/media?$query", "GET", token)
@@ -512,7 +517,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
             file?.optString("id")?.takeIf { !it.isNullOrBlank() && it != "null" },
             file?.optString("mime")?.takeIf { !it.isNullOrBlank() && it != "null" }, reply, reactions,
             !row.isNull("edited_at") && row.optString("edited_at").isNotBlank() && row.optString("edited_at") != "null",
-            row.optBoolean("pinned"), row.optString("transcript").takeIf { it.isNotBlank() && it != "null" },
+            row.optBoolean("pinned"), null,
             row.optString("forwarded_name").takeIf { it.isNotBlank() && it != "null" }, file?.optLong("size") ?: 0L, nullableText(row, "album_id"), row.optLong("chat_id"), row.optJSONObject("expression")?.optString("kind"), nullableText(row, "expression_id"),
             row.optJSONArray("emoji_entities")?.let { values -> (0 until values.length()).map { NativeEmojiEntity.parse(values.getJSONObject(it)) } } ?: emptyList(), topicName = nullableText(row,"topic_name").orEmpty())
     }

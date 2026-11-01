@@ -6,12 +6,12 @@ import EmojiPicker from './EmojiPicker';
 import {fitMessagePopup} from './message-popup.mjs';
 import './message-popup.css';
 
-export default function MessageMenu({message,quickReactions,meId,canSend,canManage,canDelete,onReact,onSelect,onCopy,onReply,onQuote,onForward,onSave,onPin,onEdit,onDelete}){
+export default function MessageMenu({message,quickReactions,allowedReactions=null,meId,canSend,canManage,canDelete,onReact,onSelect,onCopy,onReply,onQuote,onForward,onSave,onPin,onEdit,onDelete}){
  const [selectedQuote,setSelectedQuote]=useState(null),capturedQuote=useRef(null);
  const owner=useRef(null),popup=useRef(null),[point,setPoint]=useState({x:0,y:0}),id=useId(),[open,setOpen]=useState(false),[expanded,setExpanded]=useState(false),previousExpanded=useRef(false);
  const close=useCallback(()=>{if(owner.current)owner.current.open=false;setOpen(false);setExpanded(false);previousExpanded.current=false;capturedQuote.current=null;},[]);
  const collapse=useCallback(()=>setExpanded(false),[]);
- const react=emoji=>{close();onReact(emoji);};
+ const react=emoji=>{if(allowedReactions!==null&&!allowedReactions.includes(emoji))return;close();onReact(emoji);};
  const captureSelection=()=>{
   const fragment=quoteFromSelection(owner.current?.closest('[data-message-id]')?.querySelector('.message-text'),message.text||'',window.getSelection());
   capturedQuote.current=fragment;
@@ -56,10 +56,10 @@ export default function MessageMenu({message,quickReactions,meId,canSend,canMana
  return <><details ref={owner} className="message-actions" data-menu-owner={id} onToggle={toggle}>
   <summary onPointerDown={captureSelection} aria-label={'Действия сообщения '+message.id} aria-expanded={open}><Icon name="more"/></summary>
  </details>{open&&createPortal(<div ref={popup} className={'message-popup'+(expanded?' message-popup-expanded':'')} data-message-menu-owner={id}>
-  {expanded?<EmojiPicker reaction onPick={react} onClose={collapse}/>:<>
+  {expanded&&allowedReactions===null?<EmojiPicker reaction onPick={react} onClose={collapse}/>:<>
    <div className="reaction-picker message-quick-reactions" role="toolbar" aria-label="Быстрые реакции">
-    {quickReactions.slice(0,6).map(emoji=><button type="button" key={emoji} aria-label={'Реакция '+emoji} aria-pressed={message.reactions?.some(r=>r.emoji===emoji&&r.user_id===meId)||false} onClick={()=>react(emoji)}>{emoji}</button>)}
-    <button type="button" className="reaction-expand" aria-label="Другие реакции" title="Другие реакции" aria-expanded={expanded} onClick={()=>setExpanded(true)}><Icon name="down"/></button>
+    {(allowedReactions===null?quickReactions:allowedReactions).slice(0,expanded?24:6).map(emoji=><button type="button" key={emoji} aria-label={'Реакция '+emoji} aria-pressed={message.reactions?.some(r=>r.emoji===emoji&&r.user_id===meId)||false} onClick={()=>react(emoji)}>{emoji}</button>)}
+    {(allowedReactions===null||allowedReactions.length>6)&&<button type="button" className="reaction-expand" aria-label="Другие реакции" title="Другие реакции" aria-expanded={expanded} onClick={()=>setExpanded(true)}><Icon name="down"/></button>}
    </div>
    <div className="message-menu" role="menu" aria-label="Действия сообщения">
     {canSend&&<button type="button" role="menuitem" onClick={action(()=>onReply(selectedQuote))}><Icon name="reply"/>{selectedQuote?'Ответить с цитатой':'Ответить'}</button>}
