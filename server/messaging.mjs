@@ -60,7 +60,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
   const changed=(row,extra={})=>broadcast(row.chat_id,{type:'message-update',message:hydrate(row),...extra});
   const authorized=(id,uid)=>{const row=get(id);if(!row)throw error(404,'Сообщение не найдено');member(row.chat_id,uid);if(row.id<=cutoff(row.chat_id,uid))throw error(404,'Сообщение не найдено');return row;};
   const clientId=value=>{if(typeof value!=='string'||!/^[a-zA-Z0-9-]{16,64}$/.test(value))throw error(400,'Некорректный идентификатор сообщения');return value;};
-  function insert(chat,uid,data){
+  function insert(chat,uid,data,{scheduledReuse=false}={}){
     canPublish(chat,uid);
     const interactive=interactivePayload(data);if(interactive&&(data.attachment_id||data.expression_id))throw error(400,'Опрос или список отправляется отдельно от вложения');
     if(data.silent!==undefined&&typeof data.silent!=='boolean'||data.effect!==undefined&&!['👍','👎','❤️','🔥','🎉','💩','🥰'].includes(data.effect))throw error(400,'Некорректные параметры сообщения');
@@ -80,7 +80,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(reply){const quoted=get(reply);if(!quoted||quoted.deleted_at||quoted.id<=cutoff(quoted.chat_id,uid)||(!quote&&quoted.chat_id!==chat))throw error(400,'Сообщение для ответа недоступно');member(quoted.chat_id,uid);if(quote&&!validQuote(quoted.text,quote))throw error(400,'Цитата не совпадает с исходным сообщением');}
     if(attachment){const file=db.prepare('SELECT * FROM attachments WHERE id=?').get(attachment);
       if(!file||file.admin_blocked)throw error(404,'Файл не найден');
-      if(!source&&!expression&&(file.owner_id!==uid||db.prepare('SELECT 1 FROM messages WHERE attachment_id=?').get(attachment)))throw error(403,'Файл уже отправлен или принадлежит другому пользователю');
+      if(!source&&!expression&&(file.owner_id!==uid||!scheduledReuse&&(db.prepare('SELECT 1 FROM messages WHERE attachment_id=?').get(attachment)||db.prepare('SELECT 1 FROM scheduled_files WHERE file=?').get(attachment))))throw error(403,'Файл уже отправлен или принадлежит другому пользователю');
     }
     const result=db.prepare('INSERT INTO messages(chat_id,sender_id,text,client_id,created_at,attachment_id,reply_to,forwarded_name,forward_source,expression_id) VALUES(?,?,?,?,?,?,?,?,?,?)').run(chat,uid,text,cid,new Date().toISOString(),attachment,reply,data.forwarded_name||null,source,expression?.id||data.forward_expression_id||null);
     const messageId=Number(result.lastInsertRowid);db.prepare('UPDATE messages SET silent=?,effect=? WHERE id=?').run(data.silent?1:0,data.effect||null,messageId);
@@ -91,8 +91,8 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     if(!source)for(const id of new Set(entities.map(e=>e.id)))expressions()?.usage(uid,id,true);
     return {row:get(messageId),created:true};
   }
-  const scheduled=scheduledMessages({db,member,canPublish,isOnline,canSeePresence,publish:(users,event)=>{if(event.scheduledDelivery)broadcast(event.message.chat_id,{type:'message',message:event.message});else publish(users,event);},send:(chat,uid,data)=>{
-   const ids=data.attachment_ids||[data.attachment_id||null],messages=[];for(let i=0;i<ids.length;i++){const result=insert(chat,uid,{...data,attachment_ids:undefined,attachment_id:ids[i],text:i===0?data.text:'',emoji_entities:i===0?data.emoji_entities:[],client_id:ids.length>1?data.client_id+'-'+i:data.client_id});if(ids.length>1)db.prepare('UPDATE messages SET album_id=? WHERE id=?').run(uid+':'+data.client_id,result.row.id);if(result.created)messages.push(hydrate(get(result.row.id)));}return messages;
+  const scheduled=scheduledMessages({db,member,canPublish,isOnline,canSeePresence,publish:(users,event)=>{if(event.scheduledDelivery)broadcast(event.message.chat_id,{type:'message',message:event.message});else publish(users,event);},send:(chat,uid,data,options={})=>{
+   const ids=data.attachment_ids||[data.attachment_id||null],messages=[];for(let i=0;i<ids.length;i++){const result=insert(chat,uid,{...data,attachment_ids:undefined,attachment_id:ids[i],text:i===0?data.text:'',emoji_entities:i===0?data.emoji_entities:[],client_id:ids.length>1?data.client_id+'-'+i:data.client_id},{scheduledReuse:options.reuse});if(ids.length>1)db.prepare('UPDATE messages SET album_id=? WHERE id=?').run(uid+':'+data.client_id,result.row.id);if(result.created)messages.push(hydrate(get(result.row.id)));}return messages;
   }});
   const cleanupUnused=()=>{
     // Startup must initialize expressions before collecting unreferenced files.
@@ -120,7 +120,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
     const path=url.pathname,method=req.method;
     const schedulePath=path.match(/^\/api\/chats\/(\d+)\/scheduled$/),scheduleItem=path.match(/^\/api\/scheduled\/(\d+)(?:\/(send))?$/);
     if(schedulePath){const chat=Number(schedulePath[1]);if(method==='GET'){json(res,200,scheduled.list(uid,chat));return true;}if(method==='POST'){const data=await body(req);json(res,201,scheduled.create(chat,uid,data));return true;}}
-    if(scheduleItem){if(method==='DELETE'){scheduled.cancel(uid,Number(scheduleItem[1]));json(res,200,{ok:true});return true;}if(method==='POST'&&scheduleItem[2]==='send'){await body(req);scheduled.sendNow(uid,Number(scheduleItem[1]));json(res,200,{ok:true});return true;}}
+    if(scheduleItem){if(method==='PATCH'&&!scheduleItem[2]){const data=await body(req);scheduled.update(uid,Number(scheduleItem[1]),data);json(res,200,{ok:true});return true;}if(method==='DELETE'){scheduled.cancel(uid,Number(scheduleItem[1]));json(res,200,{ok:true});return true;}if(method==='POST'&&scheduleItem[2]==='send'){await body(req);scheduled.sendNow(uid,Number(scheduleItem[1]));json(res,200,{ok:true});return true;}}
     if(path==='/api/search/messages'&&method==='GET'){
       const q=(url.searchParams.get('q')||'').trim().slice(0,200),before=Number(url.searchParams.get('before')||Number.MAX_SAFE_INTEGER);
       if(!Number.isSafeInteger(before)||before<1)throw error(400,'Некорректный курсор');
