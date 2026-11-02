@@ -103,7 +103,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
 
     private fun call(path: String, method: String = "GET", token: String? = null, data: JSONObject? = null): JSONObject {
         val builder = Request.Builder().url(base + "/api" + path).header("Accept", "application/json")
-        if (!token.isNullOrBlank()) builder.header("Authorization", "Bearer $token")
+        if (!token.isNullOrBlank()) { builder.header("Authorization", "Bearer $token");if(path.startsWith("/calls/")&&path!="/calls/diagnostics")NativeCallTelemetry.header(token)?.let{builder.header("X-Volna-Call-Diagnostics",it)} }
         if (method == "POST") builder.post((data ?: JSONObject()).toString().toRequestBody(jsonType))
         if (method == "PATCH") builder.patch((data ?: JSONObject()).toString().toRequestBody(jsonType))
         if (method == "DELETE") builder.delete()
@@ -435,7 +435,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
     fun callCamera(token: String, device: String, id: String, enabled: Boolean) { call("/calls/$id/camera", "POST", token, JSONObject().put("device", device).put("enabled", enabled)) }
 
     fun currentCall(token: String, device: String): VolnaCall? {
-        val request = Request.Builder().url("$base/api/calls/current?device=$device").header("Authorization", "Bearer $token").build()
+        val request = Request.Builder().url("$base/api/calls/current?device=$device").header("Authorization", "Bearer $token").apply { NativeCallTelemetry.header(token)?.let{header("X-Volna-Call-Diagnostics",it)} }.build()
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw apiError(text, response.code)

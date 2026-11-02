@@ -1,4 +1,5 @@
 import {callCandidateSummary,callStats} from './call-stats.mjs';
+import {callDiagnosticHeader} from './call-diagnostic-transport.mjs';
 import {version as clientVersion} from '../package.json';
 import {CallRecovery} from './call-recovery.mjs';
 import {economicalAudioDescription,limitCallSenders} from './call-bandwidth.mjs';
@@ -6,7 +7,7 @@ import React,{forwardRef,useEffect,useImperativeHandle,useRef,useState} from 're
 import {Capacitor} from '@capacitor/core';
 import {API,request as apiRequest,messageId} from './api';
 import {retryCallMutation} from './call-request.mjs';
-const requestWithRetry=(path,token,data)=>retryCallMutation(apiRequest,path,token,data);
+
 import {Avatar,Icon} from './ui';
 import {CallTones,callTone} from './call-tones.mjs';
 import './call-video.css';
@@ -22,11 +23,11 @@ export default forwardRef(function Calls({token,onError,onBeforeCall,accountName
  const camera=useRef(null),localVideo=useRef(null),cameraWanted=useRef(false),videoBusy=useRef(false),stage=useRef(null),drag=useRef(null);
  const recovery=useRef(null),[safetyCode,setSafetyCode]=useState('');
  const device=useRef(messageId()),current=useRef(null),peer=useRef(null),stream=useRef(null),remote=useRef(null),remoteVideo=useRef(null),remoteAudioStream=useRef(null),remoteScreenStream=useRef(null),screen=useRef(null),operation=useRef(false),generation=useRef(0),connectedAt=useRef(0),disconnect=useRef(null),started=useRef(0);
- const diagnosticsStage=useRef('start'),diagnosticsTimer=useRef(null);
- function report(event,fields={},c=current.current){if(!token)return;const payload={...fields,event,device:device.current,call_id:c?.id||undefined,platform:window.volnaDesktop?'windows':'web',client_version:clientVersion,client_time:Date.now()};const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);apiRequest('/calls/diagnostics',token,payload,controller.signal).catch(()=>{}).finally(()=>clearTimeout(timer));}
+ const diagnosticsStage=useRef('start'),diagnosticsTimer=useRef(null),diagnosticsLatest=useRef(null);
+ function report(event,fields={},c=current.current){if(!token)return;const payload={...fields,report_id:messageId(),event,device:device.current,call_id:c?.id||undefined,platform:window.volnaDesktop?'windows':'web',client_version:clientVersion,client_time:Date.now()};diagnosticsLatest.current={session:token,payload};const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);apiRequest('/calls/diagnostics',token,payload,controller.signal).catch(error=>{if(diagnosticsLatest.current?.payload===payload)diagnosticsLatest.current={session:token,payload:{...payload,report_id:messageId(),delivery_http_status:error.status,delivery_error_type:error.name||'Error'}};}).finally(()=>clearTimeout(timer));}
  function diagnosticStage(stage){diagnosticsStage.current=stage;report('client.stage',{stage});}
  function diagnosticError(error,stage=diagnosticsStage.current){report('client.error',{stage,error_type:error.name||'Error',http_status:error.status});}
- async function request(path,session,data){try{return await requestWithRetry(path,session,data);}catch(error){if(current.current||path==='/calls/start')diagnosticError(error,path.includes('/current')?'poll':diagnosticsStage.current);throw error;}}
+ async function request(path,session,data){try{const latest=diagnosticsLatest.current,header=latest?.session===session?callDiagnosticHeader(latest.payload):null;return await retryCallMutation((p,t,d)=>apiRequest(p,t,d,undefined,undefined,header?{'X-Volna-Call-Diagnostics':header}:undefined),path,session,data);}catch(error){if(current.current||path==='/calls/start')diagnosticError(error,path.includes('/current')?'poll':diagnosticsStage.current);throw error;}}
  const tones=useRef(null);if(!tones.current)tones.current=new CallTones();
  function update(c){if(c&&current.current?.id===c.id&&(c.version??0)<(current.current.version??0))return;current.current=c;setCall(c);window.dispatchEvent(new CustomEvent('volna-call-state',{detail:{accountId,active:!!c}}));tones.current.set(callTone(c,!!connectedAt.current));window.volnaDesktop?.callState({active:!!c,incoming:!!c?.incoming&&c.status==='ringing',id:c?.id,name:accountName?`${c?.peer?.name||'Собеседник'} · ${accountName}`:c?.peer?.name}).catch(()=>{});if(typeof c?.peer_sharing==='boolean'||typeof c?.peer_video==='boolean')setRemoteSharing(!!c.peer_sharing||!!c.peer_video);if(c?.video||c?.peer_video||c?.peer_sharing)setVideoMode(true);}
  function keepAlive(active,c=current.current){if(Capacitor.getPlatform()==='android')NativeCall.keepAlive({active,api:API,token,device:device.current,peer:c?.peer?.name||'Volna'}).catch(()=>{});}

@@ -1,7 +1,4 @@
-export function callCandidateSummary(sdp=''){
- const result={relay_count:0,host_count:0,srflx_count:0,prflx_count:0,udp_count:0,tcp_count:0};
- for(const line of String(sdp).split(/\r?\n/)){if(!/^a=candidate:/.test(line))continue;const p=line.trim().split(/\s+/),type=p[p.indexOf('typ')+1],protocol=p[2]?.toLowerCase();if(Object.hasOwn(result,type+'_count'))result[type+'_count']++;if(protocol==='udp'||protocol==='tcp')result[protocol+'_count']++;}return result;
-}
+export {callCandidateSummary} from '../../shared/call-ice-summary.mjs';
 export function callStats(report){
  const rows=[...report.values()],out={bytes_sent:0,bytes_received:0,packets_sent:0,packets_received:0,packets_lost:0};
  for(const r of rows){if(r.type==='outbound-rtp'&&!r.isRemote){out.bytes_sent+=Number(r.bytesSent)||0;out.packets_sent+=Number(r.packetsSent)||0;}if(r.type==='inbound-rtp'&&!r.isRemote){out.bytes_received+=Number(r.bytesReceived)||0;out.packets_received+=Number(r.packetsReceived)||0;out.packets_lost+=Number(r.packetsLost)||0;}}

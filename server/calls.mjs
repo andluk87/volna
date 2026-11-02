@@ -1,3 +1,4 @@
+import {callCandidateSummary} from '../shared/call-ice-summary.mjs';
 import {callDiagnostics} from './call-diagnostics.mjs';
 import {callPolicy} from './call-policy.mjs';
 import {randomBytes,createHmac} from 'node:crypto';
@@ -21,6 +22,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
  const interrupted=db.prepare('SELECT id,chat_id,caller,callee,status,created FROM call_history WHERE ended IS NULL').all();for(const row of interrupted)log('call.interrupted',{call_id:row.id,chat_id:row.chat_id,caller:row.caller,callee:row.callee,status:row.status,reason:'server_restart',age_ms:clock()-row.created});
  db.prepare("UPDATE call_history SET ended=?,status='interrupted',version=version+1,callee_read=CASE WHEN ringed=1 AND answered IS NULL THEN 0 ELSE 1 END WHERE ended IS NULL").run(clock());
  db.prepare('DELETE FROM call_events WHERE created<?').run(clock()-30*86400000);
+ const clientMeta=req=>{const match=String(req.headers?.['user-agent']||'').match(/^VolnaAndroid\/([0-9]+\.[0-9]+\.[0-9]+)(?:\s|$)/);return match?{platform:'android',client_version:match[1]}:{};};
  const snapshot=c=>({call_id:c.id,chat_id:c.chat,caller:c.caller,callee:c.callee,caller_device:c.callerDevice,callee_device:c.calleeDevice,status:c.status,version:c.version,restart_generation:c.restartGeneration,age_ms:clock()-c.created,media_reporting:!!c.mediaReporting,connected:!!c.connectedAt,caller_connected:!!c.callerConnected,callee_connected:!!c.calleeConnected,caller_seen_ms:clock()-c.callerSeen,callee_seen_ms:clock()-c.calleeSeen,accepted_ms:c.acceptedAt?clock()-c.acceptedAt:undefined,video:!!c.video});
  const change=(c,type)=>{c.version++;log(type,snapshot(c));db.prepare('UPDATE call_history SET status=?,version=? WHERE id=?').run(c.status,c.version,c.id);const event={event_id:randomBytes(16).toString('hex'),call_id:c.id,type,sequence:c.version,schema_version:1,sent_at:clock(),expires_at:clock()+ttl.ring,payload:{chat_id:c.chat}};db.prepare('INSERT INTO call_events(event_id,call_id,version,type,created) VALUES(?,?,?,?,?)').run(event.event_id,c.id,c.version,type,clock());onEvent([c.caller,c.callee],event);};
  const finish=(c,status,reason='unspecified')=>{if(!active.has(c.id))return;log('call.finished',{...snapshot(c),status,reason});active.delete(c.id);c.status=status;change(c,'call.ended');db.prepare('UPDATE call_history SET ended=?,callee_read=? WHERE id=?').run(clock(),c.ringed&&!c.acceptedAt&&status!=='declined'?0:1,c.id);onEnd(c.id);onChange(c.chat,[c.caller,c.callee]);};
@@ -39,7 +41,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
  const sdp=(value,type)=>{if(!value||value.type!==type||typeof value.sdp!=='string'||value.sdp.length>24000||!value.sdp.startsWith('v=0')||!value.sdp.includes('m=audio')||value.sdp.includes('m=application'))throw fail(400,'Некорректные параметры звонка');return {type,sdp:value.sdp};};
  const timer=setInterval(sweep,5000);timer.unref();
  async function handle(req,res,url,uid){
-  if(!url.pathname.startsWith('/api/calls'))return false;sweep();if(await diagnostics(req,res,url,uid))return true;
+  if(!url.pathname.startsWith('/api/calls'))return false;diagnostics.fromHeader(req,uid);sweep();if(await diagnostics(req,res,url,uid))return true;
   if(await policy.handle(req,res,url,uid))return true;
   if(url.pathname==='/api/calls/read'&&req.method==='POST'){
    const data=await body(req);auth(req);
@@ -83,7 +85,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   const detail=url.pathname.match(/^\/api\/calls\/([a-f0-9]{32})$/);
   if(detail&&req.method==='GET'){const row=db.prepare('SELECT * FROM call_history WHERE id=? AND (caller=? OR callee=?)').get(detail[1],uid,uid);if(!row)throw fail(404,'Звонок недоступен');const c=active.get(row.id);json(res,200,c?view(c,uid,device(url.searchParams.get('device'))):{id:row.id,status:row.status,version:row.version,ended:row.ended});return true;}
   if(req.method!=='POST')return false;
-  const data=await body(req);auth(req);sweep();const d=device(data.device);const pathAction=url.pathname.split('/').at(-1);log('call.request',{operation:pathAction,user_id:uid,device:d,chat_id:Number.isSafeInteger(data.chat_id)?data.chat_id:undefined,call_id:url.pathname.match(/\/calls\/([a-f0-9]{32})\//)?.[1]});
+  const data=await body(req);auth(req);sweep();const d=device(data.device);const pathAction=url.pathname.split('/').at(-1);log('call.request',{...clientMeta(req),operation:pathAction,user_id:uid,device:d,chat_id:Number.isSafeInteger(data.chat_id)?data.chat_id:undefined,call_id:url.pathname.match(/\/calls\/([a-f0-9]{32})\//)?.[1]});
   if(url.pathname==='/api/calls/start'){
    const key=data.client_id??null;if(key!==null&&(typeof key!=='string'||!/^[a-zA-Z0-9-]{16,64}$/.test(key)))throw fail(400,'Некорректный ключ запроса');
    if(key){const old=db.prepare('SELECT * FROM call_history WHERE caller=? AND idempotency_key=?').get(uid,key);if(old){if(old.chat_id!==data.chat_id||old.caller_device!==d||!!old.video!==!!data.video)throw fail(409,'Ключ звонка уже использован');const c=active.get(old.id);json(res,200,c?view(c,uid,d):{id:old.id,status:old.status,version:old.version,ended:old.ended});return true;}}
@@ -110,7 +112,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   if(op==='end'){if(!caller&&!c.calleeDevice){c.calleeDevice=d;db.prepare('UPDATE call_history SET callee_device=? WHERE id=?').run(d,c.id);}finish(c,c.connectedAt||c.status==='active'&&!c.mediaReporting?'ended':c.status==='ringing'?(caller?'cancelled':'declined'):'interrupted',caller?'caller_ended':'callee_ended');json(res,200,{ok:true});return true;}
   if(op==='ice-restart'){
    if(c.status!=='active'||!c.mediaReporting)throw fail(409,'Обновите оба клиента для восстановления сети');
-   if(data.description){if(!caller)throw fail(403,'Новый offer создаёт инициатор');const offer=sdp(data.description,'offer');if(data.restart_generation===c.restartGeneration-1&&JSON.stringify(offer)===JSON.stringify(c.offer)){json(res,200,view(c,uid,d));return true;}if(data.restart_generation!==c.restartGeneration)throw fail(409,'Устаревшее восстановление');if(!c.recovering){c.restartAt=clock();c.recovering=true;}c.restartGeneration++;c.offer=offer;c.answer=null;c.restartRequested=false;c.callerConnected=false;c.calleeConnected=false;change(c,'rtc.ice_restart');}
+   if(data.description){if(!caller)throw fail(403,'Новый offer создаёт инициатор');const offer=sdp(data.description,'offer');if(data.restart_generation===c.restartGeneration-1&&JSON.stringify(offer)===JSON.stringify(c.offer)){json(res,200,view(c,uid,d));return true;}if(data.restart_generation!==c.restartGeneration)throw fail(409,'Устаревшее восстановление');if(!c.recovering){c.restartAt=clock();c.recovering=true;}c.restartGeneration++;c.offer=offer;log('rtc.sdp_summary',{...snapshot(c),...clientMeta(req),user_id:uid,role:'caller',stage:'restart',...callCandidateSummary(offer.sdp)});c.answer=null;c.restartRequested=false;c.callerConnected=false;c.calleeConnected=false;change(c,'rtc.ice_restart');}
    else if(!c.recovering){c.restartAt=clock();c.recovering=true;c.restartRequested=true;change(c,'call.reconnecting');}
    json(res,200,view(c,uid,d));return true;
   }
@@ -136,7 +138,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
    if(data.enabled)db.prepare('UPDATE call_history SET video=1 WHERE id=?').run(c.id);change(c,'call.camera');
   }
   if(op==='offer'&&caller&&c.offer&&JSON.stringify(sdp(data.description,'offer'))===JSON.stringify(c.offer)&&c.restartGeneration===0){json(res,200,view(c,uid,d));return true;}
-  if(op==='offer'){if(!caller||c.status!=='preparing')throw fail(409,'Предложение уже отправлено');c.offer=sdp(data.description,'offer');c.status='ringing';c.ringAt=clock();c.ringed=true;c.callerSeen=clock();change(c,'call.invited');db.prepare('UPDATE call_history SET ringed=1 WHERE id=?').run(c.id);onRing(c);}
+  if(op==='offer'){if(!caller||c.status!=='preparing')throw fail(409,'Предложение уже отправлено');c.offer=sdp(data.description,'offer');log('rtc.sdp_summary',{...snapshot(c),...clientMeta(req),user_id:uid,role:'caller',stage:'offer',...callCandidateSummary(c.offer.sdp)});c.status='ringing';c.ringAt=clock();c.ringed=true;c.callerSeen=clock();change(c,'call.invited');db.prepare('UPDATE call_history SET ringed=1 WHERE id=?').run(c.id);onRing(c);}
   if(op==='accept'&&!caller&&c.calleeDevice===d){json(res,200,view(c,uid,d));return true;}
   if(op==='accept'){if(caller||c.status!=='ringing')throw fail(409,'Звонок уже принят или завершён');c.calleeDevice=d;c.calleeSeen=clock();c.acceptedAt=clock();c.status='connecting';c.calleeProtocol=data.protocol===2?2:1;c.mediaReporting=c.callerProtocol===2&&c.calleeProtocol===2;db.prepare('UPDATE call_history SET callee_device=? WHERE id=?').run(d,c.id);change(c,'call.accepted');}
   if(op==='answer'){
@@ -145,7 +147,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
    if(caller||!(c.status==='connecting'||recovering)||c.calleeDevice!==d)throw fail(409,'Сначала примите звонок');
    if((data.restart_generation??0)!==c.restartGeneration)throw fail(409,'Устаревший ответ');
    const answer=sdp(data.description,'answer');if(c.answer&&JSON.stringify(c.answer)!==JSON.stringify(answer))throw fail(409,'Ответ уже установлен');
-   c.answer=answer;c.status='active';c.calleeSeen=clock();if(!c.mediaReporting&&!c.connectedAt){c.connectedAt=clock();db.prepare('UPDATE call_history SET answered=? WHERE id=?').run(c.connectedAt,c.id);}change(c,'rtc.answer');
+   c.answer=answer;log('rtc.sdp_summary',{...snapshot(c),...clientMeta(req),user_id:uid,role:'callee',stage:'answer',...callCandidateSummary(answer.sdp)});c.status='active';c.calleeSeen=clock();if(!c.mediaReporting&&!c.connectedAt){c.connectedAt=clock();db.prepare('UPDATE call_history SET answered=? WHERE id=?').run(c.connectedAt,c.id);}change(c,'rtc.answer');
   }
   db.prepare('UPDATE call_history SET status=? WHERE id=?').run(c.status,c.id);
   json(res,200,view(c,uid,d));return true;

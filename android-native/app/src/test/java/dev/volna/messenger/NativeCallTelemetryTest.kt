@@ -8,6 +8,12 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[35],application=Application::class)
 class NativeCallTelemetryTest {
+ @Test fun fallbackIsAccountScopedBoundedAndExpires(){
+  val body=org.json.JSONObject().put("event","rtc.state").put("report_id","a".repeat(32)).put("client_time",1000).put("ice","checking")
+  val header=nativeCallDiagnosticHeader("session-one","session-one",body,2000);assertNotNull(header)
+  val decoded=String(android.util.Base64.decode(header,android.util.Base64.URL_SAFE),Charsets.UTF_8);assertEquals("checking",org.json.JSONObject(decoded).getString("ice"));assertFalse(decoded.contains("session-one"))
+  assertNull(nativeCallDiagnosticHeader("other-account","session-one",body,2000));assertNull(nativeCallDiagnosticHeader("session-one","session-one",body,122000));assertNull(nativeCallDiagnosticHeader("session-one","session-one",body.put("large","x".repeat(5000)),2000))
+ }
  @Test fun candidateSummaryNeverIncludesAddressesOrCredentials(){
   val result=nativeCandidateSummary("v=0\r\na=ice-pwd:PRIVATE_PASSWORD\r\na=candidate:1 1 udp 123 192.168.1.2 1111 typ host\r\na=candidate:2 1 udp 123 5.188.38.29 49160 typ relay\r\na=candidate:3 1 tcp 123 5.188.38.29 49161 typ relay\r\n")
   assertEquals(2,result.getInt("relay_count"));assertEquals(1,result.getInt("host_count"));assertEquals(2,result.getInt("udp_count"));assertEquals(1,result.getInt("tcp_count"));assertFalse(result.toString().contains("PRIVATE"));assertFalse(result.toString().contains("192.168"))
