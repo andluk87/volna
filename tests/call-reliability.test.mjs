@@ -84,3 +84,26 @@ test('TURN is mandatory for every account and call, including legacy saved P2P p
  const call=await f.start();assert.equal(call.relay_only,true);
  assert.equal((await f.req('/config?call_id='+call.id)).iceTransportPolicy,'relay');
 });
+test('empty initial relay candidates trigger immediate server recovery and preserve replay safety',async t=>{
+ const f=fixture(t),{a,b,action,req,start,row}=f;
+ const description=(type,candidates=true)=>({type,sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=ice-ufrag:initial\r\na=ice-pwd:private-test-password\r\n'+(candidates?'a=candidate:1 1 udp 123 203.0.113.1 49160 typ relay\r\n':'')});
+ const originalOffer=description('offer'),emptyAnswer=description('answer',false),call=await start();await action(call.id,'offer',a,{description:originalOffer});await action(call.id,'accept',b,{protocol:2});
+ const accepted=await action(call.id,'answer',b,{description:emptyAnswer});assert.equal(accepted.status,'active');assert.equal(accepted.reconnecting,true);assert.equal(accepted.restart_requested,true);assert.equal(accepted.restart_generation,0);assert.equal(row(call.id).answered,null);
+ const version=accepted.version;const replay=await action(call.id,'answer',b,{description:emptyAnswer});assert.equal(replay.version,version);assert.equal(f.events.filter(e=>e.type==='call.reconnecting').length,1);
+ const recoveredOffer=description('offer');recoveredOffer.sdp=recoveredOffer.sdp.replace('initial','fresh');const updated=await action(call.id,'ice-restart',a,{description:recoveredOffer,restart_generation:0});assert.equal(updated.restart_generation,1);
+ const late=await action(call.id,'answer',b,{description:emptyAnswer});assert.equal(late.restart_generation,1);assert.equal(late.version,updated.version);assert.equal(row(call.id).answered,null);
+ await assert.rejects(action(call.id,'answer',b,{description:description('answer',true),restart_generation:0}),{status:409});
+ await action(call.id,'answer',b,{description:description('answer'),restart_generation:1});await action(call.id,'media-state',a,{connected:true,restart_generation:1});await action(call.id,'media-state',b,{connected:true,restart_generation:1});
+ const current=await req('/current?device='+f.da,a);assert.equal(current.reconnecting,false);assert.equal(current.restart_requested,false);assert.ok(current.connected_at);assert.ok(row(call.id).answered);
+});
+test('initial recovery also covers an empty caller, but not healthy or legacy signaling',async t=>{
+ const f=fixture(t);const sdp='v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=ice-ufrag:test\r\na=ice-pwd:private-test-password\r\n',relay='a=candidate:1 1 udp 1 203.0.113.1 49160 typ relay\r\n';
+ for(const [callerHasRelay,calleeHasRelay,protocol,expected]of [[false,true,2,true],[true,true,2,false],[false,false,1,false]]){
+  const call=await f.start();await f.action(call.id,'offer',f.a,{description:{type:'offer',sdp:sdp+(callerHasRelay?relay:'')}});await f.action(call.id,'accept',f.b,{protocol});const result=await f.action(call.id,'answer',f.b,{description:{type:'answer',sdp:sdp+(calleeHasRelay?relay:'')}});assert.equal(result.reconnecting,expected);assert.equal(result.restart_requested,expected);await f.action(call.id,'end',f.a);
+ }
+});
+test('empty-relay automatic recovery remains bounded and does not loop after another empty answer',async t=>{
+ const f=fixture(t),sdp='v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=ice-ufrag:first\r\na=ice-pwd:private-test-password\r\n',call=await f.start();await f.action(call.id,'offer',f.a,{description:{type:'offer',sdp}});await f.action(call.id,'accept',f.b,{protocol:2});await f.action(call.id,'answer',f.b,{description:{type:'answer',sdp}});
+ await f.action(call.id,'ice-restart',f.a,{description:{type:'offer',sdp:sdp.replace('first','second')},restart_generation:0});await f.action(call.id,'answer',f.b,{description:{type:'answer',sdp:sdp.replace('first','second')},restart_generation:1});assert.equal(f.events.filter(e=>e.type==='call.reconnecting').length,1);
+ f.advance(21000);await f.req('/current?device='+f.da,f.a);assert.equal(f.row(call.id).status,'interrupted');assert.ok(f.row(call.id).ended);
+});

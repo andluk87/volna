@@ -1,4 +1,4 @@
-import {callCandidateSummary} from '../shared/call-ice-summary.mjs';
+import {callCandidateSummary,initialRelayGap} from '../shared/call-ice-summary.mjs';
 import {callDiagnostics} from './call-diagnostics.mjs';
 import {callPolicy} from './call-policy.mjs';
 import {randomBytes,createHmac} from 'node:crypto';
@@ -24,7 +24,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
  db.prepare('DELETE FROM call_events WHERE created<?').run(clock()-30*86400000);
  const clientMeta=req=>{const match=String(req.headers?.['user-agent']||'').match(/^VolnaAndroid\/([0-9]+\.[0-9]+\.[0-9]+)(?:\s|$)/);return match?{platform:'android',client_version:match[1]}:{};};
  const snapshot=c=>({call_id:c.id,chat_id:c.chat,caller:c.caller,callee:c.callee,caller_device:c.callerDevice,callee_device:c.calleeDevice,status:c.status,version:c.version,restart_generation:c.restartGeneration,age_ms:clock()-c.created,media_reporting:!!c.mediaReporting,connected:!!c.connectedAt,caller_connected:!!c.callerConnected,callee_connected:!!c.calleeConnected,caller_seen_ms:clock()-c.callerSeen,callee_seen_ms:clock()-c.calleeSeen,accepted_ms:c.acceptedAt?clock()-c.acceptedAt:undefined,video:!!c.video});
- const change=(c,type)=>{c.version++;log(type,snapshot(c));db.prepare('UPDATE call_history SET status=?,version=? WHERE id=?').run(c.status,c.version,c.id);const event={event_id:randomBytes(16).toString('hex'),call_id:c.id,type,sequence:c.version,schema_version:1,sent_at:clock(),expires_at:clock()+ttl.ring,payload:{chat_id:c.chat}};db.prepare('INSERT INTO call_events(event_id,call_id,version,type,created) VALUES(?,?,?,?,?)').run(event.event_id,c.id,c.version,type,clock());onEvent([c.caller,c.callee],event);};
+ const change=(c,type,details={})=>{c.version++;log(type,{...snapshot(c),...details});db.prepare('UPDATE call_history SET status=?,version=? WHERE id=?').run(c.status,c.version,c.id);const event={event_id:randomBytes(16).toString('hex'),call_id:c.id,type,sequence:c.version,schema_version:1,sent_at:clock(),expires_at:clock()+ttl.ring,payload:{chat_id:c.chat}};db.prepare('INSERT INTO call_events(event_id,call_id,version,type,created) VALUES(?,?,?,?,?)').run(event.event_id,c.id,c.version,type,clock());onEvent([c.caller,c.callee],event);};
  const finish=(c,status,reason='unspecified')=>{if(!active.has(c.id))return;log('call.finished',{...snapshot(c),status,reason});active.delete(c.id);c.status=status;change(c,'call.ended');db.prepare('UPDATE call_history SET ended=?,callee_read=? WHERE id=?').run(clock(),c.ringed&&!c.acceptedAt&&status!=='declined'?0:1,c.id);onEnd(c.id);onChange(c.chat,[c.caller,c.callee]);};
  const policy=callPolicy({db,auth,body,json,userById,onBlock:(uid,peer)=>{for(const c of active.values())if([c.caller,c.callee].includes(uid)&&[c.caller,c.callee].includes(peer))finish(c,c.connectedAt?'ended':'interrupted','call_policy_changed');}});
  const device=value=>{if(typeof value!=='string'||!/^[a-f0-9]{32}$/.test(value))throw fail(400,'Некорректное устройство');return value;};
@@ -142,12 +142,17 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   if(op==='accept'&&!caller&&c.calleeDevice===d){json(res,200,view(c,uid,d));return true;}
   if(op==='accept'){if(caller||c.status!=='ringing')throw fail(409,'Звонок уже принят или завершён');c.calleeDevice=d;c.calleeSeen=clock();c.acceptedAt=clock();c.status='connecting';c.calleeProtocol=data.protocol===2?2:1;c.mediaReporting=c.callerProtocol===2&&c.calleeProtocol===2;db.prepare('UPDATE call_history SET callee_device=? WHERE id=?').run(d,c.id);change(c,'call.accepted');}
   if(op==='answer'){
+   // An automatic restart can overtake a lost initial-answer response. A replay
+   // acknowledges the original operation without replacing the newer ICE epoch.
+   if(!caller&&c.calleeDevice===d&&c.initialRecoveryAnswer&&(data.restart_generation??0)===0&&JSON.stringify(sdp(data.description,'answer'))===JSON.stringify(c.initialRecoveryAnswer)){json(res,200,view(c,uid,d));return true;}
    if(!caller&&c.calleeDevice===d&&c.answer&&JSON.stringify(sdp(data.description,'answer'))===JSON.stringify(c.answer)&&(data.restart_generation??0)===c.restartGeneration){json(res,200,view(c,uid,d));return true;}
    const recovering=c.status==='active'&&c.recovering;
    if(caller||!(c.status==='connecting'||recovering)||c.calleeDevice!==d)throw fail(409,'Сначала примите звонок');
    if((data.restart_generation??0)!==c.restartGeneration)throw fail(409,'Устаревший ответ');
    const answer=sdp(data.description,'answer');if(c.answer&&JSON.stringify(c.answer)!==JSON.stringify(answer))throw fail(409,'Ответ уже установлен');
    c.answer=answer;log('rtc.sdp_summary',{...snapshot(c),...clientMeta(req),user_id:uid,role:'callee',stage:'answer',...callCandidateSummary(answer.sdp)});c.status='active';c.calleeSeen=clock();if(!c.mediaReporting&&!c.connectedAt){c.connectedAt=clock();db.prepare('UPDATE call_history SET answered=? WHERE id=?').run(c.connectedAt,c.id);}change(c,'rtc.answer');
+   const gap=c.mediaReporting&&c.restartGeneration===0&&!c.connectedAt&&!c.recovering?initialRelayGap(c.offer,answer):null;
+   if(gap){c.initialRecoveryAnswer=answer;c.restartAt=clock();c.recovering=true;c.restartRequested=true;change(c,'call.reconnecting',{reason:'empty_initial_relay',...gap});}
   }
   db.prepare('UPDATE call_history SET status=? WHERE id=?').run(c.status,c.id);
   json(res,200,view(c,uid,d));return true;

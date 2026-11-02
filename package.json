@@ -1,6 +1,6 @@
 {
   "name": "volna-messenger",
-  "version": "0.12.101",
+  "version": "0.12.102",
   "private": true,
   "type": "module",
   "scripts": {
