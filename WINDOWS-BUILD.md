@@ -16,7 +16,7 @@ sh scripts/build-windows.sh
 sh scripts/build-clients.sh
 ```
 
-При проблемах DNS внутри Docker на Linux VPS используйте `VOLNA_BUILD_NETWORK=host sh scripts/build-clients.sh`: режим поддерживается в сборщиках Android/Windows и при сборке сервисов. Полная инструкция выпуска: [UPDATE-0.11.41.md](UPDATE-0.11.41.md).
+При проблемах DNS внутри Docker на Linux VPS используйте `VOLNA_BUILD_NETWORK=host sh scripts/build-clients.sh`: режим поддерживается в сборщиках Android/Windows и при сборке сервисов. Полная инструкция выпуска: [UPDATE-0.11.41.md](https://github.com/andluk87/volna/blob/ed79a08ca2e61173ea0f0897c9a55f4d997eca26/UPDATE-0.11.41.md).
 
 Скрипт проверяет версию, PE-формат, SHA-512/размер и blockmap перед публикацией. При ошибке сборки или проверки обновление не продолжается. Для первоначального включения TURN поддерживается `sh scripts/build-clients.sh --enable-calls`; если звонки уже работают, этот флаг не нужен.
 

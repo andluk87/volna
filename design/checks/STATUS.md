@@ -3,7 +3,7 @@
 - `npm test`: 77 из 77 проходят.
 - `npm run test:render`: проходят SSR-проверки действующих React-компонентов, inline time, пустого аудиосообщения, опроса, папок, эмодзи и форматирования.
 - Web production build: проходит.
-- Windows renderer build: результат указан в UPDATE-0.12.4.md; установщик EXE в этой среде не собран.
+- Windows renderer build: результат указан в [историческом отчёте](https://github.com/andluk87/volna/blob/ed79a08ca2e61173ea0f0897c9a55f4d997eca26/UPDATE-0.12.4.md); установщик EXE в этой среде не собран.
 - `test:visual --list`: конфигурация содержит 40 запусков.
 - Фактический `1440x900-light`: запуск браузера завершился SIGTRAP; UI-сценарии не начались, screenshot baseline отсутствуют.
 - Оригинал Telegram Web K доступен только до авторизации; референсов переписки нет.

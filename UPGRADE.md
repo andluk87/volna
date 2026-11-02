@@ -1,8 +1,8 @@
 # Волна 0.11.41 — обновление Android, Windows и сайта
 
-Полная инструкция нового Android и сборки обоих клиентов: [UPDATE-0.11.41.md](UPDATE-0.11.41.md).
+Полная инструкция нового Android и сборки обоих клиентов: [UPDATE-0.11.41.md](https://github.com/andluk87/volna/blob/ed79a08ca2e61173ea0f0897c9a55f4d997eca26/UPDATE-0.11.41.md).
 
-В 0.11.41 добавлены панель эмодзи/стикеров/GIF, серверный каталог и расширенное оформление. Для этих функций обновите API/Web скриптом вместе с Android и установите APK 0.11.41. Первая сборка загружает Noto/Unicode/CLDR и Haze в существующие кэши; `ANDROID_BUILD_OFFLINE=0 VOLNA_BUILD_NETWORK=host sh scripts/build-android.sh` разрешает эту загрузку. Файлы `.env`, данные и весь `artifacts` сохраняйте. Список реализации: [ANDROID-EXPRESSIONS-THEMES-0.11.40.md](ANDROID-EXPRESSIONS-THEMES-0.11.40.md).
+В 0.11.41 добавлены панель эмодзи/стикеров/GIF, серверный каталог и расширенное оформление. Для этих функций обновите API/Web скриптом вместе с Android и установите APK 0.11.41. Первая сборка загружает Noto/Unicode/CLDR и Haze в существующие кэши; `ANDROID_BUILD_OFFLINE=0 VOLNA_BUILD_NETWORK=host sh scripts/build-android.sh` разрешает эту загрузку. Файлы `.env`, данные и весь `artifacts` сохраняйте. Список реализации: [ANDROID-EXPRESSIONS-THEMES-0.11.40.md](https://github.com/andluk87/volna/blob/ed79a08ca2e61173ea0f0897c9a55f4d997eca26/ANDROID-EXPRESSIONS-THEMES-0.11.40.md).
 
 1. Распакуйте архив **в папку над действующим проектом** (обычно `~/`). В архиве уже есть папка `volna-messenger`, её файлы заменят соответствующие файлы проекта. `.env` в архив не входит и останется на месте.
 2. Перед запуском проверьте в корне проекта:
