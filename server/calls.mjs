@@ -1,7 +1,8 @@
+import {callDiagnostics} from './call-diagnostics.mjs';
 import {callPolicy} from './call-policy.mjs';
 import {randomBytes,createHmac} from 'node:crypto';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
-export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SECRET||'',turnHost=process.env.TURN_HOST||'',clock=Date.now,onRing=()=>{},onEnd=()=>{},onChange=()=>{},onEvent=()=>{},ringTimeout=45000,connectTimeout=60000,reconnectTimeout=20000,turnTlsUrls=process.env.TURN_TLS_URLS||''}){
+export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SECRET||'',turnHost=process.env.TURN_HOST||'',clock=Date.now,onRing=()=>{},onEnd=()=>{},onChange=()=>{},onEvent=()=>{},ringTimeout=45000,connectTimeout=60000,reconnectTimeout=20000,log=()=>{},turnTlsUrls=process.env.TURN_TLS_URLS||''}){
  const active=new Map(), attempts=new Map();
  const ttl={ring:Math.max(30000,Math.min(60000,Number(ringTimeout)||45000)),connect:Math.max(10000,Math.min(90000,Number(connectTimeout)||60000)),reconnect:Math.max(10000,Math.min(30000,Number(reconnectTimeout)||20000))};
  db.exec(`CREATE TABLE IF NOT EXISTS call_history(id TEXT PRIMARY KEY,chat_id INTEGER NOT NULL REFERENCES chats(id),
@@ -17,13 +18,17 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
  for(const [name,type] of Object.entries({version:'INTEGER NOT NULL DEFAULT 0',idempotency_key:'TEXT',caller_device:'TEXT',callee_device:'TEXT'}))if(!db.prepare('PRAGMA table_info(call_history)').all().some(column=>column.name===name))db.exec(`ALTER TABLE call_history ADD COLUMN ${name} ${type}`);
  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS call_request_key ON call_history(caller,idempotency_key) WHERE idempotency_key IS NOT NULL;
  CREATE TABLE IF NOT EXISTS call_events(event_id TEXT PRIMARY KEY,call_id TEXT NOT NULL REFERENCES call_history(id) ON DELETE CASCADE,version INTEGER NOT NULL,type TEXT NOT NULL,created INTEGER NOT NULL);CREATE INDEX IF NOT EXISTS call_events_call ON call_events(call_id,version);`);
+ const interrupted=db.prepare('SELECT id,chat_id,caller,callee,status,created FROM call_history WHERE ended IS NULL').all();for(const row of interrupted)log('call.interrupted',{call_id:row.id,chat_id:row.chat_id,caller:row.caller,callee:row.callee,status:row.status,reason:'server_restart',age_ms:clock()-row.created});
  db.prepare("UPDATE call_history SET ended=?,status='interrupted',version=version+1,callee_read=CASE WHEN ringed=1 AND answered IS NULL THEN 0 ELSE 1 END WHERE ended IS NULL").run(clock());
  db.prepare('DELETE FROM call_events WHERE created<?').run(clock()-30*86400000);
- const change=(c,type)=>{c.version++;db.prepare('UPDATE call_history SET status=?,version=? WHERE id=?').run(c.status,c.version,c.id);const event={event_id:randomBytes(16).toString('hex'),call_id:c.id,type,sequence:c.version,schema_version:1,sent_at:clock(),expires_at:clock()+ttl.ring,payload:{chat_id:c.chat}};db.prepare('INSERT INTO call_events(event_id,call_id,version,type,created) VALUES(?,?,?,?,?)').run(event.event_id,c.id,c.version,type,clock());onEvent([c.caller,c.callee],event);};
- const finish=(c,status)=>{if(!active.has(c.id))return;active.delete(c.id);c.status=status;change(c,'call.ended');db.prepare('UPDATE call_history SET ended=?,callee_read=? WHERE id=?').run(clock(),c.ringed&&!c.acceptedAt&&status!=='declined'?0:1,c.id);onEnd(c.id);onChange(c.chat,[c.caller,c.callee]);};
- const policy=callPolicy({db,auth,body,json,userById,onBlock:(uid,peer)=>{for(const c of active.values())if([c.caller,c.callee].includes(uid)&&[c.caller,c.callee].includes(peer))finish(c,c.connectedAt?'ended':'interrupted');}});
+ const snapshot=c=>({call_id:c.id,chat_id:c.chat,caller:c.caller,callee:c.callee,caller_device:c.callerDevice,callee_device:c.calleeDevice,status:c.status,version:c.version,restart_generation:c.restartGeneration,age_ms:clock()-c.created,media_reporting:!!c.mediaReporting,connected:!!c.connectedAt,caller_connected:!!c.callerConnected,callee_connected:!!c.calleeConnected,caller_seen_ms:clock()-c.callerSeen,callee_seen_ms:clock()-c.calleeSeen,accepted_ms:c.acceptedAt?clock()-c.acceptedAt:undefined,video:!!c.video});
+ const change=(c,type)=>{c.version++;log(type,snapshot(c));db.prepare('UPDATE call_history SET status=?,version=? WHERE id=?').run(c.status,c.version,c.id);const event={event_id:randomBytes(16).toString('hex'),call_id:c.id,type,sequence:c.version,schema_version:1,sent_at:clock(),expires_at:clock()+ttl.ring,payload:{chat_id:c.chat}};db.prepare('INSERT INTO call_events(event_id,call_id,version,type,created) VALUES(?,?,?,?,?)').run(event.event_id,c.id,c.version,type,clock());onEvent([c.caller,c.callee],event);};
+ const finish=(c,status,reason='unspecified')=>{if(!active.has(c.id))return;log('call.finished',{...snapshot(c),status,reason});active.delete(c.id);c.status=status;change(c,'call.ended');db.prepare('UPDATE call_history SET ended=?,callee_read=? WHERE id=?').run(clock(),c.ringed&&!c.acceptedAt&&status!=='declined'?0:1,c.id);onEnd(c.id);onChange(c.chat,[c.caller,c.callee]);};
+ const policy=callPolicy({db,auth,body,json,userById,onBlock:(uid,peer)=>{for(const c of active.values())if([c.caller,c.callee].includes(uid)&&[c.caller,c.callee].includes(peer))finish(c,c.connectedAt?'ended':'interrupted','call_policy_changed');}});
  const device=value=>{if(typeof value!=='string'||!/^[a-f0-9]{32}$/.test(value))throw fail(400,'Некорректное устройство');return value;};
- const sweep=()=>{const now=clock();for(const [uid,item] of attempts)if(now-item.start>60000)attempts.delete(uid);for(const c of active.values())if(now-c.created>4*3600000||now-c.callerSeen>50000||c.acceptedAt&&now-c.calleeSeen>50000||c.recovering&&now-c.restartAt>ttl.reconnect||c.status==='preparing'&&now-c.created>ttl.connect||c.status==='ringing'&&now-c.ringAt>(c.callerProtocol===2?ttl.ring:60000)||c.status==='connecting'&&now-c.acceptedAt>ttl.connect||c.mediaReporting&&!c.connectedAt&&c.acceptedAt&&now-c.acceptedAt>ttl.connect)finish(c,c.status==='ringing'?'missed':'interrupted');};
+ const timeoutReason=(c,now)=>now-c.created>4*3600000?'duration_limit':now-c.callerSeen>50000?'caller_heartbeat_timeout':c.acceptedAt&&now-c.calleeSeen>50000?'callee_heartbeat_timeout':c.recovering&&now-c.restartAt>ttl.reconnect?'ice_restart_timeout':c.status==='preparing'&&now-c.created>ttl.connect?'offer_timeout':c.status==='ringing'&&now-c.ringAt>(c.callerProtocol===2?ttl.ring:60000)?'ring_timeout':c.status==='connecting'&&now-c.acceptedAt>ttl.connect?'answer_timeout':c.mediaReporting&&!c.connectedAt&&c.acceptedAt&&now-c.acceptedAt>ttl.connect?'media_connect_timeout':null;
+ const sweep=()=>{const now=clock();for(const [uid,item] of attempts)if(now-item.start>60000)attempts.delete(uid);for(const c of active.values()){const reason=timeoutReason(c,now);if(reason)finish(c,c.status==='ringing'?'missed':'interrupted',reason);}};
+ const diagnostics=callDiagnostics({db,body,json,auth,log,clock,device});
  const view=(c,uid,d)=>{
   if(!c)return null;const caller=c.caller===uid,owned=caller?c.callerDevice===d:c.calleeDevice===d;
   if(!owned&&(caller||c.calleeDevice))return {id:c.id,status:'other-device',reason:'answered_elsewhere',version:c.version};
@@ -34,7 +39,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
  const sdp=(value,type)=>{if(!value||value.type!==type||typeof value.sdp!=='string'||value.sdp.length>24000||!value.sdp.startsWith('v=0')||!value.sdp.includes('m=audio')||value.sdp.includes('m=application'))throw fail(400,'Некорректные параметры звонка');return {type,sdp:value.sdp};};
  const timer=setInterval(sweep,5000);timer.unref();
  async function handle(req,res,url,uid){
-  if(!url.pathname.startsWith('/api/calls'))return false;sweep();
+  if(!url.pathname.startsWith('/api/calls'))return false;sweep();if(await diagnostics(req,res,url,uid))return true;
   if(await policy.handle(req,res,url,uid))return true;
   if(url.pathname==='/api/calls/read'&&req.method==='POST'){
    const data=await body(req);auth(req);
@@ -66,17 +71,19 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
    if(turnHost&&turnSecret){const username=`${Math.floor(clock()/1000)+5*3600}:${uid}`;iceServers.push({urls:[`turn:${turnHost}:3478?transport=udp`,`turn:${turnHost}:3478?transport=tcp`],username,credential:createHmac('sha1',turnSecret).update(username).digest('base64')});}
    const tls=String(turnTlsUrls).split(',').map(x=>x.trim()).filter(x=>/^turns:[a-zA-Z0-9.-]+:443\?transport=tcp$/.test(x));if(tls.length&&turnSecret){const username=`${Math.floor(clock()/1000)+5*3600}:${uid}`;iceServers.push({urls:tls,username,credential:createHmac('sha1',turnSecret).update(username).digest('base64')});}
    const selected=url.searchParams.get('call_id'),c=selected?active.get(selected):null;if(selected&&(!c||![c.caller,c.callee].includes(uid)))throw fail(404,'Звонок недоступен');
+   log('call.turn_config',{call_id:c?.id,user_id:uid,turn_configured:iceServers.length>0,turn_tls:tls.length>0&&!!turnSecret});
    json(res,200,{iceServers,relayConfigured:iceServers.length>0,iceTransportPolicy:'relay',turnTlsConfigured:tls.length>0&&!!turnSecret,timeouts:ttl});return true;
   }
   if(url.pathname==='/api/calls/current'&&req.method==='GET'){
    const d=device(url.searchParams.get('device'));const c=[...active.values()].find(c=>c.caller===uid||c.callee===uid);
+   if(c&&c.callee===uid&&c.status!=='preparing'&&!c.incomingObserved){c.incomingObserved=true;log('call.incoming_observed',{...snapshot(c),user_id:uid,device:d});}
    if(c){if(c.caller===uid&&c.callerDevice===d)c.callerSeen=clock();if(c.callee===uid&&c.calleeDevice===d)c.calleeSeen=clock();}
    json(res,200,view(c,uid,d));return true;
   }
   const detail=url.pathname.match(/^\/api\/calls\/([a-f0-9]{32})$/);
   if(detail&&req.method==='GET'){const row=db.prepare('SELECT * FROM call_history WHERE id=? AND (caller=? OR callee=?)').get(detail[1],uid,uid);if(!row)throw fail(404,'Звонок недоступен');const c=active.get(row.id);json(res,200,c?view(c,uid,device(url.searchParams.get('device'))):{id:row.id,status:row.status,version:row.version,ended:row.ended});return true;}
   if(req.method!=='POST')return false;
-  const data=await body(req);auth(req);sweep();const d=device(data.device);
+  const data=await body(req);auth(req);sweep();const d=device(data.device);const pathAction=url.pathname.split('/').at(-1);log('call.request',{operation:pathAction,user_id:uid,device:d,chat_id:Number.isSafeInteger(data.chat_id)?data.chat_id:undefined,call_id:url.pathname.match(/\/calls\/([a-f0-9]{32})\//)?.[1]});
   if(url.pathname==='/api/calls/start'){
    const key=data.client_id??null;if(key!==null&&(typeof key!=='string'||!/^[a-zA-Z0-9-]{16,64}$/.test(key)))throw fail(400,'Некорректный ключ запроса');
    if(key){const old=db.prepare('SELECT * FROM call_history WHERE caller=? AND idempotency_key=?').get(uid,key);if(old){if(old.chat_id!==data.chat_id||old.caller_device!==d||!!old.video!==!!data.video)throw fail(409,'Ключ звонка уже использован');const c=active.get(old.id);json(res,200,c?view(c,uid,d):{id:old.id,status:old.status,version:old.version,ended:old.ended});return true;}}
@@ -100,7 +107,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   if(caller?c.callerDevice!==d:c.calleeDevice&&c.calleeDevice!==d)throw Object.assign(fail(409,'Звонок принят на другом устройстве'),{code:'CALL_ANSWERED_ELSEWHERE'});
   if(data.expected_version!==undefined&&(!Number.isSafeInteger(data.expected_version)||data.expected_version!==c.version))throw Object.assign(fail(409,'Состояние звонка изменилось'),{code:'STALE_CALL_VERSION'});
   if(op==='ringing'){if(caller||c.status!=='ringing')throw fail(409,'Подтверждение доступно только получателю входящего звонка');if(!c.ringReceived){c.ringReceived=true;change(c,'call.ringing');}}
-  if(op==='end'){if(!caller&&!c.calleeDevice){c.calleeDevice=d;db.prepare('UPDATE call_history SET callee_device=? WHERE id=?').run(d,c.id);}finish(c,c.connectedAt||c.status==='active'&&!c.mediaReporting?'ended':c.status==='ringing'?(caller?'cancelled':'declined'):'interrupted');json(res,200,{ok:true});return true;}
+  if(op==='end'){if(!caller&&!c.calleeDevice){c.calleeDevice=d;db.prepare('UPDATE call_history SET callee_device=? WHERE id=?').run(d,c.id);}finish(c,c.connectedAt||c.status==='active'&&!c.mediaReporting?'ended':c.status==='ringing'?(caller?'cancelled':'declined'):'interrupted',caller?'caller_ended':'callee_ended');json(res,200,{ok:true});return true;}
   if(op==='ice-restart'){
    if(c.status!=='active'||!c.mediaReporting)throw fail(409,'Обновите оба клиента для восстановления сети');
    if(data.description){if(!caller)throw fail(403,'Новый offer создаёт инициатор');const offer=sdp(data.description,'offer');if(data.restart_generation===c.restartGeneration-1&&JSON.stringify(offer)===JSON.stringify(c.offer)){json(res,200,view(c,uid,d));return true;}if(data.restart_generation!==c.restartGeneration)throw fail(409,'Устаревшее восстановление');if(!c.recovering){c.restartAt=clock();c.recovering=true;}c.restartGeneration++;c.offer=offer;c.answer=null;c.restartRequested=false;c.callerConnected=false;c.calleeConnected=false;change(c,'rtc.ice_restart');}
@@ -110,7 +117,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   if(op==='media-state'){
    if(c.status!=='active'||typeof data.connected!=='boolean')throw fail(409,'Медиаканал ещё не согласован');
    if(data.restart_generation!==c.restartGeneration)throw fail(409,'Устаревший медиаканал');
-   const field=caller?'callerConnected':'calleeConnected';c[field]=data.connected;
+   const field=caller?'callerConnected':'calleeConnected';if(c[field]!==data.connected)log('call.media_state',{...snapshot(c),user_id:uid,role:caller?'caller':'callee',connected:data.connected});c[field]=data.connected;
    if(c.callerConnected&&c.calleeConnected){if(!c.connectedAt){c.connectedAt=clock();db.prepare('UPDATE call_history SET answered=? WHERE id=?').run(c.connectedAt,c.id);change(c,'call.connected');}if(c.recovering){c.recovering=false;c.restartRequested=false;change(c,'call.reconnected');}}
    json(res,200,view(c,uid,d));return true;
   }
@@ -148,7 +155,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   if(req.method!=='POST')throw fail(405,'Метод не поддерживается');
   const data=await body(req),c=active.get(match[1]);
   if(!c||c.status!=='ringing'||clock()-(c.ringAt||c.created)>=(c.callerProtocol===2?ttl.ring:60000)||typeof data.receipt!=='string'||data.receipt!==c.ringReceipt)throw fail(404,'Подтверждение недоступно');
-  c.ringReceived=true;json(res,200,{ok:true});return true;
+  c.ringReceived=true;log('call.push_receipt',snapshot(c));json(res,200,{ok:true});return true;
  }
- return {handle,receiptHandle,receipt:id=>{const c=active.get(id);return c?.status==='ringing'?c.ringReceipt:null;},list:()=>[...active.values()].map(c=>({id:c.id,chat_id:c.chat,caller:c.caller,callee:c.callee,status:c.status,created:c.created,video:!!c.video})),terminate:id=>{const c=active.get(id);if(!c)throw fail(404,'Активный звонок не найден');finish(c,'interrupted');},close:()=>{clearInterval(timer);for(const c of active.values())finish(c,'interrupted');}};
+ return {handle,receiptHandle,receipt:id=>{const c=active.get(id);return c?.status==='ringing'?c.ringReceipt:null;},list:()=>[...active.values()].map(c=>({id:c.id,chat_id:c.chat,caller:c.caller,callee:c.callee,caller_device:c.callerDevice,callee_device:c.calleeDevice,status:c.status,created:c.created,video:!!c.video})),terminate:id=>{const c=active.get(id);if(!c)throw fail(404,'Активный звонок не найден');finish(c,'interrupted','admin_terminated');},close:()=>{clearInterval(timer);for(const c of active.values())finish(c,'interrupted','server_shutdown');}};
 }

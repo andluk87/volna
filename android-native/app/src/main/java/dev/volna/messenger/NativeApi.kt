@@ -429,6 +429,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         return call("/communities/$chatId/$action", "POST", token, data)
     }
 
+    internal fun callDiagnostic(token: String, data: JSONObject) { call("/calls/diagnostics", "POST", token, data) }
     fun callConfig(token: String, callId: String? = null): JSONObject = call("/calls/config" + (callId?.let { "?call_id=$it" } ?: ""), token = token)
     fun callScreen(token: String, device: String, id: String, sharing: Boolean) { call("/calls/$id/screen", "POST", token, JSONObject().put("device", device).put("sharing", sharing)) }
     fun callCamera(token: String, device: String, id: String, enabled: Boolean) { call("/calls/$id/camera", "POST", token, JSONObject().put("device", device).put("enabled", enabled)) }

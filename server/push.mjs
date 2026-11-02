@@ -9,7 +9,7 @@ export function validateEndpoint(value){
  const h=url.hostname;const allowed=h==='fcm.googleapis.com'||h==='updates.push.services.mozilla.com'||h.endsWith('.push.services.mozilla.com')||h==='web.push.apple.com'||h.endsWith('.push.apple.com');
  if(url.protocol!=='https:'||!allowed||url.port||url.username||url.password||url.hash)throw fail(400,'Этот push-провайдер не поддерживается');return url.href;
 }
-export function notifications({db,auth,body,json,contactDisplay=(uid,id,name)=>name,callReceipt=()=>null,sender=webpush.sendNotification.bind(webpush),subject=process.env.VAPID_SUBJECT||'https://volna.lknet.ru'}){
+export function notifications({callLog=()=>{},db,auth,body,json,contactDisplay=(uid,id,name)=>name,callReceipt=()=>null,sender=webpush.sendNotification.bind(webpush),subject=process.env.VAPID_SUBJECT||'https://volna.lknet.ru'}){
  db.exec(`BEGIN IMMEDIATE;
  CREATE TABLE IF NOT EXISTS push_keys(id INTEGER PRIMARY KEY CHECK(id=1),public_key TEXT NOT NULL,private_key TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS push_subscriptions(id TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),session_token TEXT NOT NULL REFERENCES sessions(token) ON DELETE CASCADE,subscription TEXT NOT NULL,preview INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL);
@@ -29,7 +29,7 @@ export function notifications({db,auth,body,json,contactDisplay=(uid,id,name)=>n
   for(const uid of new Set(users))for(const sub of db.prepare('SELECT p.id FROM push_subscriptions p JOIN sessions s ON s.token=p.session_token WHERE p.user_id=? AND s.expires>?').all(uid,now))add.run(sub.id,topic,chat,kind,messageId,expires,now+(kind==='message'?1500:0));
  }
  function message(chat,m){const users=db.prepare('SELECT m.user_id FROM members m LEFT JOIN chat_preferences p ON p.chat_id=m.chat_id AND p.user_id=m.user_id WHERE m.chat_id=? AND m.user_id<>? AND COALESCE(p.muted,0)=0').all(chat,m.sender_id).map(r=>r.user_id).filter(uid=>topicNotification(db,chat,uid,m.text,m.reply_to));enqueue(users,chat,'message',m.id,'chat-'+chat,Date.now()+24*3600000);}
- function call(c){enqueue([c.callee],c.chat,'call',null,'call-'+c.id,c.created+60000);}
+ function call(c){enqueue([c.callee],c.chat,'call',null,'call-'+c.id,c.created+60000);callLog('call.push_queued',{call_id:c.id,user_id:c.callee,subscription_count:db.prepare("SELECT COUNT(*) n FROM push_jobs WHERE topic=? AND kind='call'").get('call-'+c.id).n});}
  async function deliver(job){
   if(closed)return;const row=db.prepare('SELECT p.*,s.expires AS session_expires FROM push_subscriptions p JOIN sessions s ON s.token=p.session_token WHERE p.id=?').get(job.subscription_id);
   const member=row&&db.prepare('SELECT last_read FROM members WHERE chat_id=? AND user_id=?').get(job.chat_id,row.user_id);
@@ -42,10 +42,12 @@ export function notifications({db,auth,body,json,contactDisplay=(uid,id,name)=>n
    silent=m.silent===1;
    if(row.preview){const chat=db.prepare(`SELECT c.kind,CASE WHEN c.parent_id IS NOT NULL THEN (SELECT title FROM chats WHERE id=c.parent_id)||' › '||c.title ELSE c.title END AS title FROM chats c WHERE c.id=?`).get(job.chat_id);title=chat.kind==='direct'?contactDisplay(row.user_id,m.sender_id,m.name):chat.title;text=m.text?.slice(0,160)||'Новое вложение';}
   }
+  if(job.kind==='call')callLog('call.push_attempt',{call_id:job.topic.slice(5),user_id:row.user_id});
   try{
    await sender(JSON.parse(row.subscription),JSON.stringify({title,body:text,tag:row.user_id+':'+job.topic,account_id:row.user_id,chat_id:job.chat_id,expires:job.expires,kind:job.kind,silent,...(job.kind==='call'?{call_id:job.topic.slice(5),ring_receipt:callReceipt(job.topic.slice(5))}:{})}),{vapidDetails:{subject,publicKey:keys.public_key,privateKey:keys.private_key},TTL:Math.max(1,Math.floor((job.expires-Date.now())/1000)),urgency:'high',topic:hash(row.user_id+':'+job.topic).slice(0,32),timeout:10000});
+   if(job.kind==='call')callLog('call.push_delivered',{call_id:job.topic.slice(5),user_id:row.user_id});
    if(!closed)db.prepare('DELETE FROM push_jobs WHERE id=? AND message_id IS ? AND expires=?').run(job.id,job.message_id,job.expires);
-  }catch(e){if(closed)return;if(e.statusCode===404||e.statusCode===410)db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(row.id);else if(job.attempts>=5)remove(job.id);else db.prepare('UPDATE push_jobs SET attempts=attempts+1,next_at=? WHERE id=? AND message_id IS ?').run(Date.now()+Math.min(300000,5000*2**job.attempts),job.id,job.message_id);}
+  }catch(e){if(closed)return;if(job.kind==='call')callLog('call.push_failed',{call_id:job.topic.slice(5),user_id:row.user_id,http_status:e.statusCode,reason:job.attempts>=5?'retry_exhausted':'delivery_failed'});if(e.statusCode===404||e.statusCode===410)db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(row.id);else if(job.attempts>=5)remove(job.id);else db.prepare('UPDATE push_jobs SET attempts=attempts+1,next_at=? WHERE id=? AND message_id IS ?').run(Date.now()+Math.min(300000,5000*2**job.attempts),job.id,job.message_id);}
  }
  function drain(){if(closed)return Promise.resolve();if(inflight)return inflight;inflight=(async()=>{db.prepare('DELETE FROM push_jobs WHERE expires<=?').run(Date.now());const jobs=db.prepare('SELECT * FROM push_jobs WHERE next_at<=? ORDER BY next_at LIMIT 16').all(Date.now());for(let i=0;i<jobs.length&&!closed;i+=4)await Promise.all(jobs.slice(i,i+4).map(deliver));})().finally(()=>{inflight=null;});return inflight;}
  const timer=setInterval(()=>drain().catch(()=>console.error('Push queue processing failed')),1000);timer.unref();

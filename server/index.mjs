@@ -1,3 +1,4 @@
+import {createCallLog} from './call-log.mjs';
 import {createPresence} from './presence.mjs';
 import {loginCodeMessages} from './login-code-messages.mjs';
 import {profilePosts} from './profile-posts.mjs';
@@ -26,7 +27,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => Object.assign(new Error(message), { status });
-export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, smsOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', newsEnabled = database!==':memory:'&&process.env.VOLNA_NEWS_CHANNEL!=='0', uploads = process.env.UPLOAD_PATH || join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads'), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
+export function createApp({ pushSender, callLogOptions={}, phoneAuthOptions={}, adminOptions={}, smsOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', newsEnabled = database!==':memory:'&&process.env.VOLNA_NEWS_CHANNEL!=='0', uploads = process.env.UPLOAD_PATH || join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads'), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
   if (database !== ':memory:') mkdirSync(dirname(database), { recursive: true });
   const db = new DatabaseSync(database);
   const legacy = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
@@ -112,9 +113,11 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
   const handleCommunities = communities({db,member,broadcast,publish,json,body,userById,hydrate:handleMessaging.hydrate,online:id=>presenceService?.online(id)||false});
   loginCodeService=loginCodeMessages({db,broadcast,hydrate:row=>handleMessaging.hydrate(row,{serviceContent:true}),clock:phoneAuthOptions.clock||Date.now});
   const handleTopics=topics({db,body,json,member,broadcast,publish});
+  const callLog=createCallLog({directory:database===':memory:'?null:join(dirname(database),'logs'),...callLogOptions});callLog.write('server.started',{reason:'call_logging_enabled'});
   let callService;
-  pushService = notifications({db,auth,body,json,sender:pushSender,callReceipt:id=>callService?.receipt(id),contactDisplay:(uid,id,name)=>contactService?.display(uid,id,name)||name});
-  callService = calls({db,auth,body,json,userById,onRing:pushService.call,onEnd:pushService.endCall,onEvent:(users,event)=>publish(users,event),onChange:(chat,users)=>publish(users,{type:'chats',chat_id:chat,call_history:true})});
+  pushService = notifications({callLog:callLog.write,db,auth,body,json,sender:pushSender,callReceipt:id=>callService?.receipt(id),contactDisplay:(uid,id,name)=>contactService?.display(uid,id,name)||name});
+
+  callService = calls({log:callLog.write,db,auth,body,json,userById,onRing:pushService.call,onEnd:pushService.endCall,onEvent:(users,event)=>publish(users,event),onChange:(chat,users)=>publish(users,{type:'chats',chat_id:chat,call_history:true})});
   mobileService=mobile({db,auth,body,json,userById,online:id=>presenceService?.online(id)||false,
     disconnect:(uid,token)=>{presenceService?.removeSession(token);for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();}});
   contactService=contacts({db,body,json,publish,userById});
@@ -231,10 +234,10 @@ export function createApp({ pushSender, phoneAuthOptions={}, adminOptions={}, sm
         }
       }
       throw fail(404, 'Не найдено');
-    } catch(e) { if(req.aborted&&e.code==='ECONNRESET'&&req.method==='POST'&&req.url?.split('?')[0]==='/api/uploads')return; if (!e.status) console.error(e); if (!res.headersSent) json(res, e.status || 500, { error: e.status ? e.message : 'Ошибка сервера', ...(e.status&&e.code?{code:e.code}:{}),...(e.status&&e.retry_at?{retry_at:e.retry_at,server_time:Date.now()}:{}),...(e.status&&e.suggestions?{suggestions:e.suggestions}:{}) }); else res.end(); }
+    } catch(e) {const callPath=req.url?.split('?')[0]||'';if(callPath.startsWith('/api/calls/')&&!callPath.endsWith('/diagnostics'))callLog.write('call.request_failed',{call_id:callPath.match(/^\/api\/calls\/([a-f0-9]{32})(?:\/|$)/)?.[1],operation:callPath.split('/').at(-1)?.replace(/[^a-z-]/g,'').slice(0,32),user_id:res.volnaViewer,http_status:e.status||500,reason:['STALE_CALL_VERSION','CALL_ANSWERED_ELSEWHERE'].includes(e.code)?e.code:e.status===409?'state_conflict':e.status===404?'call_or_peer_unavailable':e.status===403?'forbidden':e.status===401?'unauthorized':e.status===400?'invalid_request':'request_failed'}); if(req.aborted&&e.code==='ECONNRESET'&&req.method==='POST'&&req.url?.split('?')[0]==='/api/uploads')return; if (!e.status) console.error(e); if (!res.headersSent) json(res, e.status || 500, { error: e.status ? e.message : 'Ошибка сервера', ...(e.status&&e.code?{code:e.code}:{}),...(e.status&&e.retry_at?{retry_at:e.retry_at,server_time:Date.now()}:{}),...(e.status&&e.suggestions?{suggestions:e.suggestions}:{}) }); else res.end(); }
   });
   server.requestTimeout = 120000; server.headersTimeout = 15000;
-  return { server, adminServer:adminService.server, db, push:pushService, close: async () => { await adminService.close();callService.close();contactService.close();presenceService.close();handleMessaging.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close(); } };
+  return { server, adminServer:adminService.server, db, push:pushService, close: async () => { await adminService.close();callService.close();contactService.close();presenceService.close();handleMessaging.close();clearInterval(cleanup);await pushService.close(); for (const list of streams.values()) for (const res of list) res.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); db.close();callLog.write('server.stopped');callLog.close(); } };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const app = createApp(); app.server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => console.log('Volna API listening on :'+(process.env.PORT || 3000)));

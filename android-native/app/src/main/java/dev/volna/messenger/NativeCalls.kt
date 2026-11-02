@@ -45,7 +45,7 @@ data class NativeAudioRoute(val id: Int, val label: String)
 /** Owns media independently of Compose and the activity. The foreground service keeps it alive. */
 object NativeCalls {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, problem ->
-        NativeCallDiagnostics.failure(problem)
+        diagnosticFailure(problem);NativeCallDiagnostics.failure(problem)
         end("Ошибка звонка: ${problem.message ?: problem.javaClass.simpleName}")
     })
     private val mutableState = MutableStateFlow(NativeCallState())
@@ -56,6 +56,11 @@ object NativeCalls {
     internal fun accountId():Long = NativeCredentials.accountId(token)
     internal fun configuredFor(session: String) = token.isNotBlank() && NativeCredentials.resolve(token) == NativeCredentials.resolve(session)
     private var device = ""
+    private var diagnosticStage = "start"
+    private var diagnosticJob: Job? = null
+    private fun diagnostic(event:String,fields:JSONObject=JSONObject()) { NativeCallTelemetry.send(token,device,state.value.call?.id,event,fields) }
+    private fun diagnosticStep(stage:String) { diagnosticStage=stage;diagnostic("client.stage",JSONObject().put("stage",stage)) }
+    private fun diagnosticFailure(problem:Throwable) { diagnostic("client.error",JSONObject().put("stage",diagnosticStage).put("error_type",if(problem is LinkageError)"LinkageError" else problem.javaClass.simpleName).apply { if(problem is NativeApiException)put("http_status",problem.status) }) }
     private var generation = 0
     private val pollWake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
     fun wake(session: String) { if (configuredFor(session)) pollWake.trySend(Unit) }
@@ -166,7 +171,7 @@ object NativeCalls {
             try { setDescription(pc, current.answer, local = false) }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (problem: Exception) {
-                if (version == generation) { NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось согласовать звонок") }
+                if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось согласовать звонок") }
                 return
             }
             if (version != generation || peer !== pc) return
@@ -189,7 +194,7 @@ object NativeCalls {
         operation = scope.launch {
             var created: VolnaCall? = null
             try {
-                NativeCallDiagnostics.step("Создание звонка на сервере")
+                diagnosticStep("start");NativeCallDiagnostics.step("Создание звонка на сервере")
                 withContext(Dispatchers.IO) { created = api.startCall(session, device, chat.id, video) }
                 checkVersion(version)
                 val call = created ?: error("Сервер не создал звонок")
@@ -199,7 +204,7 @@ object NativeCalls {
                 setDescription(pc, description, local = true)
                 gather(pc)
                 checkVersion(version)
-                NativeCallDiagnostics.step("Передача предложения звонка на сервер")
+                diagnosticStep("offer");NativeCallDiagnostics.step("Передача предложения звонка на сервер")
                 val ready = withContext(Dispatchers.IO) { api.callAction(session, device, call.id, "offer", localDescription(pc)) }
                 checkVersion(version)
                 mutableState.update { it.copy(call = ready, phase = "Устанавливаем соединение…", busy = false) }
@@ -207,8 +212,8 @@ object NativeCalls {
             } catch (cancelled: CancellationException) {
                 created?.let { call -> scope.launch(Dispatchers.IO) { runCatching { api.callAction(session, device, call.id, "end") } } }
                 throw cancelled
-            } catch (problem: Exception) { if (version == generation) { NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось начать звонок") } }
-            catch (problem: LinkageError) { if (version == generation) { NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.") } }
+            } catch (problem: Exception) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось начать звонок") } }
+            catch (problem: LinkageError) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.") } }
             finally { if (version == generation) mutableState.update { it.copy(busy = false) } }
         }
     }
@@ -233,15 +238,15 @@ object NativeCalls {
                 setDescription(pc, createDescription(pc, offer = false), local = true)
                 gather(pc)
                 checkVersion(version)
-                NativeCallDiagnostics.step("Передача ответа звонка на сервер")
+                diagnosticStep("answer");NativeCallDiagnostics.step("Передача ответа звонка на сервер")
                 val ready = withContext(Dispatchers.IO) { api.callAction(token, device, call.id, "answer", localDescription(pc)) }
                 checkVersion(version)
                 mutableState.update { it.copy(call = ready, phase = if (it.connected) "Разговор" else "Соединяем…", busy = false) }
                 updateScreenReady()
                 if (!state.value.connected) NativeCallDiagnostics.step("Ожидание соединения ICE")
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (problem: Exception) { if (version == generation) { if(problem is NativeApiException && problem.errorCode == "CALL_ANSWERED_ELSEWHERE") end(notifyServer = false) else { NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось принять звонок") } } }
-            catch (problem: LinkageError) { if (version == generation) { NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.") } }
+            catch (problem: Exception) { if (version == generation) { if(problem is NativeApiException && problem.errorCode == "CALL_ANSWERED_ELSEWHERE") end(notifyServer = false) else { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось принять звонок") } } }
+            catch (problem: LinkageError) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.") } }
             finally { if (version == generation) mutableState.update { it.copy(busy = false) } }
         }
     }
@@ -254,14 +259,14 @@ object NativeCalls {
         check(app.checkSelfPermission(Manifest.permission.ACCESS_NETWORK_STATE) == PackageManager.PERMISSION_GRANTED) {
             "В установленной сборке отсутствует разрешение ACCESS_NETWORK_STATE. Обновите приложение VLN."
         }
-        NativeCallDiagnostics.step("Получение настроек ICE/TURN")
+        diagnosticStep("turn_config");NativeCallDiagnostics.step("Получение настроек ICE/TURN")
         val config = withContext(Dispatchers.IO) { api.callConfig(token, state.value.call?.id) }
         check(config.optBoolean("relayConfigured") && (config.optJSONArray("iceServers")?.length() ?: 0) > 0) { "Звонки доступны только через TURN. Сервер TURN не настроен." }
         checkVersion(version)
-        NativeCallDiagnostics.step("Запуск сервиса микрофона")
+        diagnosticStep("microphone");NativeCallDiagnostics.step("Запуск сервиса микрофона")
         CallService.ensureReady(app)
         checkVersion(version)
-        NativeCallDiagnostics.step("Получение аудиофокуса")
+        diagnosticStep("audio_device");NativeCallDiagnostics.step("Получение аудиофокуса")
         beginAudio(app)
         NativeCallDiagnostics.step("Загрузка WebRTC")
         if (!initialized) {
@@ -300,7 +305,7 @@ object NativeCalls {
             iceServers += PeerConnection.IceServer.builder(addresses).setUsername(server.optString("username")).setPassword(server.optString("credential")).createIceServer()
         }
         val rtc = PeerConnection.RTCConfiguration(iceServers).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN; iceTransportsType=PeerConnection.IceTransportsType.RELAY }
-        NativeCallDiagnostics.step("Создание соединения WebRTC")
+        diagnosticStep("peer_create");NativeCallDiagnostics.step("Создание соединения WebRTC")
         val pc = mediaFactory.createPeerConnection(rtc, observer(version)) ?: error("Не удалось создать WebRTC")
         peer = pc
         NativeCallDiagnostics.step("Создание дорожки микрофона")
@@ -319,22 +324,25 @@ object NativeCalls {
         if (!incoming) checkNotNull(pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV, listOf("volna")))) { "Не удалось подготовить видеоканал" }
         attemptAt = SystemClock.elapsedRealtime()
         mutableState.update { it.copy(relay = config.optBoolean("relayConfigured")) }
+        diagnosticJob?.cancel()
+        diagnosticJob=scope.launch { while(version==generation&&peer===pc) { runCatching { pc.getStats { report -> if(version==generation&&peer===pc)diagnostic("rtc.stats",nativeCallStats(report.statsMap.values.map { NativeCallStat(it.id,it.type,it.members) })) } };delay(15_000) } }
         return pc
     }
 
     private fun mediaFailure(version: Int, label: String, detail: String) {
         scope.launch {
             if (version != generation) return@launch
-            NativeCallDiagnostics.failure(IllegalStateException(detail))
+            diagnosticStep("audio_device");diagnosticFailure(IllegalStateException(label));NativeCallDiagnostics.failure(IllegalStateException(detail))
             end("$label. Проверьте разрешения и закройте другие приложения, использующие звук.")
         }
     }
 
     private fun observer(version: Int) = object : PeerConnection.Observer {
-        override fun onSignalingChange(value: PeerConnection.SignalingState?) { }
-        override fun onIceConnectionChange(value: PeerConnection.IceConnectionState?) { }
+        override fun onSignalingChange(value: PeerConnection.SignalingState?) { if(version==generation)diagnostic("rtc.state",JSONObject().put("signaling",value?.name?.lowercase()?.replace('_','-'))) }
+        override fun onIceConnectionChange(value: PeerConnection.IceConnectionState?) { if(version==generation)diagnostic("rtc.state",JSONObject().put("ice",value?.name?.lowercase())) }
         override fun onIceConnectionReceivingChange(value: Boolean) { }
-        override fun onIceGatheringChange(value: PeerConnection.IceGatheringState?) { }
+        override fun onIceGatheringChange(value: PeerConnection.IceGatheringState?) { if(version==generation)diagnostic("rtc.state",JSONObject().put("gathering",value?.name?.lowercase())) }
+        override fun onIceCandidateError(event: IceCandidateErrorEvent?) { if(version==generation&&event!=null)diagnostic("rtc.ice_error",JSONObject().put("ice_error",event.errorCode)) }
         override fun onIceCandidate(value: IceCandidate?) { }
         override fun onIceCandidatesRemoved(values: Array<out IceCandidate>?) { }
         override fun onAddStream(value: MediaStream?) { }
@@ -346,6 +354,7 @@ object NativeCalls {
         override fun onConnectionChange(value: PeerConnection.PeerConnectionState?) {
             scope.launch {
                 if (version != generation) return@launch
+                diagnostic("rtc.state",JSONObject().put("connection",value?.name?.lowercase()))
                 when (value) {
                     PeerConnection.PeerConnectionState.CONNECTED -> {
                         disconnectedAt = 0L
@@ -579,6 +588,7 @@ object NativeCalls {
             .setAcceptsDelayedFocusGain(true)
             .setOnAudioFocusChangeListener { value -> scope.launch {
                 if (version != generation) return@launch
+                diagnostic("rtc.state",JSONObject().put("stage","audio_device").put("audio_focus",when(value){AudioManager.AUDIOFOCUS_GAIN->"gained";AudioManager.AUDIOFOCUS_LOSS->"lost";else->"transient"}))
                 when (value) {
                     AudioManager.AUDIOFOCUS_LOSS -> { granted.complete(false); end("Звук занят другим звонком") }
                     AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> { audioTrack?.setEnabled(false); mutableState.update { it.copy(phase = "Звук временно занят") } }
@@ -599,6 +609,7 @@ object NativeCalls {
 
     fun end(message: String = "", notifyServer: Boolean = true) {
         val call = state.value.call; val session = token
+        diagnostic("client.ended",JSONObject().put("stage",diagnosticStage).put("connected",state.value.connected));diagnosticJob?.cancel();diagnosticJob=null
         generation++
         operation?.cancel(); operation = null
         recoveryJob?.cancel(); recoveryJob = null; pendingRestart = null; pendingAnswer = null; appliedRestart = 0; reportedMedia = -1
@@ -683,8 +694,9 @@ object NativeCalls {
     }
     private fun checkVersion(version: Int) { if (version != generation) throw CancellationException("Звонок отменён") }
     private suspend fun gather(pc: PeerConnection) {
-        NativeCallDiagnostics.step("Сбор сетевых кандидатов ICE")
+        diagnosticStep("gather");NativeCallDiagnostics.step("Сбор сетевых кандидатов ICE")
         withTimeoutOrNull(10_000) { while (peer === pc && pc.iceGatheringState() != PeerConnection.IceGatheringState.COMPLETE) delay(80) }
+        if(peer===pc)diagnostic("rtc.gathered",nativeCandidateSummary(pc.localDescription?.description.orEmpty()))
     }
     private fun localDescription(pc: PeerConnection): JSONObject = pc.localDescription.let { JSONObject().put("type", it.type.canonicalForm()).put("sdp", it.description) }
     private suspend fun createDescription(pc: PeerConnection, offer: Boolean, restart: Boolean = false): JSONObject {
