@@ -1,3 +1,4 @@
+import {callEndReason} from '../shared/call-debug.mjs';
 import {callCandidateSummary,initialRelayGap} from '../shared/call-ice-summary.mjs';
 import {callDiagnostics} from './call-diagnostics.mjs';
 import {callPolicy} from './call-policy.mjs';
@@ -109,7 +110,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   if(caller?c.callerDevice!==d:c.calleeDevice&&c.calleeDevice!==d)throw Object.assign(fail(409,'Звонок принят на другом устройстве'),{code:'CALL_ANSWERED_ELSEWHERE'});
   if(data.expected_version!==undefined&&(!Number.isSafeInteger(data.expected_version)||data.expected_version!==c.version))throw Object.assign(fail(409,'Состояние звонка изменилось'),{code:'STALE_CALL_VERSION'});
   if(op==='ringing'){if(caller||c.status!=='ringing')throw fail(409,'Подтверждение доступно только получателю входящего звонка');if(!c.ringReceived){c.ringReceived=true;change(c,'call.ringing');}}
-  if(op==='end'){if(!caller&&!c.calleeDevice){c.calleeDevice=d;db.prepare('UPDATE call_history SET callee_device=? WHERE id=?').run(d,c.id);}finish(c,c.connectedAt||c.status==='active'&&!c.mediaReporting?'ended':c.status==='ringing'?(caller?'cancelled':'declined'):'interrupted',caller?'caller_ended':'callee_ended');json(res,200,{ok:true});return true;}
+  if(op==='end'){log('call.end_requested',{...snapshot(c),user_id:uid,role:caller?'caller':'callee',device:d,end_reason:callEndReason(data.end_reason)});if(!caller&&!c.calleeDevice){c.calleeDevice=d;db.prepare('UPDATE call_history SET callee_device=? WHERE id=?').run(d,c.id);}finish(c,c.connectedAt||c.status==='active'&&!c.mediaReporting?'ended':c.status==='ringing'?(caller?'cancelled':'declined'):'interrupted',caller?'caller_ended':'callee_ended');json(res,200,{ok:true});return true;}
   if(op==='ice-restart'){
    if(c.status!=='active'||!c.mediaReporting)throw fail(409,'Обновите оба клиента для восстановления сети');
    if(data.description){if(!caller)throw fail(403,'Новый offer создаёт инициатор');const offer=sdp(data.description,'offer');if(data.restart_generation===c.restartGeneration-1&&JSON.stringify(offer)===JSON.stringify(c.offer)){json(res,200,view(c,uid,d));return true;}if(data.restart_generation!==c.restartGeneration)throw fail(409,'Устаревшее восстановление');if(!c.recovering){c.restartAt=clock();c.recovering=true;}c.restartGeneration++;c.offer=offer;log('rtc.sdp_summary',{...snapshot(c),...clientMeta(req),user_id:uid,role:'caller',stage:'restart',...callCandidateSummary(offer.sdp)});c.answer=null;c.restartRequested=false;c.callerConnected=false;c.calleeConnected=false;change(c,'rtc.ice_restart');}

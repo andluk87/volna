@@ -8,6 +8,8 @@ import http from 'node:http';
 import {folders} from './folders.mjs';
 import {contacts} from './contacts.mjs';
 import {initAdminSchema,readAdminSettings} from './admin-config.mjs';
+import {callDebugBot} from './call-debug-bot.mjs';
+import {callLogAccess} from './call-log-access.mjs';
 import {createAdminServer} from './admin.mjs';
 import { messaging } from './messaging.mjs';
 import { notifications } from './push.mjs';
@@ -27,7 +29,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => Object.assign(new Error(message), { status });
-export function createApp({ pushSender, callLogOptions={}, phoneAuthOptions={}, adminOptions={}, smsOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', newsEnabled = database!==':memory:'&&process.env.VOLNA_NEWS_CHANNEL!=='0', uploads = process.env.UPLOAD_PATH || join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads'), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
+export function createApp({ pushSender, callLogOptions={}, callDebugOptions={}, phoneAuthOptions={}, adminOptions={}, smsOptions={}, transcriber=createTranscriber(), database = process.env.DB_PATH || './data/volna.db', newsEnabled = database!==':memory:'&&process.env.VOLNA_NEWS_CHANNEL!=='0', uploads = process.env.UPLOAD_PATH || join(dirname(database === ':memory:' ? './data/volna.db' : database), 'uploads'), origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080,http://localhost:5173,https://localhost,app://volna').split(',') } = {}) {
   if (database !== ':memory:') mkdirSync(dirname(database), { recursive: true });
   const db = new DatabaseSync(database);
   const legacy = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
@@ -53,6 +55,7 @@ export function createApp({ pushSender, callLogOptions={}, phoneAuthOptions={}, 
   let presenceService;
   let newsService;
   let loginCodeService;
+  let diagnosticBot;
   const userById = (id,own=false) => {
     const row=db.prepare('SELECT id,username,name,bio,avatar_id,avatar_hidden,phone,last_seen,first_name,last_name,profile_setup_required FROM users WHERE id=?').get(id);
     if(!row)return;
@@ -107,13 +110,15 @@ export function createApp({ pushSender, callLogOptions={}, phoneAuthOptions={}, 
   usernameService=usernames({db,body,json,userById,publish,uploads});
   const handlePosts=profilePosts({db,auth,body,json,userById,publish});
   let expressionService;
-  const handleMessaging = messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions:()=>expressionService,serviceMessages:()=>loginCodeService,isOnline:id=>presenceService.online(id),canSeePresence:(uid,id)=>contactService?.canSeePresence(uid,id)||false,publish});
+  const handleMessaging = messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions:()=>expressionService,serviceMessages:()=>loginCodeService,onMessage:row=>diagnosticBot?.message(row),isOnline:id=>presenceService.online(id),canSeePresence:(uid,id)=>contactService?.canSeePresence(uid,id)||false,publish});
   expressionService=expressions({db,uploads,body,json,member,publish});
   handleMessaging.cleanupUnused();
   const handleCommunities = communities({db,member,broadcast,publish,json,body,userById,hydrate:handleMessaging.hydrate,online:id=>presenceService?.online(id)||false});
   loginCodeService=loginCodeMessages({db,broadcast,hydrate:row=>handleMessaging.hydrate(row,{serviceContent:true}),clock:phoneAuthOptions.clock||Date.now});
   const handleTopics=topics({db,body,json,member,broadcast,publish});
   const callLog=createCallLog({directory:database===':memory:'?null:join(dirname(database),'logs'),...callLogOptions});callLog.write('server.started',{reason:'call_logging_enabled'});
+  const callDebug=callLogAccess({db,file:callLog.file,clock:adminOptions.clock||Date.now});
+  diagnosticBot=callDebugBot({db,access:callDebug,broadcast,hydrate:handleMessaging.hydrate,adminPhone:adminOptions.adminPhone,publicOrigin:callDebugOptions.publicOrigin??(process.env.CHAT_DOMAIN?`https://${process.env.CHAT_DOMAIN}`:undefined),clock:adminOptions.clock||Date.now});
   let callService;
   pushService = notifications({callLog:callLog.write,db,auth,body,json,sender:pushSender,callReceipt:id=>callService?.receipt(id),contactDisplay:(uid,id,name)=>contactService?.display(uid,id,name)||name});
 
@@ -121,12 +126,12 @@ export function createApp({ pushSender, callLogOptions={}, phoneAuthOptions={}, 
   mobileService=mobile({db,auth,body,json,userById,online:id=>presenceService?.online(id)||false,
     disconnect:(uid,token)=>{presenceService?.removeSession(token);for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();}});
   contactService=contacts({db,body,json,publish,userById});
-  const adminService=createAdminServer({db,smsOptions,uploads,json,body,publish,broadcast,hydrate:handleMessaging.hydrate,userById,disconnectUser:uid=>{for(const stream of streams.get(uid)||[])stream.end();},cleanupFiles:handleMessaging.cleanupUnused,callService,...adminOptions});
+  const adminService=createAdminServer({callDebug,db,smsOptions,uploads,json,body,publish,broadcast,hydrate:handleMessaging.hydrate,userById,disconnectUser:uid=>{for(const stream of streams.get(uid)||[])stream.end();},cleanupFiles:handleMessaging.cleanupUnused,callService,...adminOptions});
   if(newsEnabled)newsService=createNewsChannel({db,uploads});
   const cleanup = setInterval(() => {
     loginCodeService.refresh();
     const now = Date.now(); for (const [key, entry] of limits) if (entry.until < now) limits.delete(key);
-    phoneService.cleanup(); adminService.cleanup();
+    phoneService.cleanup(); adminService.cleanup();callDebug.cleanup();
     for (const list of streams.values()) for (const res of list) if (res.sessionExpires < now) res.end();
   }, 30000); cleanup.unref();
   const server = http.createServer(async (req, res) => {
@@ -139,6 +144,7 @@ export function createApp({ pushSender, callLogOptions={}, phoneAuthOptions={}, 
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
       if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
       const url = new URL(req.url, 'http://local'); const path = url.pathname; const method = req.method;
+      if(path.startsWith('/api/call-debug/')){limit('call-debug:'+req.socket.remoteAddress,60);if(callDebug.publicHandle(req,res,url))return;}
       if (path === '/api/health' && method === 'GET') return json(res, 200, { ok: true });
       if (['/api/register','/api/login','/api/password'].includes(path) || path.startsWith('/api/auth/telegram/')) throw fail(404,'Этот способ входа удалён');
       if (path.startsWith('/api/auth/') || path.startsWith('/api/v1/auth/otp/')) { if(await phoneService.handle(req,res,url))return; }
@@ -168,6 +174,7 @@ export function createApp({ pushSender, callLogOptions={}, phoneAuthOptions={}, 
         res.on('close', () => { clearInterval(heartbeat); list.delete(res); if (!list.size) {streams.delete(uid);} }); return;
       }
       limit(`user:${uid}`, 240);
+      if(path==='/api/chats'&&method==='GET')diagnosticBot.ensure(uid);
       if(await handleAppearance(req,res,url,uid))return;
       if (await contactService.handle(req,res,url,uid)) return;
       if (await mobileService.handle(req,res,url,session)) return;

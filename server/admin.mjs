@@ -20,14 +20,14 @@ const text=(value,max=500)=>{if(typeof value!=='string'||!value.trim()||value.le
 const numeric=value=>{const n=Number(value);if(!Number.isSafeInteger(n)||n<1)throw fail(400,'Некорректный идентификатор');return n;};
 const boolean=value=>{if(typeof value!=='boolean')throw fail(400,'Ожидается переключатель');return value;};
 const opaque=(value,length=32)=>{if(typeof value!=='string'||!new RegExp(`^[a-f0-9]{${length}}$`).test(value))throw fail(400,'Некорректный идентификатор');return value;};
-export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrate,userById,disconnectUser,cleanupFiles,callService,
+export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrate,userById,disconnectUser,cleanupFiles,callService,callDebug,
  adminPhone=process.env.ADMIN_PHONE||ADMIN_PHONE,origin=process.env.ADMIN_PUBLIC_URL||(process.env.CHAT_DOMAIN?`https://${process.env.CHAT_DOMAIN}:8998`:'http://localhost:8998'),
  sender,smsReady,smsOptions={},clock=Date.now,
  codeGenerator=()=>String(randomInt(0,1000000)).padStart(6,'0'),trustProxy=process.env.AUTH_TRUST_PROXY==='1',cookieSecure=new URL(origin).protocol==='https:',
  serviceStatus=async()=>{const url=new URL(process.env.WHISPER_URL||'http://transcription:8000/transcribe');url.pathname='/health';const r=await fetch(url,{signal:AbortSignal.timeout(2500)});if(!r.ok)throw Error();const v=await r.json();return {available:true,ready:!!v.ready,state:String(v.state||'unknown').slice(0,30),model:String(v.active_model||v.model||'').slice(0,40)};}}){
  initAdminSchema(db);const sms=createSmsRouter({db,...smsOptions});sender??=sms.send;const isSmsReady=()=>typeof smsReady==='function'?smsReady():smsReady??sms.ready();adminPhone=normalizePhone(adminPhone);origin=new URL(origin).origin;
  const priorPhone=db.prepare("SELECT value FROM admin_meta WHERE key='admin-phone'").get()?.value;
- if(priorPhone&&priorPhone!==adminPhone){db.exec('DELETE FROM admin_sessions; DELETE FROM admin_sms;');}
+ if(priorPhone&&priorPhone!==adminPhone){db.exec('DELETE FROM admin_sessions; DELETE FROM admin_sms;');callDebug?.revoke();}
  db.prepare("INSERT INTO admin_meta VALUES('admin-phone',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(adminPhone);
  db.prepare('INSERT OR IGNORE INTO admin_meta VALUES(?,?)').run('hmac',secret());
  const key=db.prepare("SELECT value FROM admin_meta WHERE key='hmac'").get().value;
@@ -87,7 +87,7 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
     if(!asset||!['GET','HEAD'].includes(method))throw fail(404,'Страница не найдена');const bytes=readFileSync(join(staticRoot,asset[0]));res.writeHead(200,{'Content-Type':asset[1]});return res.end(method==='HEAD'?undefined:bytes);
    }
    if(method!=='GET'&&!String(req.headers['content-type']||'').toLowerCase().startsWith('application/json'))throw fail(415,'Ожидается JSON');
-   if(path==='/admin/api/config'&&method==='GET')return json(res,200,{version,sms_enabled:isSmsReady(),phone_hint:adminPhone.slice(0,2)+' ••• ••• '+adminPhone.slice(-4),origin});
+   if(path==='/admin/api/config'&&method==='GET')return json(res,200,{version,sms_enabled:isSmsReady(),app_origin:process.env.CHAT_DOMAIN?`https://${process.env.CHAT_DOMAIN}`:new URL(origin).origin.replace(/:8998$/, ''),phone_hint:adminPhone.slice(0,2)+' ••• ••• '+adminPhone.slice(-4),origin});
    if(path.startsWith('/admin/api/auth/')){
     const address=ip(req),now=clock();let bucket=buckets.get(address);if(!bucket||bucket.until<=now){bucket={until:now+60000,count:0};buckets.set(address,bucket);}if(++bucket.count>30)throw fail(429,'Подождите минуту');
     const data=await body(req);
@@ -121,6 +121,7 @@ export function createAdminServer({db,uploads,json,body,publish,broadcast,hydrat
    const session=authenticate(req);
    if(path==='/admin/api/session'&&method==='GET')return json(res,200,{id:session.id,phone:adminPhone,csrf_token:session.csrf_token,expires:session.expires,version});
    if(path==='/admin/api/logout'&&method==='POST'){db.prepare('DELETE FROM admin_sessions WHERE id=?').run(session.id);audit('auth.logout',session.id);cookie(res,'',0);return json(res,200,{ok:true});}
+   if(callDebug&&await callDebug.admin(req,res,url,json,audit))return;
    const p=page(url);
    if(path==='/admin/api/stats'&&method==='GET'){
     const counts={};for(const [key,table] of Object.entries({users:'users',chats:'chats',messages:'messages',files:'attachments',push_jobs:'push_jobs'}))counts[key]=db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n;

@@ -46,6 +46,7 @@ internal object NativeTelecom {
             val context = app ?: return
             val handle = account ?: return
             announced = call.id; failed = null
+            NativeCalls.debug("telecom_announced")
             try {
                 val extras = Bundle().apply { putString(CALL_ID, call.id);callerAddress(call)?.let{putParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS,it)} }
                 val telecom = context.getSystemService(TelecomManager::class.java)
@@ -69,26 +70,29 @@ internal object NativeTelecom {
             }
             false
         }
-        if (available == true) return true
+        if (available == true) { NativeCalls.debug("audio_focus_granted"); return true }
         if (NativeCalls.state.value.call?.id != id) throw CancellationException("Звонок отменён")
         if (failed == id || connection == null) {
             // A late Connection must not seize audio after the manual fallback starts.
+            NativeCalls.debug("audio_focus_fallback")
             failed = id; systemFocused = false
             return false
         }
         error("Android не передал звук системному звонку. Завершите другой звонок и повторите вызов.")
     }
     fun focusChanged(gained: Boolean) {
+        NativeCalls.debug(if(gained)"telecom_focus_gained" else "telecom_focus_lost")
         systemFocused = gained
         if (!gained) NativeCalls.systemAudioLost()
     }
-    fun creationFailed(id: String?) { if (id == announced) failed = id }
+    fun creationFailed(id: String?) { if (id == announced) { NativeCalls.debug("telecom_creation_failed"); failed = id } }
 
     fun create(id: String?): Connection {
         val state = NativeCalls.state.value
         val call = state.call
         if (id == null || call == null || id != call.id || id != announced || failed == id)
             return Connection.createFailedConnection(DisconnectCause(DisconnectCause.CANCELED))
+        NativeCalls.debug("telecom_created")
         return VolnaConnection(id).also { created ->
             connection?.finish(); connection = created
             created.setAddress(callerAddress(call),TelecomManager.PRESENTATION_ALLOWED)
@@ -117,7 +121,7 @@ internal object NativeTelecom {
         }
     }
 
-    fun end(id: String) { if (nativeTelecomActionAllowed(NativeCalls.state.value, id)) NativeCalls.end() }
+    fun end(id: String, reason:String, action:String) { if (nativeTelecomActionAllowed(NativeCalls.state.value, id)) { NativeCalls.debug(action); NativeCalls.end(reason=reason) } }
     fun mute(id: String, muted: Boolean) {
         if (NativeCalls.state.value.call?.id == id && NativeCalls.state.value.muted != muted) NativeCalls.toggleMute()
     }
@@ -172,9 +176,9 @@ internal class VolnaConnection(private val id: String) : Connection() {
     fun finish() { setDisconnected(DisconnectCause(DisconnectCause.LOCAL)); destroy() }
     override fun onAnswer() = NativeTelecom.answer(id, NativeCalls.state.value.call?.video == true)
     override fun onAnswer(videoState: Int) = NativeTelecom.answer(id, VideoProfile.isVideo(videoState))
-    override fun onDisconnect() = NativeTelecom.end(id)
-    override fun onReject() = NativeTelecom.end(id)
-    override fun onAbort() = NativeTelecom.end(id)
+    override fun onDisconnect() = NativeTelecom.end(id,"telecom_disconnect","telecom_disconnected")
+    override fun onReject() = NativeTelecom.end(id,"telecom_reject","telecom_rejected")
+    override fun onAbort() = NativeTelecom.end(id,"telecom_abort","telecom_aborted")
     override fun onMuteStateChanged(isMuted: Boolean) { NativeTelecom.mute(id, isMuted); lastSystemMuted = isMuted }
     override fun onCallAudioStateChanged(state: CallAudioState) {
         audioState=state

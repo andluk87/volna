@@ -38,6 +38,7 @@ class CallService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        NativeCalls.debug("service_created")
         val audio = getSystemService(AudioManager::class.java)
         audio.registerAudioDeviceCallback(devices, Handler(Looper.getMainLooper()))
         if (Build.VERSION.SDK_INT >= 31) {
@@ -49,6 +50,7 @@ class CallService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        NativeCalls.debug("service_started")
         if (NativeCalls.state.value.call == null) { ready?.completeExceptionally(IllegalStateException("Звонок завершён")); stopSelf(); return START_NOT_STICKY }
         try {
             projecting = intent?.action == ACTION_SCREEN || projecting
@@ -66,7 +68,7 @@ class CallService : Service() {
             }
         } catch (problem: Exception) {
             ready?.completeExceptionally(problem)
-            NativeCalls.end(problem.message ?: "Не удалось запустить фоновый звонок")
+            NativeCalls.end(problem.message ?: "Не удалось запустить фоновый звонок", reason="service_error")
             stopSelf()
         }
         return START_NOT_STICKY
@@ -111,10 +113,11 @@ class CallService : Service() {
         if (Build.VERSION.SDK_INT >= 31) communicationChanged?.let { audio.removeOnCommunicationDeviceChangedListener(it) }
         releaseProximity()
         val owning = instance === this
+        NativeCalls.debug("service_destroyed",org.json.JSONObject().put("notify_server",owning))
         if (owning) instance = null
         wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
         stopForeground(STOP_FOREGROUND_REMOVE)
-        if (owning && NativeCalls.state.value.call != null) NativeCalls.end("Фоновый звонок остановлен")
+        if (owning && NativeCalls.state.value.call != null) NativeCalls.end("Фоновый звонок остановлен", reason="service_destroyed")
         super.onDestroy()
     }
     override fun onBind(intent: Intent?): IBinder? = null
@@ -150,13 +153,13 @@ class CallActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if(intent.action!=CallService.ACTION_END)return
         val id=intent.getStringExtra("call_id")?:return
-        if(id==NativeCalls.state.value.call?.id){NativeCalls.end();return}
+        if(id==NativeCalls.state.value.call?.id){NativeCalls.end(reason="notification_end");return}
         val account=intent.getLongExtra("account_id",0);val token=NativeCredentials.access(account)
         if(account<=0||token.isBlank())return
         val result=goAsync()
         kotlin.concurrent.thread {
             try{val device=context.getSharedPreferences("volna-native",Context.MODE_PRIVATE).getString("call_device",null)?:"0".repeat(32)
-                NativeApi(BuildConfig.API_BASE_URL).callAction(token,device,id,"end")
+                NativeApi(BuildConfig.API_BASE_URL).callAction(token,device,id,"end",endReason="notification_end")
                 NativeBackgroundCalls.remove(account)
                 context.getSystemService(NotificationManager::class.java).cancel("volna-call-account-$account",NativeCalls.CALL_NOTIFICATION)
             }catch(_:Exception){}finally{result.finish()}

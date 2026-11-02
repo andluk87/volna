@@ -84,7 +84,7 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
                 NativeText(if (state.connected) callDuration(state.elapsed) + if (state.sharing) " · Показ экрана" else " · Разговор" else state.phase, color = Color.White.copy(alpha = .85f), fontSize = 11.sp)
             }
             IconButton(onClick = NativeCalls::toggleMute) { Icon(if (state.muted) Icons.Outlined.MicOff else Icons.Outlined.Mic, "Микрофон", tint = Color.White) }
-            IconButton(onClick = { NativeCalls.end() }) { Icon(Icons.Outlined.CallEnd, "Завершить звонок", tint = Color(0xFFE7767F)) }
+            IconButton(onClick = { NativeCalls.end(reason="user_hangup") }) { Icon(Icons.Outlined.CallEnd, "Завершить звонок", tint = Color(0xFFE7767F)) }
         }
         return
     }
@@ -145,7 +145,7 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
                 if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED && (!call.video || context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)) NativeCalls.accept(video = call.video)
                 else micPermission.launch(if (call.video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO))
             }
-            CallControl(Icons.Outlined.CallEnd, "Отклонить", Color(0xFFF32638), size = 72.dp) { NativeCalls.end() }
+            CallControl(Icons.Outlined.CallEnd, "Отклонить", Color(0xFFF32638), size = 72.dp) { NativeCalls.end(reason="user_reject") }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 CallControl(nativeRouteIcon(state.route), if(state.routePending)"Переключаем…" else state.route, if(state.route.startsWith("Динамик"))Accent else Panel.copy(alpha=.85f),enabled=!state.routePending) {
@@ -158,7 +158,7 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
                     else cameraPermission.launch(Manifest.permission.CAMERA)
                 }
                 CallControl(if (state.muted) Icons.Outlined.MicOff else Icons.Outlined.Mic, if (state.muted) "Вкл. звук" else "Выкл. звук", if (state.muted) Accent else Panel.copy(alpha = .85f)) { NativeCalls.toggleMute() }
-                CallControl(Icons.Outlined.CallEnd, "Завершить", Color(0xFFF32638)) { NativeCalls.end() }
+                CallControl(Icons.Outlined.CallEnd, "Завершить", Color(0xFFF32638)) { NativeCalls.end(reason="user_hangup") }
             }
 
         }

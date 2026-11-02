@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {createApp,fixtureFetch} from './phone-fixture.mjs';
+import {createCallLog} from '../server/call-log.mjs';
+import {callLogAccess} from '../server/call-log-access.mjs';
+test('private diagnostic bot issues live links only to admin, retries once, revokes and refuses extra readers',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'volna-debug-bot-')),app=createApp({database:join(dir,'volna.db'),uploads:join(dir,'uploads'),callDebugOptions:{publicOrigin:'https://volna.example'}});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(async()=>{await app.close();rmSync(dir,{recursive:true,force:true});});
+ const base=`http://127.0.0.1:${app.server.address().port}`;
+ const req=async(path,token,data)=>{const r=await fixtureFetch(base+'/api'+path,{method:data===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});return {status:r.status,data:await r.json()};};
+ const admin=(await req('/register','',{username:'debug-admin'})).data,other=(await req('/register','',{username:'debug-other'})).data;
+ app.db.prepare('UPDATE users SET phone=? WHERE id=?').run('+79681411241',admin.user.id);
+ assert.ok(!(await req('/chats',other.token)).data.some(c=>c.name==='Волна — диагностика'));
+ const chats=(await req('/chats',admin.token)).data,chat=chats.find(c=>c.name==='Волна — диагностика');assert.ok(chat);assert.equal(chats.filter(c=>c.name==='Волна — диагностика').length,1);
+ assert.equal((await req('/chats',admin.token)).data.filter(c=>c.name==='Волна — диагностика').length,1);
+ const command={text:'/calllog',client_id:'debug-command-000001'};
+ assert.equal((await req(`/chats/${chat.id}/messages`,other.token,command)).status,404);
+ assert.equal((await req(`/chats/${chat.id}/messages`,admin.token,command)).status,201);
+ let rows=(await req(`/chats/${chat.id}/messages`,admin.token)).data;const reply=rows.find(r=>r.sender_id!==admin.user.id&&r.text.includes('https://volna.example/api/call-debug/'));assert.ok(reply);const url=new URL(reply.text.match(/https:\/\/[^\s]+/)[0]);assert.equal((await fetch(base+url.pathname)).status,200);
+ const shares=app.db.prepare('SELECT * FROM call_debug_shares').all();assert.equal(shares.length,1);
+ assert.equal((await req(`/chats/${chat.id}/messages`,admin.token,command)).status,200);assert.deepEqual(app.db.prepare('SELECT * FROM call_debug_shares').all(),shares);
+ rows=(await req(`/chats/${chat.id}/messages`,admin.token)).data;assert.equal(rows.filter(r=>r.text===reply.text).length,1);
+ await req(`/chats/${chat.id}/messages`,admin.token,{text:'/revoke',client_id:'debug-command-000002'});assert.equal((await fetch(base+url.pathname)).status,404);
+ app.db.prepare("INSERT INTO members(chat_id,user_id,role) VALUES(?,?,'member')").run(chat.id,other.user.id);
+ await req(`/chats/${chat.id}/messages`,admin.token,{text:'/calllog',client_id:'debug-command-000003'});assert.equal(app.db.prepare('SELECT COUNT(*) n FROM call_debug_shares').get().n,0);
+});
+test('shared live log spans rotation and excludes symlinks and unrelated files',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'volna-debug-read-')),app=createApp({database:':memory:'});t.after(async()=>{await app.close();rmSync(dir,{recursive:true,force:true});});
+ const logger=createCallLog({directory:dir,maxBytes:600});for(let i=0;i<20;i++)logger.write('rtc.stats',{bytes_sent:i});logger.close();
+ writeFileSync(join(dir,'unrelated.txt'),'NEVER-EXPOSE');symlinkSync(join(dir,'unrelated.txt'),join(dir,'volna-calls_2027-01-01_00-00-00.000Z_pid999_000001.log.tar.gz'));
+ const access=callLogAccess({db:app.db,file:join(dir,'volna-calls.log')}),shared=access.createShare();let body;const res={setHeader(){},writeHead(){},end(value){body=value;}};
+ assert.equal(access.publicHandle({method:'GET'},res,new URL(shared.path,'http://test')),true);const rows=body.trim().split('\n').map(JSON.parse);assert.equal(rows.at(-1).bytes_sent,19);assert.ok(rows.some(r=>r.bytes_sent<19));assert.ok(!body.includes('NEVER-EXPOSE'));
+});

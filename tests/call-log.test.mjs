@@ -39,9 +39,9 @@ test('real call lifecycle and bounded authorized telemetry are collected without
  assert.equal((await req('/calls/diagnostics',eve.token,{...diagnostic,device:dc})).status,404);assert.equal((await req('/calls/diagnostics',a.token,diagnostic)).status,200);
  assert.equal((await req('/calls/diagnostics',a.token,{...diagnostic,event:'unbounded_event'})).status,400);
  for(const [token,d]of [[a.token,da],[b.token,db]])await req(`/calls/${call.id}/media-state`,token,{device:d,connected:true,restart_generation:0});
- await req(`/calls/${call.id}/end`,a.token,{device:da});assert.equal((await req('/calls/diagnostics',b.token,{...diagnostic,device:db,platform:'android',event:'client.ended'})).status,200);
+ await req(`/calls/${call.id}/end`,a.token,{device:da,end_reason:'telecom_disconnect'});assert.equal((await req('/calls/diagnostics',b.token,{...diagnostic,device:db,platform:'android',event:'client.ended'})).status,200);
  const text=readFileSync(join(dir,'volna-calls.log'),'utf8'),rows=text.trim().split('\n').map(JSON.parse);for(const type of ['call.created','call.invited','call.incoming_observed','call.accepted','rtc.answer','call.connected','call.finished','rtc.stats','client.ended'])assert.ok(rows.some(r=>r.event===type),type);
- assert.ok(rows.some(r=>r.reason==='caller_ended'));for(const privateValue of [a.token,b.token,a.user.phone,b.user.phone,signal.sdp,'NEVER-SDP-PASSWORD','NEVER-UNTRUSTED','NEVER-TURN-PASSWORD','caller-logging'])assert.ok(!text.includes(privateValue),privateValue);
+ assert.ok(rows.some(r=>r.reason==='caller_ended'));assert.ok(rows.some(r=>r.event==='call.end_requested'&&r.end_reason==='telecom_disconnect'&&r.role==='caller'));for(const privateValue of [a.token,b.token,a.user.phone,b.user.phone,signal.sdp,'NEVER-SDP-PASSWORD','NEVER-UNTRUSTED','NEVER-TURN-PASSWORD','caller-logging'])assert.ok(!text.includes(privateValue),privateValue);
  for(let i=0;i<119;i++)assert.equal((await req('/calls/diagnostics',a.token,diagnostic)).status,200);assert.equal((await req('/calls/diagnostics',a.token,diagnostic)).status,429);
 });
 test('call log identifies offer/media timeouts and interrupted calls on restart',async t=>{
@@ -71,4 +71,26 @@ test('server collects ICE summaries from legacy signaling and accepts a deduplic
 test('fallback headers are bounded, expire, preserve UTF-8 and carry no session credentials',async()=>{
  const {callDiagnosticHeader}=await import('../client/src/call-diagnostic-transport.mjs');const payload={report_id:'a'.repeat(32),event:'client.stage',client_time:1000,stage:'start',platform:'web'};
  const header=callDiagnosticHeader(payload,2000);assert.deepEqual(JSON.parse(Buffer.from(header,'base64url').toString()),payload);assert.equal(callDiagnosticHeader(payload,122000),null);assert.equal(callDiagnosticHeader({...payload,large:'x'.repeat(4000)},2000),null);assert.equal(callDiagnosticHeader({event:'client.stage'},2000),null);
+});
+
+test('lifecycle and termination debug fields are bounded and never accept arbitrary messages',async()=>{
+ const {diagnosticFields}=await import('../server/call-diagnostics.mjs');
+ const {callEndReasons,callLifecycleActions,callEndReason}=await import('../shared/call-debug.mjs');
+ for(const end_reason of callEndReasons)assert.equal(diagnosticFields({end_reason}).end_reason,end_reason);
+ for(const lifecycle of callLifecycleActions)assert.equal(diagnosticFields({lifecycle}).lifecycle,lifecycle);
+ const safe={end_reason:'session_reset',lifecycle:'configure_requested',process_id:'a'.repeat(32),sequence:17,uptime_ms:43000,generation:2,sdk:35,call_status:'active',has_peer:true,operation_active:false,session_same:true,session_blank:true,notify_server:true,model:'Test phone',manufacturer:'Test',call_version:5};
+ assert.deepEqual(diagnosticFields({...safe,token:'PRIVATE',message:'PRIVATE',stack:'PRIVATE',sdp:'PRIVATE'}),safe);
+ assert.deepEqual(diagnosticFields({end_reason:'PRIVATE',lifecycle:'PRIVATE',process_id:'PRIVATE',model:'x'.repeat(65),manufacturer:'a\nb',sequence:Infinity,generation:-2,notify_server:'true'}),{});
+ assert.equal(callEndReason('telecom_abort'),'telecom_abort');assert.equal(callEndReason('PRIVATE'),undefined);
+});
+test('lifecycle reports before and after a call retain ordering and require authentication',async t=>{
+ const dir=tmp(t),app=createApp({database:':memory:',callLogOptions:{directory:dir}});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(()=>app.close());
+ const req=async(path,token,data)=>{const r=await fixtureFetch(`http://127.0.0.1:${app.server.address().port}/api`+path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(data)});return {status:r.status,data:await r.json()};};
+ const a=(await req('/register','',{username:'debug-lifecycle'})).data;
+ const payload={event:'client.lifecycle',platform:'android',device:'d'.repeat(32),lifecycle:'configure_requested',session_same:true,sequence:1,process_id:'e'.repeat(32),uptime_ms:12345,sdk:35,model:'Test phone',token:'NEVER-LOG'};
+ assert.equal((await req('/calls/diagnostics','',payload)).status,401);
+ assert.equal((await req('/calls/diagnostics',a.token,payload)).status,200);
+ assert.equal((await req('/calls/diagnostics',a.token,{...payload,sequence:2,lifecycle:'telecom_created',call_id:'f'.repeat(32)})).status,404);
+ const text=readFileSync(join(dir,'volna-calls.log'),'utf8'),row=text.trim().split('\n').map(JSON.parse).find(r=>r.event==='client.lifecycle');
+ assert.equal(row.sequence,1);assert.equal(row.process_id,payload.process_id);assert.equal(row.uptime_ms,12345);assert.equal(row.session_same,true);assert.ok(!text.includes('NEVER-LOG'));
 });

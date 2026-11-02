@@ -64,8 +64,9 @@ class MessagingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        NativeCalls.debug("messaging_started",org.json.JSONObject().put("session_blank",intent?.action==ACTION_SYNC||intent?.action==ACTION_STOP))
         if (intent?.action == ACTION_STOP) {
-            NativeCalls.configure(this, ""); stopped = true
+            NativeCalls.configure(this, "", "messaging_stop"); stopped = true
             (priorityRingtones.keys.toSet() + streams.keys.toSet()).forEach { clearBackgroundCall(it) }
             streams.values.forEach { it.stop() }; streams.clear()
             main.removeCallbacks(reconcile); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
@@ -74,8 +75,8 @@ class MessagingService : Service() {
         stopped = false
         val selectedId = intent?.getLongExtra(EXTRA_USER_ID, 0L)?.takeIf { it > 0 } ?: prefs.getLong("user_id", 0L)
         val selectedToken = intent?.getStringExtra(EXTRA_TOKEN)?.takeIf { it.isNotBlank() } ?: NativeCredentials.access(selectedId)
-        if (intent?.action == ACTION_SYNC) NativeCalls.configure(this, "")
-        else if (selectedToken.isNotBlank()) { prefs.edit().remove("token").putLong("user_id", selectedId).apply(); NativeCalls.configure(this, selectedToken) }
+        if (intent?.action == ACTION_SYNC) NativeCalls.configure(this, "", "messaging_sync")
+        else if (selectedToken.isNotBlank()) { prefs.edit().remove("token").putLong("user_id", selectedId).apply(); NativeCalls.configure(this, selectedToken, "messaging_login") }
         startForeground(FOREGROUND_ID, serviceNotification())
         syncAccounts()
         main.removeCallbacks(reconcile); if (!stopped) main.postDelayed(reconcile, 6_000)
@@ -97,7 +98,7 @@ class MessagingService : Service() {
                 stream.callsWorker = thread(name = "volna-call-alerts-${account.user.id}", isDaemon = true) { watchCalls(stream) }
             }
         }
-        if (accounts.isEmpty()) { stopped = true; NativeCalls.configure(this, ""); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+        if (accounts.isEmpty()) { stopped = true; NativeCalls.configure(this, "", "no_accounts"); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
     }
     private fun current(stream: AccountStream) = !stopped && !stream.stopped && streams[stream.userId] === stream
     private fun invalidSession(stream: AccountStream) {
@@ -105,7 +106,7 @@ class MessagingService : Service() {
         NativeAccounts.remove(this, stream.userId)
         stream.stop(); streams.remove(stream.userId, stream); clearBackgroundCall(stream.userId)
         main.post {
-            if (prefs.getLong("user_id", 0L) == stream.userId) { prefs.edit().remove("user_id").apply(); NativeCalls.configure(this, "") }
+            if (prefs.getLong("user_id", 0L) == stream.userId) { prefs.edit().remove("user_id").apply(); NativeCalls.configure(this, "", "session_invalid") }
             syncAccounts()
         }
     }
@@ -408,7 +409,7 @@ class MessagingService : Service() {
         }
 
         fun stop(context: Context) {
-            NativeCalls.configure(context, "")
+            NativeCalls.configure(context, "", "account_logout")
             if (NativeAccounts.list(context).isEmpty()) context.stopService(Intent(context, MessagingService::class.java))
             else {
                 val intent = Intent(context, MessagingService::class.java).setAction(ACTION_SYNC)

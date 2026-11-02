@@ -46,7 +46,7 @@ data class NativeAudioRoute(val id: Int, val label: String)
 object NativeCalls {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, problem ->
         diagnosticFailure(problem);NativeCallDiagnostics.failure(problem)
-        end("Ошибка звонка: ${problem.message ?: problem.javaClass.simpleName}")
+        end("Ошибка звонка: ${problem.message ?: problem.javaClass.simpleName}", reason="uncaught_error")
     })
     private val mutableState = MutableStateFlow(NativeCallState())
     val state: StateFlow<NativeCallState> = mutableState
@@ -58,9 +58,27 @@ object NativeCalls {
     private var device = ""
     private var diagnosticStage = "start"
     private var diagnosticJob: Job? = null
-    private fun diagnostic(event:String,fields:JSONObject=JSONObject()) { NativeCallTelemetry.send(token,device,state.value.call?.id,event,fields) }
+    private fun diagnostic(event:String,fields:JSONObject=JSONObject()) { NativeCallTelemetry.send(token,device,state.value.call?.id,event,networkSnapshot(fields).put("generation",generation)) }
     private fun diagnosticStep(stage:String) { diagnosticStage=stage;diagnostic("client.stage",JSONObject().put("stage",stage)) }
-    private fun diagnosticFailure(problem:Throwable) { diagnostic("client.error",JSONObject().put("stage",diagnosticStage).put("error_type",if(problem is LinkageError)"LinkageError" else problem.javaClass.simpleName).apply { if(problem is NativeApiException)put("http_status",problem.status) }) }
+    private fun diagnosticFailure(problem:Throwable,stage:String=diagnosticStage) { diagnostic("client.error",JSONObject().put("stage",stage).put("error_type",if(problem is LinkageError)"LinkageError" else problem.javaClass.simpleName).apply { if(problem is NativeApiException)put("http_status",problem.status) }) }
+    internal fun debug(action:String,fields:JSONObject=JSONObject(),call:VolnaCall?=state.value.call) { NativeCallTelemetry.send(token,device,call?.id,"client.lifecycle",networkSnapshot(fields).put("generation",generation).put("lifecycle",action).put("has_peer",peer!=null).put("operation_active",operation?.isActive==true).put("call_status",call?.status?:"none")) }
+    private fun networkSnapshot(fields:JSONObject):JSONObject {
+        runCatching {
+            val manager=context?.getSystemService(android.net.ConnectivityManager::class.java)?:return fields
+            val caps=manager.getNetworkCapabilities(manager.activeNetwork)
+            val transport=when {
+                caps==null->"none"
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)->"vpn"
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)->"wifi"
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)->"cellular"
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)->"ethernet"
+                else->"other"
+            }
+            fields.put("network_transport",transport).put("network_validated",caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)==true).put("network_metered",manager.isActiveNetworkMetered)
+        }
+        return fields
+    }
+    private var debugPollAt = 0L
     private var generation = 0
     private val pollWake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
     fun wake(session: String) { if (configuredFor(session)) pollWake.trySend(Unit) }
@@ -106,11 +124,12 @@ object NativeCalls {
     private var initialized = false
     private val frameObserver = VideoSink { lastVideoFrame = SystemClock.elapsedRealtime() }
 
-    fun configure(appContext: Context, sessionToken: String) {
+    fun configure(appContext: Context, sessionToken: String, trigger:String) {
+        debug("configure_requested",JSONObject().put("trigger",trigger).put("session_same",configuredFor(sessionToken)).put("session_blank",sessionToken.isBlank()))
         NativeTelecom.configure(appContext)
-        if (context != null && token == sessionToken) return
-        if(sessionToken.isNotBlank()&&state.value.call!=null&&!configuredFor(sessionToken))return
-        end()
+        if (context != null && token == sessionToken) { debug("configure_unchanged"); return }
+        if(sessionToken.isNotBlank()&&state.value.call!=null&&!configuredFor(sessionToken)){debug("configure_blocked");return}
+        end(reason="session_reset")
         pollJob?.cancel()
         clockJob?.cancel()
         toneObserver?.cancel()
@@ -137,8 +156,9 @@ object NativeCalls {
                         applyCurrent(current)
                     }
                 } catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) {
-                    if (version == generation && state.value.call != null && SystemClock.elapsedRealtime() - lastSuccess > 35_000) end("Нет связи с сервером")
+                catch (problem: Exception) {
+                    if (state.value.call != null) { diagnosticFailure(problem,"poll");debug("poll_error",JSONObject().put("poll_age_ms",SystemClock.elapsedRealtime()-lastSuccess)) }
+                    if (version == generation && state.value.call != null && SystemClock.elapsedRealtime() - lastSuccess > 35_000) end("Нет связи с сервером", reason="poll_timeout")
                 }
                 withTimeoutOrNull(2_000) { pollWake.receive() }
             }
@@ -147,8 +167,11 @@ object NativeCalls {
 
     private suspend fun applyCurrent(current: VolnaCall?) {
         val version = generation
-        if (current == null) { if (state.value.call != null) end(); return }
-        if (current.status == "other-device") { if (state.value.call != null) end(notifyServer = false); return }
+        if (current == null) { if (state.value.call != null) end(reason="server_no_call"); return }
+        if (current.status == "other-device") { if (state.value.call != null) end(notifyServer = false, reason="other_device"); return }
+        val previous = state.value.call
+        val now = SystemClock.elapsedRealtime()
+        if (previous?.version != current.version || previous?.id != current.id || now-debugPollAt >= 10000) { debugPollAt=now;debug("poll_snapshot",JSONObject().put("call_version",current.version).put("incoming",current.incoming).put("restart_generation",current.restartGeneration),call=current) }
         val existing = state.value.call
         if (existing == null) {
             if (current.incoming && current.status == "ringing") {
@@ -157,12 +180,12 @@ object NativeCalls {
                 withContext(Dispatchers.IO){api.callAction(token,device,current.id,"ringing")}
             } else {
                 // A process restart cannot restore old DTLS keys. Release an abandoned device call.
-                withContext(Dispatchers.IO) { api.callAction(token, device, current.id, "end") }
+                withContext(Dispatchers.IO) { api.callAction(token, device, current.id, "end", endReason="abandoned_call") }
             }
             return
         }
         if (existing.id == current.id && current.version < existing.version) return
-        if (existing.id != current.id) { end(notifyServer = false); return }
+        if (existing.id != current.id) { end(notifyServer = false, reason="call_replaced"); return }
         if(current.incoming&&current.status=="ringing"&&!current.ringReceived)withContext(Dispatchers.IO){api.callAction(token,device,current.id,"ringing")}
         mutableState.update { if(!current.incoming&&current.status=="ringing")it.copy(call=current,phase=if(current.ringReceived)"У собеседника входящий звонок…" else "Устанавливаем соединение…") else it.copy(call = current) }
         if (cameraWanted && current.status == "active" && state.value.connected && state.value.screenReady) { cameraWanted = false; setCamera(true) }
@@ -171,7 +194,7 @@ object NativeCalls {
             try { setDescription(pc, current.answer, local = false) }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (problem: Exception) {
-                if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось согласовать звонок") }
+                if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось согласовать звонок", reason="answer_error") }
                 return
             }
             if (version != generation || peer !== pc) return
@@ -180,12 +203,13 @@ object NativeCalls {
             mutableState.update { if (it.connected) it else it.copy(phase = "Соединяем…") }
         }
         if (pc != null) syncRecovery(current, pc)
-        if (pc != null && !state.value.connected && connectedAt == 0L && SystemClock.elapsedRealtime() - attemptAt > 60_000) end("Не удалось соединиться. Проверьте сеть и TURN")
+        if (pc != null && !state.value.connected && connectedAt == 0L && SystemClock.elapsedRealtime() - attemptAt > 60_000) end("Не удалось соединиться. Проверьте сеть и TURN", reason="connect_timeout")
     }
 
     fun start(chat: VolnaChat, video: Boolean = false) {
         if (token.isBlank() || state.value.call != null || operation?.isActive == true) return
         if (chat.kind != "direct" || chat.saved) return
+        debug("start_requested")
         val session = token
         val version = ++generation
         cameraWanted = video
@@ -210,10 +234,10 @@ object NativeCalls {
                 mutableState.update { it.copy(call = ready, phase = "Устанавливаем соединение…", busy = false) }
                 NativeCallDiagnostics.step("Ожидание ответа собеседника")
             } catch (cancelled: CancellationException) {
-                created?.let { call -> scope.launch(Dispatchers.IO) { runCatching { api.callAction(session, device, call.id, "end") } } }
+                created?.let { call -> scope.launch(Dispatchers.IO) { runCatching { api.callAction(session, device, call.id, "end", endReason="operation_cancelled") } } }
                 throw cancelled
-            } catch (problem: Exception) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось начать звонок") } }
-            catch (problem: LinkageError) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.") } }
+            } catch (problem: Exception) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось начать звонок", reason="start_error") } }
+            catch (problem: LinkageError) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.", reason="webrtc_unavailable") } }
             finally { if (version == generation) mutableState.update { it.copy(busy = false) } }
         }
     }
@@ -221,6 +245,7 @@ object NativeCalls {
     fun accept(video: Boolean = false) {
         val call = state.value.call ?: return
         if (!call.incoming || call.status != "ringing" || operation?.isActive == true) return
+        debug("accept_requested")
         val version = ++generation
         NativeCallDiagnostics.begin()
         stopRinging()
@@ -245,8 +270,8 @@ object NativeCalls {
                 updateScreenReady()
                 if (!state.value.connected) NativeCallDiagnostics.step("Ожидание соединения ICE")
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (problem: Exception) { if (version == generation) { if(problem is NativeApiException && problem.errorCode == "CALL_ANSWERED_ELSEWHERE") end(notifyServer = false) else { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось принять звонок") } } }
-            catch (problem: LinkageError) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.") } }
+            catch (problem: Exception) { if (version == generation) { if(problem is NativeApiException && problem.errorCode == "CALL_ANSWERED_ELSEWHERE") end(notifyServer = false, reason="other_device") else { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось принять звонок", reason="accept_error") } } }
+            catch (problem: LinkageError) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.", reason="webrtc_unavailable") } }
             finally { if (version == generation) mutableState.update { it.copy(busy = false) } }
         }
     }
@@ -325,7 +350,7 @@ object NativeCalls {
         attemptAt = SystemClock.elapsedRealtime()
         mutableState.update { it.copy(relay = config.optBoolean("relayConfigured")) }
         diagnosticJob?.cancel()
-        diagnosticJob=scope.launch { while(version==generation&&peer===pc) { runCatching { pc.getStats { report -> if(version==generation&&peer===pc)diagnostic("rtc.stats",nativeCallStats(report.statsMap.values.map { NativeCallStat(it.id,it.type,it.members) })) } };delay(15_000) } }
+        diagnosticJob=scope.launch { while(version==generation&&peer===pc) { runCatching { pc.getStats { report -> if(version==generation&&peer===pc)diagnostic("rtc.stats",nativeCallStats(report.statsMap.values.map { NativeCallStat(it.id,it.type,it.members) })) } };delay(5_000) } }
         return pc
     }
 
@@ -333,7 +358,7 @@ object NativeCalls {
         scope.launch {
             if (version != generation) return@launch
             diagnosticStep("audio_device");diagnosticFailure(IllegalStateException(label));NativeCallDiagnostics.failure(IllegalStateException(detail))
-            end("$label. Проверьте разрешения и закройте другие приложения, использующие звук.")
+            end("$label. Проверьте разрешения и закройте другие приложения, использующие звук.", reason="audio_error")
         }
     }
 
@@ -574,6 +599,7 @@ object NativeCalls {
         val manager = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val callId = state.value.call?.id ?: throw CancellationException("Звонок отменён")
         NativeCallDiagnostics.step("Ожидание системного аудиофокуса Telecom")
+        debug("audio_focus_requested")
         if (NativeTelecom.audioFocus(callId)) {
             checkVersion(version)
             telecomAudio = true
@@ -590,7 +616,7 @@ object NativeCalls {
                 if (version != generation) return@launch
                 diagnostic("rtc.state",JSONObject().put("stage","audio_device").put("audio_focus",when(value){AudioManager.AUDIOFOCUS_GAIN->"gained";AudioManager.AUDIOFOCUS_LOSS->"lost";else->"transient"}))
                 when (value) {
-                    AudioManager.AUDIOFOCUS_LOSS -> { granted.complete(false); end("Звук занят другим звонком") }
+                    AudioManager.AUDIOFOCUS_LOSS -> { granted.complete(false); end("Звук занят другим звонком", reason="audio_focus_lost") }
                     AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> { audioTrack?.setEnabled(false); mutableState.update { it.copy(phase = "Звук временно занят") } }
                     AudioManager.AUDIOFOCUS_GAIN -> { granted.complete(true); audioTrack?.setEnabled(!state.value.muted); if (state.value.connected) mutableState.update { it.copy(phase = "Разговор") } }
                 }
@@ -605,11 +631,11 @@ object NativeCalls {
     }
 
     private var telecomAudio = false
-    internal fun systemAudioLost() { if (telecomAudio && state.value.call != null) end("Звук передан другому системному звонку") }
+    internal fun systemAudioLost() { if (telecomAudio && state.value.call != null) end("Звук передан другому системному звонку", reason="telecom_audio_lost") }
 
-    fun end(message: String = "", notifyServer: Boolean = true) {
+    fun end(message: String = "", notifyServer: Boolean = true, reason: String) {
         val call = state.value.call; val session = token
-        diagnostic("client.ended",JSONObject().put("stage",diagnosticStage).put("connected",state.value.connected));diagnosticJob?.cancel();diagnosticJob=null
+        if (call != null) diagnostic("client.ended",JSONObject().put("stage",diagnosticStage).put("connected",state.value.connected).put("end_reason",reason).put("notify_server",notifyServer).put("call_status",call.status).put("has_peer",peer!=null).put("operation_active",operation?.isActive==true).put("telecom_audio",telecomAudio));diagnosticJob?.cancel();diagnosticJob=null
         generation++
         operation?.cancel(); operation = null
         recoveryJob?.cancel(); recoveryJob = null; pendingRestart = null; pendingAnswer = null; appliedRestart = 0; reportedMedia = -1
@@ -638,7 +664,7 @@ object NativeCalls {
         mutableState.value = NativeCallState(error = message)
         NativeCallDiagnostics.finish(message)
         context?.let { runCatching { CallService.stop(it) } }
-        if (notifyServer && call != null && session.isNotBlank()) scope.launch(Dispatchers.IO) { runCatching { api.callAction(session, device, call.id, "end") } }
+        if (notifyServer && call != null && session.isNotBlank()) scope.launch(Dispatchers.IO) { runCatching { api.callAction(session, device, call.id, "end", endReason=reason) } }
     }
 
     private fun updateProtocolCall(call: VolnaCall) {
@@ -686,7 +712,7 @@ object NativeCalls {
 
     private fun updateClock() {
         val now = SystemClock.elapsedRealtime()
-        if (disconnectedAt > 0 && now - disconnectedAt > 20_000) { end("Соединение звонка потеряно"); return }
+        if (disconnectedAt > 0 && now - disconnectedAt > 20_000) { end("Соединение звонка потеряно", reason="recovery_timeout"); return }
         mutableState.update { it.copy(elapsed = if (connectedAt > 0) ((now - connectedAt) / 1000).toInt() else 0,
             remoteSharing = it.call?.peerSharing ?: (lastVideoFrame > 0 && now - lastVideoFrame < 4_000),
             remoteVideo = it.call?.peerVideo == true || it.call?.peerSharing != true && lastVideoFrame > 0 && now - lastVideoFrame < 4_000) }

@@ -141,6 +141,9 @@ private suspend fun startApkInstaller(context: Context, file: File) { installVol
 private val QuickEmoji = listOf("👍", "❤️", "😂", "🔥", "🎉", "😮", "😢", "🙏", "👏", "😍", "🤔", "💯", "🥰", "👎", "✨", "💙", "😎", "🤝", "👋", "💪", "😭", "😡", "🤗", "🤣")
 
 class MainActivity : ComponentActivity() {
+    override fun onResume() { super.onResume(); NativeCalls.debug("activity_resumed") }
+    override fun onPause() { NativeCalls.debug("activity_paused"); super.onPause() }
+    override fun onDestroy() { NativeCalls.debug("activity_destroyed"); super.onDestroy() }
     private val incomingShare = mutableStateOf<NativeIncomingShare?>(null)
     private var incomingShareSource: Intent? = null
     private val authReturn = mutableStateOf<String?>(null)
@@ -514,7 +517,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
         }
     }
 
-    LaunchedEffect(token) { NativeCalls.configure(context, token) }
+    LaunchedEffect(token) { NativeCalls.configure(context, token, "main_activity") }
     LaunchedEffect(openInvite, token, addingAccount, me?.id, me?.profileSetupRequired) {
         if (openInvite != null && token.isNotBlank() && !addingAccount && me != null && me?.profileSetupRequired != true) {
             communityEntry = "join:$openInvite"; onIntentConsumed()
@@ -748,7 +751,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                         scope.launch { try { withContext(Dispatchers.IO) { api.logout(session) } } catch (_: Exception) { }
                             account?.let { id -> NativeAccounts.remove(context, id); withContext(Dispatchers.IO) { cache.clear(id); NativeVoiceOutbox.clear(context, id) }; NativeDrafts(context, id).clear() }
                             if (token == session) {
-                                MessagingService.stop(context); NativeCalls.configure(context, ""); attachmentBatch = null; selectedChat = null
+                                MessagingService.stop(context); NativeCalls.configure(context, "", "account_logout"); attachmentBatch = null; selectedChat = null
                                 prefs.edit().remove("token").remove("user_id").apply(); token = ""; error = ""
                             } }
                     }

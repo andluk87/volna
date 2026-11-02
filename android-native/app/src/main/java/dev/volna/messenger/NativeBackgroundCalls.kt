@@ -28,6 +28,6 @@ internal fun NativeBackgroundCallHost(api:NativeApi) {
   context.startActivity(IncomingCallActivity.intent(context,incoming.call.id,incoming.account,true))
   dismissed=dismissed+incoming.call.id
  }){NativeText("Ответить")}},dismissButton={TextButton(onClick={scope.launch{
-  try{withContext(Dispatchers.IO){val device=context.getSharedPreferences("volna-native",Context.MODE_PRIVATE).getString("call_device",null)?:"0".repeat(32);api.callAction(NativeCredentials.access(incoming.account),device,incoming.call.id,"end")};NativeBackgroundCalls.remove(incoming.account)}catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(_:Exception){}
+  try{withContext(Dispatchers.IO){val device=context.getSharedPreferences("volna-native",Context.MODE_PRIVATE).getString("call_device",null)?:"0".repeat(32);api.callAction(NativeCredentials.access(incoming.account),device,incoming.call.id,"end",endReason="user_reject")};NativeBackgroundCalls.remove(incoming.account)}catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(_:Exception){}
  }}){NativeText("Отклонить")}})
 }

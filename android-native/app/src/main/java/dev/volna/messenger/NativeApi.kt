@@ -448,9 +448,10 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         return parseCall(nativeRetryCallMutation { call("/calls/start", "POST", token, data) })
     }
 
-    fun callAction(token: String, device: String, id: String, action: String, description: JSONObject? = null): VolnaCall? {
+    fun callAction(token: String, device: String, id: String, action: String, description: JSONObject? = null, endReason: String? = null): VolnaCall? {
         val data = JSONObject().put("device", device)
         if (action == "accept") data.put("protocol", 2)
+        if (action == "end" && endReason != null) data.put("end_reason", endReason)
         if (description != null) data.put("description", description)
         val result = if(action in listOf("offer","accept","answer","end")) nativeRetryCallMutation { call("/calls/$id/$action", "POST", token, data) } else call("/calls/$id/$action", "POST", token, data)
         return if (action == "end") null else parseCall(result)

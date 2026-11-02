@@ -10,7 +10,7 @@ import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 const error=(status,message)=>Object.assign(new Error(message),{status});
 const emojis=['👍','❤️','😂','🔥','🎉','😢','👏','😍','🤔','😮','🙏','💯','👎','🥰','🤣','😎','😭','🤝','💪','👋','✨','💙','😡','🤗'];
-export function messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions=()=>null,serviceMessages=()=>null,isOnline=()=>false,canSeePresence=()=>false,publish=()=>{}}) {
+export function messaging({db,uploads,member,broadcast,userById,json,body,transcriber,expressions=()=>null,serviceMessages=()=>null,onMessage=()=>{},isOnline=()=>false,canSeePresence=()=>false,publish=()=>{}}) {
   mkdirSync(uploads,{recursive:true});
   db.exec('CREATE TABLE IF NOT EXISTS chat_visibility(user_id INTEGER NOT NULL REFERENCES users(id),chat_id INTEGER NOT NULL REFERENCES chats(id),hidden_before INTEGER NOT NULL DEFAULT 0,deleted INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(user_id,chat_id))');
   const cutoff=(chat,uid)=>db.prepare('SELECT hidden_before FROM chat_visibility WHERE user_id=? AND chat_id=?').get(uid,chat)?.hidden_before||0;
@@ -254,7 +254,7 @@ export function messaging({db,uploads,member,broadcast,userById,json,body,transc
       }
       if(action==='messages'&&method==='POST'){
         const data=await body(req);const result=insert(chat,uid,{text:data.text,client_id:data.client_id,attachment_id:data.attachment_id,reply_to:data.reply_to,reply_quote:data.reply_quote,expression_id:data.expression_id,emoji_entities:data.emoji_entities,poll:data.poll,checklist:data.checklist,silent:data.silent,effect:data.effect});
-        const message=hydrate(result.row);if(result.created)broadcast(chat,{type:'message',message});json(res,result.created?201:200,message);return true;
+        const message=hydrate(result.row);if(result.created)broadcast(chat,{type:'message',message});onMessage(result.row);json(res,result.created?201:200,message);return true;
       }
     }
     const messageMatch=path.match(/^\/api\/messages\/(\d+)(?:\/(edit|delete|react|pin|forward|transcribe|vote|check))?$/);

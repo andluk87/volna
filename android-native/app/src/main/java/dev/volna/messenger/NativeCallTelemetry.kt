@@ -16,6 +16,8 @@ internal object NativeCallTelemetry {
     private val api by lazy { NativeApi(BuildConfig.API_BASE_URL,requestTimeoutSeconds=5) }
     @Volatile private var latest:Item? = null
     private var warningAt=0L
+    private val processId=UUID.randomUUID().toString().replace("-", "")
+    private var sequence=0L
     init { scope.launch { for(item in queue)try { api.callDiagnostic(item.session,item.body) } catch(problem:Exception) {
         synchronized(this@NativeCallTelemetry) { if(latest===item){val copy=JSONObject(item.body.toString()).put("report_id",UUID.randomUUID().toString().replace("-", "")).put("delivery_error_type",problem.javaClass.simpleName);if(problem is NativeApiException)copy.put("delivery_http_status",problem.status);latest=Item(item.session,copy)} }
         val now=android.os.SystemClock.elapsedRealtime();if(now-warningAt>10000){warningAt=now;Log.w("VolnaCallTelemetry","delivery_failed status=${(problem as? NativeApiException)?.status?:0} type=${problem.javaClass.simpleName}")}
@@ -26,8 +28,10 @@ internal object NativeCallTelemetry {
     }
     @Synchronized fun send(session:String,device:String,call:String?,event:String,fields:JSONObject=JSONObject()) {
         if(session.isBlank()||device.length!=32)return
-        val body=JSONObject(fields.toString()).put("report_id",UUID.randomUUID().toString().replace("-", "")).put("event",event).put("platform","android").put("device",device).put("client_version",BuildConfig.VERSION_NAME).put("client_time",System.currentTimeMillis())
+        val body=JSONObject(fields.toString()).put("sequence",++sequence).put("process_id",processId).put("uptime_ms",android.os.SystemClock.elapsedRealtime()).put("sdk",android.os.Build.VERSION.SDK_INT).put("model",android.os.Build.MODEL.take(64)).put("manufacturer",android.os.Build.MANUFACTURER.take(64)).put("report_id",UUID.randomUUID().toString().replace("-", "")).put("event",event).put("platform","android").put("device",device).put("client_version",BuildConfig.VERSION_NAME).put("client_time",System.currentTimeMillis())
         if(!call.isNullOrBlank())body.put("call_id",call)
+        // Mirror controlled fields to logcat so termination is visible even during a server outage.
+        if(call!=null || event=="client.error")Log.i("VolnaCallDebug",body.toString())
         val item=Item(session,body);latest=item;queue.trySend(item)
     }
 }

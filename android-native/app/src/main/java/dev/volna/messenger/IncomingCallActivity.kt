@@ -47,7 +47,8 @@ class IncomingCallActivity : ComponentActivity() {
         if(NativeCalls.state.value.call!=null&&!NativeCalls.configuredFor(token)){finish();return}
 
         if (token.isBlank()) { finish(); return }
-        NativeCalls.configure(this, token)
+        NativeCalls.configure(this, token, "call_activity")
+        NativeCalls.debug("activity_created")
         receive(intent)
         setContent { NativeEmojiProvider {
             val state by NativeCalls.state.collectAsState()
@@ -73,6 +74,10 @@ class IncomingCallActivity : ComponentActivity() {
         } }
     }
 
+    override fun onResume() { super.onResume(); NativeCalls.debug("activity_resumed") }
+    override fun onPause() { NativeCalls.debug("activity_paused"); super.onPause() }
+    override fun onDestroy() { NativeCalls.debug("activity_destroyed"); super.onDestroy() }
+
     override fun onUserLeaveHint() { super.onUserLeaveHint(); enterCallPip() }
     override fun onPictureInPictureModeChanged(inPip: Boolean, config: android.content.res.Configuration) { super.onPictureInPictureModeChanged(inPip, config); NativeCallLayout.inPip = inPip }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); receive(intent) }
@@ -83,7 +88,7 @@ class IncomingCallActivity : ComponentActivity() {
         val requestedAccount=intent.getLongExtra("account_id",0).takeIf{it>0}?:accountId
         val session=NativeCredentials.access(requestedAccount)
         if(session.isBlank()||(NativeCalls.state.value.call!=null&&!NativeCalls.configuredFor(session))){finish();return}
-        accountId=requestedAccount;NativeCalls.configure(this,session)
+        accountId=requestedAccount;NativeCalls.configure(this,session,"call_activity")
         expectedId = id; resolved = false
         answerRequested = intent.action == ACTION_ANSWER
         lifecycleScope.launch {

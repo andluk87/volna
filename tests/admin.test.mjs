@@ -135,3 +135,19 @@ test('changing administrator phone revokes old administrative credentials while 
  app=create('+79681411241');assert.equal(app.db.prepare('SELECT COUNT(*) n FROM admin_sessions').get().n,1);await app.close();app=null;
  app=create('+79000000002');assert.equal(app.db.prepare('SELECT COUNT(*) n FROM admin_sessions').get().n,0);assert.equal(app.db.prepare("SELECT value FROM admin_meta WHERE key='admin-phone'").get().value,'+79000000002');
 });
+test('call debug shares are admin-only, expire, can be revoked and never expose arbitrary files',async t=>{
+ const f=await fixture(t);assert.equal((await f.admin('call-debug')).status,401);assert.equal((await f.admin('call-debug/share',{})).status,401);await f.login();
+ const overview=await f.admin('call-debug');assert.equal(overview.status,200);assert.match(overview.data.text,/server.started/);assert.ok(overview.data.files.some(x=>x.name==='volna-calls.log'));
+ assert.equal((await f.admin('call-debug/share',{}, {'X-Admin-CSRF':''})).status,403);
+ const base=`http://127.0.0.1:${f.app.server.address().port}`;
+ let share=(await f.admin('call-debug/share',{})).data;assert.match(share.path,/^\/api\/call-debug\/[A-Za-z0-9_-]{43}$/);
+ assert.ok(!JSON.stringify(f.app.db.prepare('SELECT * FROM call_debug_shares').all()).includes(share.path.split('/').at(-1)));
+ let response=await fetch(base+share.path);assert.equal(response.status,200);assert.match(response.headers.get('content-type'),/^text\/plain/);assert.equal(response.headers.get('cache-control'),'no-store');assert.match(await response.text(),/server.started/);
+ assert.equal((await fetch(base+share.path,{method:'POST'})).status,404);assert.equal((await fetch(base+'/api/call-debug/not-a-token')).status,404);
+ const download=await fetch(f.base+'/admin/api/call-debug/download?file=..%2Fvolna.db',{headers:{Cookie:f.cookie()}});assert.equal(download.status,404);
+ const normalDownload=await fetch(f.base+'/admin/api/call-debug/download',{headers:{Cookie:f.cookie()}});assert.equal(normalDownload.status,200);assert.match(normalDownload.headers.get('content-disposition'),/volna-calls-recent.log/);
+ const second=(await f.admin('call-debug/share',{})).data;assert.equal((await fetch(base+share.path)).status,404);assert.equal((await fetch(base+second.path)).status,200);
+ f.advance(86400001);assert.equal((await fetch(base+second.path)).status,404);await f.login();share=(await f.admin('call-debug/share',{})).data;assert.equal((await fetch(base+share.path)).status,200);
+ assert.equal((await f.admin('call-debug/revoke',{})).status,200);assert.equal((await fetch(base+share.path)).status,404);
+ assert.ok(f.app.db.prepare("SELECT 1 FROM admin_audit WHERE action='call.debug.share'").get());
+});
