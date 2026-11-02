@@ -37,3 +37,11 @@ test('call commands retry network/5xx failures once with the identical key, neve
  for(const error of [Object.assign(Error('rejected'),{status:409}),Object.assign(Error('cancelled'),{name:'AbortError'})]){let count=0;await assert.rejects(retryCallMutation(async()=>{count++;throw error;},'/calls/start','token',body));assert.equal(count,1);}
  let count=0;await assert.rejects(retryCallMutation(async()=>{count++;throw Error('down');},'/profile','token',body));assert.equal(count,1);
 });
+
+test('ICE recovery continues immediately after signaling and never wakes on unchanged stable state',async t=>{
+ const h=harness();t.after(h.stop);const busy=[];h.recovery.onProgress=()=>busy.push(h.recovery.busy);
+ await h.recovery.sync(h.call);assert.deepEqual(busy,[false]);const n=h.sent.length;
+ await h.recovery.sync(h.call);assert.deepEqual(busy,[false]);assert.equal(h.sent.length,n);
+ h.setCall({restart_requested:true,reconnecting:true});await h.recovery.sync(h.call);assert.deepEqual(busy,[false,false]);assert.equal(h.offers(),1);
+ h.stop();await h.recovery.sync(h.call);assert.deepEqual(busy,[false,false]);
+});

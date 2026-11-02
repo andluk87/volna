@@ -164,7 +164,7 @@ object NativeCalls {
                     if (state.value.call != null) { diagnosticFailure(problem,"poll");debug("poll_error",JSONObject().put("poll_age_ms",SystemClock.elapsedRealtime()-lastSuccess)) }
                     if (version == generation && state.value.call != null && SystemClock.elapsedRealtime() - lastSuccess > 35_000) end("Нет связи с сервером", reason="poll_timeout")
                 }
-                withTimeoutOrNull(2_000) { pollWake.receive() }
+                withTimeoutOrNull(nativeCallPollDelay(state.value.call!=null,state.value.connected,state.value.call?.reconnecting==true)) { pollWake.receive() }
             }
         }
     }
@@ -242,7 +242,7 @@ object NativeCalls {
                 throw cancelled
             } catch (problem: Exception) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось начать звонок", reason="start_error") } }
             catch (problem: LinkageError) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.", reason="webrtc_unavailable") } }
-            finally { if (version == generation) mutableState.update { it.copy(busy = false) } }
+            finally { if (version == generation) { mutableState.update { it.copy(busy = false) };pollWake.trySend(Unit) } }
         }
     }
 
@@ -276,7 +276,7 @@ object NativeCalls {
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (problem: Exception) { if (version == generation) { if(problem is NativeApiException && problem.errorCode == "CALL_ANSWERED_ELSEWHERE") end(notifyServer = false, reason="other_device") else { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось принять звонок", reason="accept_error") } } }
             catch (problem: LinkageError) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.", reason="webrtc_unavailable") } }
-            finally { if (version == generation) mutableState.update { it.copy(busy = false) } }
+            finally { if (version == generation) { mutableState.update { it.copy(busy = false) };pollWake.trySend(Unit) } }
         }
     }
 
@@ -673,6 +673,9 @@ object NativeCalls {
 
     private fun updateProtocolCall(call: VolnaCall) {
         mutableState.update { if (it.call?.id == call.id && call.version >= (it.call?.version ?: 0)) it.copy(call = call) else it }
+        // An SSE wake may already have been consumed while this mutation was in flight.
+        // Continue negotiation immediately after the reply, instead of waiting for a poll timeout.
+        if(state.value.call?.id==call.id)pollWake.trySend(Unit)
     }
 
     private fun requestRecovery() {
