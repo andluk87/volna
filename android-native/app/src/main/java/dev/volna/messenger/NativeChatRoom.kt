@@ -105,6 +105,11 @@ internal fun ChatRoomScreen(
     var failedDraft by remember(chat.id, user?.id) { mutableStateOf(drafts.failed(chat.id)) }
     var entities by remember(chat.id, user?.id) { mutableStateOf(drafts.entities(chat.id)) }
     val panel = remember(chat.id, user?.id) { NativePanelState().apply { tab = NativeExpressionStore(context, user?.id ?: 0).lastTab } }
+    var botCommands by remember(chat.id,token){mutableStateOf(emptyList<NativeBotCommand>())}
+    var botSending by remember(chat.id,token){mutableStateOf(false)}
+    LaunchedEffect(chat.id,token){
+        if(chat.kind=="direct")try{botCommands=withContext(Dispatchers.IO){api.botCommands(token,chat.id)}}catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){}
+    }
     val inputFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
@@ -320,6 +325,10 @@ internal fun ChatRoomScreen(
         }
         if (!chat.canSend) NativeText(if(chat.topicClosed) "Тема закрыта" else "Публиковать могут только администраторы", Modifier.fillMaxWidth().background(Panel).padding(16.dp), color = Muted, fontSize = 13.sp)
         else NativeGlassSurface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp).onSizeChanged { composerHeight = it.height / density.density }, radius = 28.dp, floating = true) { Row(Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            if(!recorder.recording)NativeBotMenu(botCommands,enabled=!busy&&!botSending){ command->
+                botSending=true
+                onSend(command,null,emptyList(),null){success->botSending=false;if(!success)Toast.makeText(context,"Не удалось отправить команду. Повторите из меню.",Toast.LENGTH_SHORT).show()}
+            }
             IconButton(onClick = { if (editTarget != null) panel.tab = "emoji"; togglePanel() }) { Icon(if (panel.open) Icons.Outlined.Keyboard else Icons.Outlined.EmojiEmotions, if (panel.open) "Переключиться на клавиатуру" else "Эмодзи, стикеры и GIF", tint = Muted) }
             if (recorder.recording) {
                 IconButton(onClick = recorder::cancel) { Icon(Icons.Outlined.DeleteOutline, "Отменить запись", tint = MaterialTheme.colorScheme.error) }
@@ -340,7 +349,7 @@ internal fun ChatRoomScreen(
                 NativeRichComposer(input, ::changeInput, entities, user?.id ?: 0, token, api,
                     Modifier.weight(1f).focusRequester(inputFocus).onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.isCtrlPressed || event.isMetaPressed)) { val kind = when(event.key){Key.B -> "bold";Key.I -> "italic";Key.U -> "underline";Key.K -> "link";else -> null}; if(kind != null){applyFormat(kind);true}else false } else false }.onFocusChanged { if (it.isFocused && panel.open && !panel.searching) panel.open = false },
                     enabled = true, maxLines = if (LocalConfiguration.current.screenHeightDp < 480) 3 else 6, onFormat = { applyFormat(it) })
-                if (!recorder.recording) IconButton(onClick = { formattingSelection = input.selection; formattingMenu = true }) { Icon(Icons.Outlined.TextFormat, "Форматирование текста", tint = Muted) }
+                if (!recorder.recording && botCommands.isEmpty()) IconButton(onClick = { formattingSelection = input.selection; formattingMenu = true }) { Icon(Icons.Outlined.TextFormat, "Форматирование текста", tint = Muted) }
                 if (!recorder.recording) IconButton(onClick = { attachmentMenu = true }, enabled = !busy && editTarget == null) { Icon(Icons.Outlined.AttachFile, "Вложение", tint = Muted) }
             }
             if (input.text.isBlank() && editTarget == null || recorder.recording) NativeRecordButton(recorder, enabled = !busy && !callActive) { micPermission.launch(Manifest.permission.RECORD_AUDIO) }

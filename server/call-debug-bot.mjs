@@ -2,13 +2,14 @@ import {randomBytes} from 'node:crypto';
 import {ADMIN_PHONE} from './admin-config.mjs';
 import {normalizePhone} from './phone-auth.mjs';
 /** A private command chat, available only to the configured administrator's messenger account. */
-export function callDebugBot({db,access,broadcast,hydrate,clock=Date.now,adminPhone=process.env.ADMIN_PHONE||ADMIN_PHONE,publicOrigin=process.env.CHAT_DOMAIN?`https://${process.env.CHAT_DOMAIN}`:null}){
+export function callDebugBot({menus,db,access,broadcast,hydrate,clock=Date.now,adminPhone=process.env.ADMIN_PHONE||ADMIN_PHONE,publicOrigin=process.env.CHAT_DOMAIN?`https://${process.env.CHAT_DOMAIN}`:null}){
  adminPhone=normalizePhone(adminPhone);
  const help='Журнал звонков Волны\n\n/calllog — создать ссылку на журнал на 24 часа\n/revoke — отозвать доступ по ссылке\n/help — показать команды\n\nСсылка показывает текущий журнал и два последних архива, обновляется при каждом открытии и даёт доступ только к диагностике звонков. Новая ссылка отменяет предыдущую. Пришлите ссылку для разбора сбоя.';
  function ensure(uid){
   const admin=db.prepare('SELECT id FROM users WHERE phone=? AND admin_blocked=0').get(adminPhone);if(!admin||uid!==undefined&&uid!==admin.id)return null;
   let actor=db.prepare("SELECT id FROM users WHERE phone='service:call-debug-bot'").get();
   if(!actor)actor={id:Number(db.prepare('INSERT INTO users(username,name,phone,admin_blocked,admin_reason) VALUES(?,?,?,?,?)').run('volna_diagnostics_'+randomBytes(6).toString('hex'),'Волна — диагностика','service:call-debug-bot',1,'Служебный бот: вход запрещён').lastInsertRowid)};
+  menus?.register(actor.id,[{command:'/calllog',description:'Ссылка на актуальный журнал на 24 часа'},{command:'/revoke',description:'Отозвать доступ'},{command:'/help',description:'Команды'}],admin.id);
   let chat=db.prepare("SELECT id FROM chats WHERE pair=?").get('call-debug-bot:'+admin.id);
   if(!chat){
    db.exec('BEGIN IMMEDIATE');try{

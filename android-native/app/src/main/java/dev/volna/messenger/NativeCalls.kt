@@ -54,7 +54,7 @@ object NativeCalls {
     private val api by lazy { NativeApi(BuildConfig.API_BASE_URL) }
     @Volatile private var token = ""
     internal fun accountId():Long = NativeCredentials.accountId(token)
-    internal fun configuredFor(session: String) = token.isNotBlank() && NativeCredentials.resolve(token) == NativeCredentials.resolve(session)
+    internal fun configuredFor(session: String) = nativeSameCallSession(token,session,NativeCredentials::resolve)
     private var device = ""
     private var diagnosticStage = "start"
     private var diagnosticJob: Job? = null
@@ -127,8 +127,12 @@ object NativeCalls {
     fun configure(appContext: Context, sessionToken: String, trigger:String) {
         debug("configure_requested",JSONObject().put("trigger",trigger).put("session_same",configuredFor(sessionToken)).put("session_blank",sessionToken.isBlank()))
         NativeTelecom.configure(appContext)
-        if (context != null && token == sessionToken) { debug("configure_unchanged"); return }
-        if(sessionToken.isNotBlank()&&state.value.call!=null&&!configuredFor(sessionToken)){debug("configure_blocked");return}
+        when(nativeCallConfiguration(context!=null,token,sessionToken,state.value.call!=null,NativeCredentials::resolve)) {
+            // NativeApi resolves refresh aliases on every request. Keep the live call and its jobs.
+            NativeCallConfiguration.KEEP -> { debug("configure_unchanged"); return }
+            NativeCallConfiguration.BLOCK -> { debug("configure_blocked"); return }
+            NativeCallConfiguration.RESET -> Unit
+        }
         end(reason="session_reset")
         pollJob?.cancel()
         clockJob?.cancel()

@@ -15,6 +15,13 @@ test('private diagnostic bot issues live links only to admin, retries once, revo
  assert.ok(!(await req('/chats',other.token)).data.some(c=>c.name==='Волна — диагностика'));
  const chats=(await req('/chats',admin.token)).data,chat=chats.find(c=>c.name==='Волна — диагностика');assert.ok(chat);assert.equal(chats.filter(c=>c.name==='Волна — диагностика').length,1);
  assert.equal((await req('/chats',admin.token)).data.filter(c=>c.name==='Волна — диагностика').length,1);
+ const menu=(await req(`/chats/${chat.id}/bot-commands`,admin.token)).data.commands;assert.deepEqual(menu.map(x=>x.command),['/calllog','/revoke','/help']);assert.ok(menu.every(x=>x.description));
+ assert.equal((await req(`/chats/${chat.id}/bot-commands`,other.token)).status,404);
+ assert.equal((await req(`/chats/${chat.id}/bot-commands`,admin.token,{})).status,405);
+ const otherBot=Number(app.db.prepare('INSERT INTO users(username,name,phone,admin_blocked) VALUES(?,?,?,1)').run('menu-other-bot','Other bot','service:menu-test').lastInsertRowid);
+ const ownChat=Number(app.db.prepare("INSERT INTO chats(pair,kind) VALUES('menu-other-test','direct')").run().lastInsertRowid);for(const id of [admin.user.id,otherBot])app.db.prepare('INSERT INTO members(chat_id,user_id) VALUES(?,?)').run(ownChat,id);
+ app.db.prepare('INSERT INTO bot_menus VALUES(?,?,?)').run(otherBot,null,JSON.stringify([{command:'/status',description:'Other bot status'}]));assert.deepEqual((await req(`/chats/${ownChat}/bot-commands`,admin.token)).data.commands.map(x=>x.command),['/status']);
+ const ordinary=(await req('/chats',admin.token,{user_id:other.user.id})).data;assert.deepEqual((await req(`/chats/${ordinary.id}/bot-commands`,admin.token)).data.commands,[]);
  const command={text:'/calllog',client_id:'debug-command-000001'};
  assert.equal((await req(`/chats/${chat.id}/messages`,other.token,command)).status,404);
  assert.equal((await req(`/chats/${chat.id}/messages`,admin.token,command)).status,201);
@@ -24,6 +31,7 @@ test('private diagnostic bot issues live links only to admin, retries once, revo
  rows=(await req(`/chats/${chat.id}/messages`,admin.token)).data;assert.equal(rows.filter(r=>r.text===reply.text).length,1);
  await req(`/chats/${chat.id}/messages`,admin.token,{text:'/revoke',client_id:'debug-command-000002'});assert.equal((await fetch(base+url.pathname)).status,404);
  app.db.prepare("INSERT INTO members(chat_id,user_id,role) VALUES(?,?,'member')").run(chat.id,other.user.id);
+ assert.deepEqual((await req(`/chats/${chat.id}/bot-commands`,other.token)).data.commands,[]);
  await req(`/chats/${chat.id}/messages`,admin.token,{text:'/calllog',client_id:'debug-command-000003'});assert.equal(app.db.prepare('SELECT COUNT(*) n FROM call_debug_shares').get().n,0);
 });
 test('shared live log spans rotation and excludes symlinks and unrelated files',async t=>{

@@ -208,6 +208,10 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
 
     internal fun folders(token: String) = call("/folders", token = token)
     internal fun saveFolders(token: String, version: Long, items: List<NativeFolder>) = call("/folders", "POST", token, JSONObject().put("version", version).put("folders", NativeFolders.encode(items)))
+    internal fun botCommands(token:String,chat:Long):List<NativeBotCommand> {
+        val rows=call("/chats/$chat/bot-commands",token=token).optJSONArray("commands")?:return emptyList()
+        return (0 until rows.length()).map { val row=rows.getJSONObject(it);NativeBotCommand(row.getString("command"),row.getString("description")) }
+    }
     fun chats(token: String): List<VolnaChat> {
         val request = Request.Builder().url("$base/api/chats").header("Authorization", "Bearer $token").build()
         http.newCall(request).execute().use { response ->

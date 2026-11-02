@@ -8,6 +8,7 @@ import http from 'node:http';
 import {folders} from './folders.mjs';
 import {contacts} from './contacts.mjs';
 import {initAdminSchema,readAdminSettings} from './admin-config.mjs';
+import {botMenus} from './bot-menus.mjs';
 import {callDebugBot} from './call-debug-bot.mjs';
 import {callLogAccess} from './call-log-access.mjs';
 import {createAdminServer} from './admin.mjs';
@@ -118,7 +119,8 @@ export function createApp({ pushSender, callLogOptions={}, callDebugOptions={}, 
   const handleTopics=topics({db,body,json,member,broadcast,publish});
   const callLog=createCallLog({directory:database===':memory:'?null:join(dirname(database),'logs'),...callLogOptions});callLog.write('server.started',{reason:'call_logging_enabled'});
   const callDebug=callLogAccess({db,file:callLog.file,clock:adminOptions.clock||Date.now});
-  diagnosticBot=callDebugBot({db,access:callDebug,broadcast,hydrate:handleMessaging.hydrate,adminPhone:adminOptions.adminPhone,publicOrigin:callDebugOptions.publicOrigin??(process.env.CHAT_DOMAIN?`https://${process.env.CHAT_DOMAIN}`:undefined),clock:adminOptions.clock||Date.now});
+  const commandMenus=botMenus({db,json,member});
+  diagnosticBot=callDebugBot({menus:commandMenus,db,access:callDebug,broadcast,hydrate:handleMessaging.hydrate,adminPhone:adminOptions.adminPhone,publicOrigin:callDebugOptions.publicOrigin??(process.env.CHAT_DOMAIN?`https://${process.env.CHAT_DOMAIN}`:undefined),clock:adminOptions.clock||Date.now});
   let callService;
   pushService = notifications({callLog:callLog.write,db,auth,body,json,sender:pushSender,callReceipt:id=>callService?.receipt(id),contactDisplay:(uid,id,name)=>contactService?.display(uid,id,name)||name});
 
@@ -175,6 +177,7 @@ export function createApp({ pushSender, callLogOptions={}, callDebugOptions={}, 
       }
       limit(`user:${uid}`, 240);
       if(path==='/api/chats'&&method==='GET')diagnosticBot.ensure(uid);
+      if(commandMenus.handle(req,res,url,uid))return;
       if(await handleAppearance(req,res,url,uid))return;
       if (await contactService.handle(req,res,url,uid)) return;
       if (await mobileService.handle(req,res,url,session)) return;
