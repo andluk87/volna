@@ -94,3 +94,12 @@ test('lifecycle reports before and after a call retain ordering and require auth
  const text=readFileSync(join(dir,'volna-calls.log'),'utf8'),row=text.trim().split('\n').map(JSON.parse).find(r=>r.event==='client.lifecycle');
  assert.equal(row.sequence,1);assert.equal(row.process_id,payload.process_id);assert.equal(row.uptime_ms,12345);assert.equal(row.session_same,true);assert.ok(!text.includes('NEVER-LOG'));
 });
+
+test('call startup bundles media, prefetches one relay session and candidate logs exclude addresses',async()=>{
+ const {callRtcConfig,callIceEvent}=await import('../client/src/call-rtc-config.mjs');
+ const {diagnosticFields}=await import('../server/call-diagnostics.mjs');
+ const servers=[{urls:['turn:example.invalid:3478?transport=udp','turn:example.invalid:3478?transport=tcp'],username:'PRIVATE',credential:'PRIVATE'}],config=callRtcConfig({iceServers:servers,iceTransportPolicy:'all'});
+ assert.equal(config.iceServers,servers);assert.equal(config.iceTransportPolicy,'relay');assert.equal(config.bundlePolicy,'max-bundle');assert.equal(config.rtcpMuxPolicy,'require');assert.equal(config.iceCandidatePoolSize,1);
+ const event=callIceEvent('candidate:1 1 UDP 123 192.168.1.10 49160 typ relay raddr 10.0.0.1 rport 123 ufrag PRIVATE');assert.deepEqual(event,{candidate_type:'relay',protocol:'udp'});assert.deepEqual(callIceEvent('PRIVATE'),{});
+ assert.deepEqual(diagnosticFields({bundle_policy:'max-bundle',candidate_pool_size:1,...event,sdp:'PRIVATE'}),{bundle_policy:'max-bundle',candidate_type:'relay',protocol:'udp',candidate_pool_size:1});
+});

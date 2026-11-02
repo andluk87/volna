@@ -56,3 +56,11 @@ internal fun nativeCallDiagnosticHeader(session:String,owner:String,body:JSONObj
     val value=Base64.encodeToString(body.toString().toByteArray(Charsets.UTF_8),Base64.NO_WRAP or Base64.URL_SAFE or Base64.NO_PADDING)
     return value.takeIf { it.length<=4096 }
 }
+
+/** Candidate metadata only. Addresses, usernames and SDP never leave this helper. */
+internal fun nativeIceCandidateEvent(candidate:String):JSONObject {
+    val parts=candidate.trim().split(Regex("\\s+"))
+    val type=parts.getOrNull(parts.indexOf("typ")+1)
+    val protocol=parts.getOrNull(2)?.lowercase()
+    return JSONObject().apply { if(type in listOf("relay","host","srflx","prflx"))put("candidate_type",type);if(protocol in listOf("udp","tcp"))put("protocol",protocol) }
+}

@@ -333,10 +333,11 @@ object NativeCalls {
             val addresses = if (urls != null) (0 until urls.length()).map { urls.getString(it) } else listOf(server.getString("urls"))
             iceServers += PeerConnection.IceServer.builder(addresses).setUsername(server.optString("username")).setPassword(server.optString("credential")).createIceServer()
         }
-        val rtc = PeerConnection.RTCConfiguration(iceServers).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN; iceTransportsType=PeerConnection.IceTransportsType.RELAY }
+        val rtc = nativeCallRtcConfig(iceServers)
         diagnosticStep("peer_create");NativeCallDiagnostics.step("Создание соединения WebRTC")
         val pc = mediaFactory.createPeerConnection(rtc, observer(version)) ?: error("Не удалось создать WebRTC")
         peer = pc
+        diagnostic("rtc.state",JSONObject().put("bundle_policy","max-bundle").put("candidate_pool_size",rtc.iceCandidatePoolSize))
         NativeCallDiagnostics.step("Создание дорожки микрофона")
         val source = mediaFactory.createAudioSource(MediaConstraints().apply {
             optional.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
@@ -372,7 +373,7 @@ object NativeCalls {
         override fun onIceConnectionReceivingChange(value: Boolean) { }
         override fun onIceGatheringChange(value: PeerConnection.IceGatheringState?) { if(version==generation)diagnostic("rtc.state",JSONObject().put("gathering",value?.name?.lowercase())) }
         override fun onIceCandidateError(event: IceCandidateErrorEvent?) { if(version==generation&&event!=null)diagnostic("rtc.ice_error",JSONObject().put("ice_error",event.errorCode)) }
-        override fun onIceCandidate(value: IceCandidate?) { }
+        override fun onIceCandidate(value: IceCandidate?) { if(version==generation&&value!=null)diagnostic("rtc.candidate",nativeIceCandidateEvent(value.sdp)) }
         override fun onIceCandidatesRemoved(values: Array<out IceCandidate>?) { }
         override fun onAddStream(value: MediaStream?) { }
         override fun onRemoveStream(value: MediaStream?) { }
@@ -727,9 +728,10 @@ object NativeCalls {
     }
     private fun checkVersion(version: Int) { if (version != generation) throw CancellationException("Звонок отменён") }
     private suspend fun gather(pc: PeerConnection) {
+        val gatherStarted=SystemClock.elapsedRealtime()
         diagnosticStep("gather");NativeCallDiagnostics.step("Сбор сетевых кандидатов ICE")
         withTimeoutOrNull(10_000) { while (peer === pc && pc.iceGatheringState() != PeerConnection.IceGatheringState.COMPLETE) delay(80) }
-        if(peer===pc)diagnostic("rtc.gathered",nativeCandidateSummary(pc.localDescription?.description.orEmpty()))
+        if(peer===pc)diagnostic("rtc.gathered",nativeCandidateSummary(pc.localDescription?.description.orEmpty()).put("elapsed_ms",SystemClock.elapsedRealtime()-gatherStarted))
     }
     private fun localDescription(pc: PeerConnection): JSONObject = pc.localDescription.let { JSONObject().put("type", it.type.canonicalForm()).put("sdp", it.description) }
     private suspend fun createDescription(pc: PeerConnection, offer: Boolean, restart: Boolean = false): JSONObject {

@@ -8,6 +8,11 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[35],application=Application::class)
 class NativeCallTelemetryTest {
+ @Test fun candidateEventsContainOnlyTypeAndProtocol(){
+  val result=nativeIceCandidateEvent("candidate:1 1 udp 123 192.168.1.10 49160 typ relay raddr 10.0.0.1 rport 1 ufrag PRIVATE")
+  assertEquals("relay",result.getString("candidate_type"));assertEquals("udp",result.getString("protocol"));assertEquals(2,result.length());assertFalse(result.toString().contains("PRIVATE"));assertFalse(result.toString().contains("192.168"))
+ }
+
  @Test fun fallbackIsAccountScopedBoundedAndExpires(){
   val body=org.json.JSONObject().put("event","rtc.state").put("report_id","a".repeat(32)).put("client_time",1000).put("ice","checking")
   val header=nativeCallDiagnosticHeader("session-one","session-one",body,2000);assertNotNull(header)

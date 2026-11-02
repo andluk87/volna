@@ -1,3 +1,4 @@
+import {callRtcConfig,callIceEvent} from './call-rtc-config.mjs';
 import {callCandidateSummary,callStats} from './call-stats.mjs';
 import {callDiagnosticHeader} from './call-diagnostic-transport.mjs';
 import {version as clientVersion} from '../package.json';
@@ -71,7 +72,7 @@ export default forwardRef(function Calls({token,onError,onBeforeCall,accountName
   const config=await request('/calls/config?call_id='+current.current.id,token);check(version);setRelay(config.relayConfigured);if(!config.relayConfigured||!config.iceServers?.length)throw Error('Звонки доступны только через TURN. Сервер TURN не настроен.');
   diagnosticStage('microphone');const media=await navigator.mediaDevices.getUserMedia({audio:microphoneConstraints(true),video:false});if(version!==generation.current){media.getTracks().forEach(t=>t.stop());check(version);}stream.current=media;for(const track of media.getAudioTracks())track.addEventListener('ended',()=>{if(stream.current===media)report('client.lifecycle',{lifecycle:'media_track_ended',audio_track:false});});setHasAudio(true);keepAlive(true);
   window.dispatchEvent(new CustomEvent('volna-audio-play',{detail:null}));
-  diagnosticStage('peer_create');const pc=new RTCPeerConnection({iceServers:config.iceServers,iceTransportPolicy:'relay'});peer.current=pc;media.getTracks().forEach(t=>pc.addTrack(t,media));
+  diagnosticStage('peer_create');const pc=new RTCPeerConnection(callRtcConfig(config));peer.current=pc;report('rtc.state',{bundle_policy:'max-bundle',candidate_pool_size:1});media.getTracks().forEach(t=>pc.addTrack(t,media));
   if(!incoming&&pc.addTransceiver)pc.addTransceiver('video',{direction:'sendrecv'});
   remoteAudioStream.current=new MediaStream();remoteScreenStream.current=new MediaStream();
   pc.ontrack=e=>{if(pc!==peer.current)return;const video=e.track.kind==='video',received=video?remoteScreenStream.current:remoteAudioStream.current;if(!received.getTracks().some(t=>t.id===e.track.id))received.addTrack(e.track);
@@ -83,6 +84,7 @@ export default forwardRef(function Calls({token,onError,onBeforeCall,accountName
   pc.onsignalingstatechange=()=>{if(pc===peer.current)report('rtc.state',{signaling:pc.signalingState});};
   pc.oniceconnectionstatechange=()=>{if(pc===peer.current)report('rtc.state',{ice:pc.iceConnectionState,connection:pc.connectionState});};
   pc.onicegatheringstatechange=()=>{if(pc===peer.current)report('rtc.state',{gathering:pc.iceGatheringState});};
+  pc.onicecandidate=e=>{if(pc===peer.current&&e.candidate)report('rtc.candidate',callIceEvent(e.candidate.candidate));};
   pc.onicecandidateerror=e=>{if(pc===peer.current)report('rtc.ice_error',{ice_error:e.errorCode});};
   const stats=async()=>{try{const values=await pc.getStats();if(pc===peer.current)report('rtc.stats',callStats(values));}catch{}};clearInterval(diagnosticsTimer.current);diagnosticsTimer.current=setInterval(stats,5000);
   return pc;
