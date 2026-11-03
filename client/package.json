@@ -1,6 +1,6 @@
 {
   "name": "volna-client",
-  "version": "0.12.106",
+  "version": "0.12.107",
   "private": true,
   "type": "module",
   "description": "VLN desktop and mobile messenger",

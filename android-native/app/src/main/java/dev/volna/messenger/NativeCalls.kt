@@ -730,8 +730,17 @@ object NativeCalls {
     private suspend fun gather(pc: PeerConnection) {
         val gatherStarted=SystemClock.elapsedRealtime()
         diagnosticStep("gather");NativeCallDiagnostics.step("Сбор сетевых кандидатов ICE")
-        withTimeoutOrNull(10_000) { while (peer === pc && pc.iceGatheringState() != PeerConnection.IceGatheringState.COMPLETE) delay(80) }
-        if(peer===pc)diagnostic("rtc.gathered",nativeCandidateSummary(pc.localDescription?.description.orEmpty()).put("elapsed_ms",SystemClock.elapsedRealtime()-gatherStarted))
+        var lastCount=0
+        var changed=gatherStarted
+        while(peer===pc){
+            val now=SystemClock.elapsedRealtime()
+            val summary=nativeCandidateSummary(pc.localDescription?.description.orEmpty())
+            val count=summary.optInt("relay_count")
+            if(count!=lastCount){lastCount=count;changed=now}
+            val reason=nativeRelayGatherDecision(pc.iceGatheringState()==PeerConnection.IceGatheringState.COMPLETE,count,now-changed,now-gatherStarted)
+            if(reason!=null){diagnostic("rtc.gathered",summary.put("elapsed_ms",now-gatherStarted).put("gather_exit",reason));return}
+            delay(40)
+        }
     }
     private fun localDescription(pc: PeerConnection): JSONObject = pc.localDescription.let { JSONObject().put("type", it.type.canonicalForm()).put("sdp", it.description) }
     private suspend fun createDescription(pc: PeerConnection, offer: Boolean, restart: Boolean = false): JSONObject {
