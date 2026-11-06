@@ -45,7 +45,7 @@ export default forwardRef(function Calls({token,onError,onBeforeCall,accountName
  }
 
  const tones=useRef(null);if(!tones.current)tones.current=new CallTones();
- function update(c){if(c&&current.current?.id===c.id&&(c.version??0)<(current.current.version??0))return;current.current=c;setCall(c);if(c?.incoming&&c.status==='ringing')warmNetwork(c);window.dispatchEvent(new CustomEvent('volna-call-state',{detail:{accountId,active:!!c}}));tones.current.set(callTone(c,!!connectedAt.current&&peer.current?.connectionState==='connected'));window.volnaDesktop?.callState({active:!!c,incoming:!!c?.incoming&&c.status==='ringing',id:c?.id,name:accountName?`${c?.peer?.name||'Собеседник'} · ${accountName}`:c?.peer?.name}).catch(()=>{});if(typeof c?.peer_sharing==='boolean'||typeof c?.peer_video==='boolean')setRemoteSharing(!!c.peer_sharing||!!c.peer_video);if(c?.video||c?.peer_video||c?.peer_sharing)setVideoMode(true);}
+ function update(c){if(c&&current.current?.id===c.id&&(c.version??0)<(current.current.version??0))return;current.current=c;setCall(c);if(c?.incoming&&c.status==='ringing')warmNetwork(c);window.dispatchEvent(new CustomEvent('volna-call-state',{detail:{accountId,active:!!c}}));tones.current.set(callTone(c,peer.current?.connectionState==='connected',connectedAt.current>0));window.volnaDesktop?.callState({active:!!c,incoming:!!c?.incoming&&c.status==='ringing',id:c?.id,name:accountName?`${c?.peer?.name||'Собеседник'} · ${accountName}`:c?.peer?.name}).catch(()=>{});if(typeof c?.peer_sharing==='boolean'||typeof c?.peer_video==='boolean')setRemoteSharing(!!c.peer_sharing||!!c.peer_video);if(c?.video||c?.peer_video||c?.peer_sharing)setVideoMode(true);}
  function warmNetwork(c){
   if(warmer.current.matches(c.id,token)||!window.RTCPeerConnection)return;
   report('client.lifecycle',{lifecycle:'warmup_started'},c);
@@ -142,7 +142,7 @@ export default forwardRef(function Calls({token,onError,onBeforeCall,accountName
     if(c.incoming&&c.status==='ringing'&&!c.ring_received)await request(`/calls/${c.id}/ringing`,token,{device:device.current});
     const pc=peer.current;if(!c.incoming&&c.answer&&pc&&!pc.remoteDescription){started.current=Date.now();await pc.setRemoteDescription(c.answer);setScreenReady(pc.getTransceivers().some(t=>t.receiver?.track?.kind==='video'&&['sendrecv','sendonly'].includes(t.currentDirection)));if(pc.connectionState!=='connected')setPhase('Соединяем…');}
     if(pc)await recovery.current?.sync(c);
-    if(pc&&!connectedAt.current&&pc.connectionState!=='connected'&&Date.now()-started.current>180000){onError('Не удалось соединиться за минуту. Проверьте сеть и TURN.');await endRef.current('connect_timeout');}
+    if(pc&&!connectedAt.current&&pc.connectionState!=='connected'&&Date.now()-started.current>180000){onError('Не удалось восстановить соединение за три минуты. Проверьте сеть и TURN.');await endRef.current('connect_timeout');}
    }catch(e){if(!disposed&&current.current&&!document.hidden&&(e.status===401||Date.now()-lastSuccess>180000)){onError('Звонок прерван: нет связи с сервером');cleanup('poll_timeout');}}
    finally{polling=false;if(queued&&!disposed&&!operation.current)queueMicrotask(poll);}
   }

@@ -1,7 +1,7 @@
 import {callCandidateSummary} from './call-stats.mjs';
 /** Full gathering may wait for an unreachable alternate TURN route despite a ready relay. */
 export function relayGatherDecision({complete,relays,quietMs,elapsedMs,timeoutMs=10000,settleMs=200}){
- if(complete)return 'complete';
+ if(complete&&relays>0)return 'complete';
  if(relays>0&&quietMs>=settleMs)return 'relay_ready';
  if(elapsedMs>=timeoutMs)return 'timeout';
  return null;

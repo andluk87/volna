@@ -94,8 +94,9 @@ object NativeCalls {
         val app=context?:return
         if(networkCallback!=null)return
         val manager=app.getSystemService(android.net.ConnectivityManager::class.java)?:return
-        fun signature():String{val n=manager.activeNetwork;val c=manager.getNetworkCapabilities(n);return "$n:${c?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)}:${c?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)}:${c?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)}"}
+        fun signature():String{val n=manager.activeNetwork;val c=manager.getNetworkCapabilities(n);return "$n:${c?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)}:${c?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)}"}
         networkSignature=runCatching{signature()}.getOrDefault("")
+        networkReady=manager.activeNetwork!=null
         val callback=object:android.net.ConnectivityManager.NetworkCallback(){
             fun changed(){scope.launch{networkDebounce?.cancel();networkDebounce=scope.launch refresh@{
                 delay(400);if(token.isBlank())return@refresh
@@ -188,7 +189,7 @@ object NativeCalls {
         if (token.isBlank()) {unwatchNetwork();return}
         watchNetwork()
         toneObserver = scope.launch {
-            state.map { nativeOutgoingCallTone(it.call?.incoming ?: true,it.call?.status.orEmpty(),it.call?.ringReceived ?: false,it.connected) }
+            state.map { nativeOutgoingCallTone(it.call?.incoming ?: true,it.call?.status.orEmpty(),it.call?.ringReceived ?: false,it.connected,connectedAt>0) }
                 .distinctUntilChanged().collect { tone -> if (tone.isNotEmpty()) startRingback(tone) else stopRingback() }
         }
         clockJob = scope.launch { while (isActive) { updateClock(); delay(1_000) } }
@@ -423,7 +424,7 @@ object NativeCalls {
             val addresses = if (urls != null) (0 until urls.length()).map { urls.getString(it) } else listOf(server.getString("urls"))
             iceServers += PeerConnection.IceServer.builder(addresses).setUsername(server.optString("username")).setPassword(server.optString("credential")).createIceServer()
         }
-        val rtc = nativeCallRtcConfig(iceServers)
+        val rtc = nativeCallRtcConfig(iceServers,incoming=state.value.call?.incoming==true)
         diagnosticStep("peer_create");NativeCallDiagnostics.step("Создание соединения WebRTC")
         val pc = mediaFactory.createPeerConnection(rtc, observer({ ticket.version }) { warmPeer===ticket }) ?: error("Не удалось создать WebRTC")
         peer = pc
@@ -804,6 +805,10 @@ object NativeCalls {
                     else return@launch
                 }
                 if(peer!==pc||version!=generation)return@launch
+                if(pc.connectionState()==PeerConnection.PeerConnectionState.CONNECTED&&appliedRestart==epoch&&!call.restartRequested){
+                    disconnectedAt=0L
+                    mutableState.update{it.copy(connected=true,phase="Разговор")}
+                }
                 if(state.value.connected&&reportedMedia!=epoch){val updated=online(version){api.callProtocol(token,device,call.id,"media-state",JSONObject().put("connected",true).put("restart_generation",epoch))};checkVersion(version);updateProtocolCall(updated);reportedMedia=epoch}
                 val code=nativeCallSafetyCode(call.id,pc.localDescription?.description,pc.remoteDescription?.description)
                 mutableState.update{it.copy(safetyCode=code)}

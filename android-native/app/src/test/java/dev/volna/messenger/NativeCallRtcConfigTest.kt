@@ -12,6 +12,7 @@ class NativeCallRtcConfigTest {
         assertEquals(PeerConnection.RtcpMuxPolicy.REQUIRE,config.rtcpMuxPolicy)
         assertEquals(PeerConnection.SdpSemantics.UNIFIED_PLAN,config.sdpSemantics)
         assertEquals(1,config.iceCandidatePoolSize)
+        assertEquals(0,nativeCallRtcConfig(listOf(server),incoming=true).iceCandidatePoolSize)
         assertEquals(PeerConnection.IceTransportsType.RELAY,config.iceTransportsType)
         assertEquals(listOf(server),config.iceServers)
     }

@@ -9,6 +9,8 @@ class NativeCallGatherTest {
  @Test fun noRelayKeepsTheOriginalBoundAndCompleteReturnsImmediately(){
   assertNull(nativeRelayGatherDecision(false,0,5000,5000))
   assertEquals("timeout",nativeRelayGatherDecision(false,0,10000,10000))
-  assertEquals("complete",nativeRelayGatherDecision(true,0,0,1))
+  assertNull(nativeRelayGatherDecision(true,0,0,1))
+  assertEquals("complete",nativeRelayGatherDecision(true,2,0,1))
+  assertEquals("timeout",nativeRelayGatherDecision(true,0,10000,10000))
  }
 }

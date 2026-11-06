@@ -1,4 +1,4 @@
-export function callTone(call,connected=false){if(!call||connected)return '';if(call.incoming&&call.status==='ringing')return 'incoming';if(call.status==='ringing')return call.ring_received?'ringback':'setup';if(['preparing','connecting','active'].includes(call.status))return 'setup';return '';}
+export function callTone(call,connected=false,established=false){if(!call||connected||established)return '';if(call.incoming&&call.status==='ringing')return 'incoming';if(call.status==='ringing')return call.ring_received?'ringback':'setup';if(['preparing','connecting','active'].includes(call.status))return 'setup';return '';}
 export function callEndTone(reason,hadCall=true){
  if(['other_device','call_replaced','session_reset','component_unmount','abandoned_call','operation_cancelled'].includes(reason))return '';
  if(['call_busy','server_declined'].includes(reason))return 'busy';

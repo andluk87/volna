@@ -1,3 +1,4 @@
+import {callRequestBudget} from './call-request-budget.mjs';
 import {createCallLog} from './call-log.mjs';
 import {createPresence} from './presence.mjs';
 import {loginCodeMessages} from './login-code-messages.mjs';
@@ -175,7 +176,15 @@ export function createApp({ pushSender, callLogOptions={}, callDebugOptions={}, 
         const heartbeat = setInterval(() => { if (!res.write(': heartbeat\n\n')) res.end(); }, 20000);
         res.on('close', () => { clearInterval(heartbeat); list.delete(res); if (!list.size) {streams.delete(uid);} }); return;
       }
-      limit(`user:${uid}`, 240);
+      const callBudget=callRequestBudget(path,method);
+      if(callBudget){
+        const pollDevice=callBudget.bucket==='poll'?url.searchParams.get('device'):null;
+        if(pollDevice&&/^[a-f0-9]{32}$/.test(pollDevice)){
+          limit(`call:${session.token}:all-polls`,900);
+          limit(`call:${session.token}:poll:${pollDevice}`,callBudget.max);
+        }else limit(`call:${session.token}:${callBudget.bucket}`,callBudget.max);
+      }
+      else limit(`user:${uid}`, 240);
       if(path==='/api/chats'&&method==='GET')diagnosticBot.ensure(uid);
       if(commandMenus.handle(req,res,url,uid))return;
       if(await handleAppearance(req,res,url,uid))return;
