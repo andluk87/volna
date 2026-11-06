@@ -6,7 +6,7 @@ class NativeOutgoingCallToneTest {
   assertEquals("setup",nativeOutgoingCallTone(false,"preparing",false,false))
   assertEquals("setup",nativeOutgoingCallTone(false,"ringing",false,false))
   assertEquals("ringback",nativeOutgoingCallTone(false,"ringing",true,false))
-  for(status in listOf("connecting","active","ended"))assertEquals("",nativeOutgoingCallTone(false,status,true,false))
+  for(status in listOf("connecting","active")){assertEquals("setup",nativeOutgoingCallTone(false,status,true,false));assertEquals("setup",nativeOutgoingCallTone(true,status,true,false))};assertEquals("",nativeOutgoingCallTone(false,"ended",true,false))
   assertEquals("",nativeOutgoingCallTone(false,"ringing",true,true))
   assertEquals("",nativeOutgoingCallTone(true,"ringing",true,false))
  }

@@ -25,18 +25,22 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
  db.prepare('DELETE FROM call_events WHERE created<?').run(clock()-30*86400000);
  const clientMeta=req=>{const match=String(req.headers?.['user-agent']||'').match(/^VolnaAndroid\/([0-9]+\.[0-9]+\.[0-9]+)(?:\s|$)/);return match?{platform:'android',client_version:match[1]}:{};};
  const snapshot=c=>({call_id:c.id,chat_id:c.chat,caller:c.caller,callee:c.callee,caller_device:c.callerDevice,callee_device:c.calleeDevice,status:c.status,version:c.version,restart_generation:c.restartGeneration,age_ms:clock()-c.created,media_reporting:!!c.mediaReporting,connected:!!c.connectedAt,caller_connected:!!c.callerConnected,callee_connected:!!c.calleeConnected,caller_seen_ms:clock()-c.callerSeen,callee_seen_ms:clock()-c.calleeSeen,accepted_ms:c.acceptedAt?clock()-c.acceptedAt:undefined,video:!!c.video});
- const change=(c,type,details={})=>{c.version++;log(type,{...snapshot(c),...details});db.prepare('UPDATE call_history SET status=?,version=? WHERE id=?').run(c.status,c.version,c.id);const event={event_id:randomBytes(16).toString('hex'),call_id:c.id,type,sequence:c.version,schema_version:1,sent_at:clock(),expires_at:clock()+ttl.ring,payload:{chat_id:c.chat}};db.prepare('INSERT INTO call_events(event_id,call_id,version,type,created) VALUES(?,?,?,?,?)').run(event.event_id,c.id,c.version,type,clock());onEvent([c.caller,c.callee],event);};
+ const change=(c,type,details={})=>{c.version++;log(type,{...snapshot(c),...details});db.prepare('UPDATE call_history SET status=?,version=? WHERE id=?').run(c.status,c.version,c.id);const event={event_id:randomBytes(16).toString('hex'),call_id:c.id,type,sequence:c.version,schema_version:1,sent_at:clock(),expires_at:clock()+ttl.ring,payload:{chat_id:c.chat,...(type==='call.ended'?{status:c.status}:{})}};db.prepare('INSERT INTO call_events(event_id,call_id,version,type,created) VALUES(?,?,?,?,?)').run(event.event_id,c.id,c.version,type,clock());onEvent([c.caller,c.callee],event);};
  const finish=(c,status,reason='unspecified')=>{if(!active.has(c.id))return;log('call.finished',{...snapshot(c),status,reason});active.delete(c.id);c.status=status;change(c,'call.ended');db.prepare('UPDATE call_history SET ended=?,callee_read=? WHERE id=?').run(clock(),c.ringed&&!c.acceptedAt&&status!=='declined'?0:1,c.id);onEnd(c.id);onChange(c.chat,[c.caller,c.callee]);};
  const policy=callPolicy({db,auth,body,json,userById,onBlock:(uid,peer)=>{for(const c of active.values())if([c.caller,c.callee].includes(uid)&&[c.caller,c.callee].includes(peer))finish(c,c.connectedAt?'ended':'interrupted','call_policy_changed');}});
  const device=value=>{if(typeof value!=='string'||!/^[a-f0-9]{32}$/.test(value))throw fail(400,'Некорректное устройство');return value;};
- const timeoutReason=(c,now)=>now-c.created>4*3600000?'duration_limit':now-c.callerSeen>50000?'caller_heartbeat_timeout':c.acceptedAt&&now-c.calleeSeen>50000?'callee_heartbeat_timeout':c.recovering&&now-c.restartAt>ttl.reconnect?'ice_restart_timeout':c.status==='preparing'&&now-c.created>ttl.connect?'offer_timeout':c.status==='ringing'&&now-c.ringAt>(c.callerProtocol===2?ttl.ring:60000)?'ring_timeout':c.status==='connecting'&&now-c.acceptedAt>ttl.connect?'answer_timeout':c.mediaReporting&&!c.connectedAt&&c.acceptedAt&&now-c.acceptedAt>ttl.connect?'media_connect_timeout':null;
- const sweep=()=>{const now=clock();for(const [uid,item] of attempts)if(now-item.start>60000)attempts.delete(uid);for(const c of active.values()){const reason=timeoutReason(c,now);if(reason)finish(c,c.status==='ringing'?'missed':'interrupted',reason);}};
+ const networkGrace=c=>c.resilient?180000:50000;
+ const timeoutReason=(c,now)=>now-c.created>4*3600000?'duration_limit':now-c.callerSeen>networkGrace(c)?'caller_heartbeat_timeout':(c.acceptedAt||c.resilient&&c.status==='ringing')&&now-c.calleeSeen>networkGrace(c)?'callee_heartbeat_timeout':c.recovering&&now-c.restartAt>(c.resilient?180000:ttl.reconnect)?'ice_restart_timeout':c.status==='preparing'&&now-c.created>(c.resilient?180000:ttl.connect)?'offer_timeout':c.status==='ringing'&&now-c.ringAt-(c.ringPauseAt?now-c.ringPauseAt:0)>(c.callerProtocol===2?ttl.ring:60000)?'ring_timeout':c.status==='connecting'&&now-c.acceptedAt>(c.resilient?180000:ttl.connect)?'answer_timeout':c.mediaReporting&&!c.connectedAt&&c.acceptedAt&&now-c.acceptedAt>(c.resilient?180000:ttl.connect)?'media_connect_timeout':null;
+ const sweep=()=>{const now=clock();for(const [uid,item] of attempts)if(now-item.start>60000)attempts.delete(uid);for(const c of active.values()){
+  if(c.resilient&&c.status==='ringing'){const gap=Math.max(now-c.callerSeen,now-c.calleeSeen);if(gap>5000&&!c.ringPauseAt)c.ringPauseAt=now-gap+5000;else if(gap<=5000&&c.ringPauseAt){c.ringAt+=now-c.ringPauseAt;c.ringPauseAt=null;}}
+  const reason=timeoutReason(c,now);if(reason)finish(c,c.status==='ringing'?'missed':'interrupted',reason);
+ }};
  const diagnostics=callDiagnostics({db,body,json,auth,log,clock,device});
  const view=(c,uid,d)=>{
   if(!c)return null;const caller=c.caller===uid,owned=caller?c.callerDevice===d:c.calleeDevice===d;
   if(!owned&&(caller||c.calleeDevice))return {id:c.id,status:'other-device',reason:'answered_elsewhere',version:c.version};
   if(!caller&&c.status==='preparing')return null;
-  return {id:c.id,version:c.version,protocol:2,media_reporting:!!c.mediaReporting,relay_only:!!c.relayOnly,restart_generation:c.restartGeneration,restart_requested:!!c.restartRequested,reconnecting:!!c.recovering,connected_at:c.connectedAt||null,expires_at:(c.ringAt||c.created)+ttl.ring,chat_id:c.chat,peer:userById(caller?c.callee:c.caller),incoming:!caller,status:c.status,created:c.created,video:!!c.video,ring_received:!!c.ringReceived,
+  return {id:c.id,version:c.version,protocol:2,resilient:!!c.resilient,network_grace_ms:c.resilient?180000:50000,media_reporting:!!c.mediaReporting,relay_only:!!c.relayOnly,restart_generation:c.restartGeneration,restart_requested:!!c.restartRequested,reconnecting:!!c.recovering,connected_at:c.connectedAt||null,expires_at:(c.ringAt||c.created)+ttl.ring,chat_id:c.chat,peer:userById(caller?c.callee:c.caller),incoming:!caller,status:c.status,created:c.created,video:!!c.video,ring_received:!!c.ringReceived,
     peer_video:!!(caller?c.calleeCamera:c.callerCamera),peer_sharing:!!(caller?c.calleeSharing:c.callerSharing),offer:!caller?c.offer:undefined,answer:caller?c.answer:undefined};
  };
  const sdp=(value,type)=>{if(!value||value.type!==type||typeof value.sdp!=='string'||value.sdp.length>24000||!value.sdp.startsWith('v=0')||!value.sdp.includes('m=audio')||value.sdp.includes('m=application'))throw fail(400,'Некорректные параметры звонка');return {type,sdp:value.sdp};};
@@ -80,7 +84,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   if(url.pathname==='/api/calls/current'&&req.method==='GET'){
    const d=device(url.searchParams.get('device'));const c=[...active.values()].find(c=>c.caller===uid||c.callee===uid);
    if(c&&c.callee===uid&&c.status!=='preparing'&&!c.incomingObserved){c.incomingObserved=true;log('call.incoming_observed',{...snapshot(c),user_id:uid,device:d});}
-   if(c){if(c.caller===uid&&c.callerDevice===d)c.callerSeen=clock();if(c.callee===uid&&c.calleeDevice===d)c.calleeSeen=clock();}
+   if(c){if(c.caller===uid&&c.callerDevice===d)c.callerSeen=clock();if(c.callee===uid&&(c.calleeDevice===d||c.resilient&&!c.calleeDevice&&c.status==='ringing'))c.calleeSeen=clock();}
    json(res,200,view(c,uid,d));return true;
   }
   const detail=url.pathname.match(/^\/api\/calls\/([a-f0-9]{32})$/);
@@ -97,9 +101,9 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
    if(!chat)throw fail(404,'Личный чат не найден');
    const peer=db.prepare('SELECT user_id FROM members WHERE chat_id=? AND user_id<>?').get(chat.id,uid)?.user_id;if(!peer||db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(peer)?.admin_blocked)throw fail(404,'Собеседник недоступен');
    if(!policy.allowed(uid,peer))throw fail(404,'Собеседник недоступен');
-   if([...active.values()].some(c=>[c.caller,c.callee].some(id=>id===uid||id===peer)))throw fail(409,'Вы или собеседник уже участвуете в звонке');
+   if([...active.values()].some(c=>[c.caller,c.callee].some(id=>id===uid||id===peer)))throw Object.assign(fail(409,'Вы или собеседник уже участвуете в звонке'),{code:'CALL_BUSY'});
    if(active.size>=100)throw fail(503,'Сервер звонков занят');
-   const c={id:randomBytes(16).toString('hex'),caller:uid,callee:peer,chat:chat.id,callerDevice:d,calleeDevice:null,status:'preparing',ringReceipt:randomBytes(24).toString('hex'),video:!!data.video,created:clock(),callerSeen:clock(),calleeSeen:clock(),version:0,callerProtocol:data.protocol===2?2:1,calleeProtocol:1,restartGeneration:0,relayOnly:true};
+   const c={id:randomBytes(16).toString('hex'),caller:uid,callee:peer,chat:chat.id,callerDevice:d,calleeDevice:null,status:'preparing',ringReceipt:randomBytes(24).toString('hex'),video:!!data.video,created:clock(),callerSeen:clock(),calleeSeen:clock(),version:0,resilient:data.resilient===true,callerProtocol:data.protocol===2?2:1,calleeProtocol:1,restartGeneration:0,relayOnly:true};
    db.prepare('INSERT INTO call_history(id,chat_id,caller,callee,created,status,video) VALUES(?,?,?,?,?,?,?)').run(c.id,c.chat,uid,peer,c.created,c.status,c.video?1:0);
    db.prepare('UPDATE call_history SET idempotency_key=?,caller_device=? WHERE id=?').run(key,d,c.id);
    active.set(c.id,c);change(c,'call.created');json(res,201,view(c,uid,d));return true;
@@ -114,7 +118,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   if(op==='ice-restart'){
    if(c.status!=='active'||!c.mediaReporting)throw fail(409,'Обновите оба клиента для восстановления сети');
    if(data.description){if(!caller)throw fail(403,'Новый offer создаёт инициатор');const offer=sdp(data.description,'offer');if(data.restart_generation===c.restartGeneration-1&&JSON.stringify(offer)===JSON.stringify(c.offer)){json(res,200,view(c,uid,d));return true;}if(data.restart_generation!==c.restartGeneration)throw fail(409,'Устаревшее восстановление');if(!c.recovering){c.restartAt=clock();c.recovering=true;}c.restartGeneration++;c.offer=offer;log('rtc.sdp_summary',{...snapshot(c),...clientMeta(req),user_id:uid,role:'caller',stage:'restart',...callCandidateSummary(offer.sdp)});c.answer=null;c.restartRequested=false;c.callerConnected=false;c.calleeConnected=false;change(c,'rtc.ice_restart');}
-   else if(!c.recovering){c.restartAt=clock();c.recovering=true;c.restartRequested=true;change(c,'call.reconnecting');}
+   else if(!c.recovering||c.resilient&&data.network_change===true&&!c.restartRequested){if(!c.recovering)c.restartAt=clock();c.recovering=true;c.restartRequested=true;c.callerConnected=false;c.calleeConnected=false;change(c,'call.reconnecting',{reason:data.network_change===true?'network_changed':'ice_disconnected'});}
    json(res,200,view(c,uid,d));return true;
   }
   if(op==='media-state'){
@@ -141,7 +145,7 @@ export function calls({db,auth,body,json,userById,turnSecret=process.env.TURN_SE
   if(op==='offer'&&caller&&c.offer&&JSON.stringify(sdp(data.description,'offer'))===JSON.stringify(c.offer)&&c.restartGeneration===0){json(res,200,view(c,uid,d));return true;}
   if(op==='offer'){if(!caller||c.status!=='preparing')throw fail(409,'Предложение уже отправлено');c.offer=sdp(data.description,'offer');log('rtc.sdp_summary',{...snapshot(c),...clientMeta(req),user_id:uid,role:'caller',stage:'offer',...callCandidateSummary(c.offer.sdp)});c.status='ringing';c.ringAt=clock();c.ringed=true;c.callerSeen=clock();change(c,'call.invited');db.prepare('UPDATE call_history SET ringed=1 WHERE id=?').run(c.id);onRing(c);}
   if(op==='accept'&&!caller&&c.calleeDevice===d){json(res,200,view(c,uid,d));return true;}
-  if(op==='accept'){if(caller||c.status!=='ringing')throw fail(409,'Звонок уже принят или завершён');c.calleeDevice=d;c.calleeSeen=clock();c.acceptedAt=clock();c.status='connecting';c.calleeProtocol=data.protocol===2?2:1;c.mediaReporting=c.callerProtocol===2&&c.calleeProtocol===2;db.prepare('UPDATE call_history SET callee_device=? WHERE id=?').run(d,c.id);change(c,'call.accepted');}
+  if(op==='accept'){if(caller||c.status!=='ringing')throw fail(409,'Звонок уже принят или завершён');c.calleeDevice=d;c.calleeSeen=clock();c.acceptedAt=clock();c.status='connecting';c.calleeProtocol=data.protocol===2?2:1;c.resilient=c.resilient||data.resilient===true;c.mediaReporting=c.callerProtocol===2&&c.calleeProtocol===2;db.prepare('UPDATE call_history SET callee_device=? WHERE id=?').run(d,c.id);change(c,'call.accepted');}
   if(op==='answer'){
    // An automatic restart can overtake a lost initial-answer response. A replay
    // acknowledges the original operation without replacing the newer ICE epoch.

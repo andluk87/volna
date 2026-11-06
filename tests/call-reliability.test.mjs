@@ -107,3 +107,17 @@ test('empty-relay automatic recovery remains bounded and does not loop after ano
  await f.action(call.id,'ice-restart',f.a,{description:{type:'offer',sdp:sdp.replace('first','second')},restart_generation:0});await f.action(call.id,'answer',f.b,{description:{type:'answer',sdp:sdp.replace('first','second')},restart_generation:1});assert.equal(f.events.filter(e=>e.type==='call.reconnecting').length,1);
  f.advance(21000);await f.req('/current?device='+f.da,f.a);assert.equal(f.row(call.id).status,'interrupted');assert.ok(f.row(call.id).ended);
 });
+
+test('resilient calls retain identity through a minute offline, renew restart and expire after grace',async t=>{
+ const f=fixture(t),{a,b,action,req,da,db}=f,call=await f.start({resilient:true});
+ await action(call.id,'offer',a,{description:offer});await action(call.id,'accept',b,{protocol:2,resilient:true});await action(call.id,'answer',b,{description:answer});await action(call.id,'media-state',a,{connected:true,restart_generation:0});await action(call.id,'media-state',b,{connected:true,restart_generation:0});const at=f.row(call.id).answered;
+ f.advance(60000);assert.equal((await req('/current?device='+da,a)).id,call.id);await req('/current?device='+db,b);
+ await action(call.id,'ice-restart',b,{network_change:true});const restarted=await action(call.id,'ice-restart',a,{description:{...offer,sdp:offer.sdp.replace('first','next')},restart_generation:0});assert.equal(restarted.restart_generation,1);
+ const renewed=await action(call.id,'ice-restart',b,{network_change:true});assert.equal(renewed.restart_requested,true);assert.equal(renewed.id,call.id);assert.equal(f.row(call.id).answered,at);
+ f.advance(180001);assert.equal(await req('/current?device='+da,a),null);assert.equal(f.row(call.id).status,'interrupted');
+});
+test('resilient incoming ringing pauses during outage and resumes on same call',async t=>{
+ const f=fixture(t),call=await f.start({resilient:true});await f.action(call.id,'offer',f.a,{description:offer});
+ f.advance(60000);assert.equal((await f.req('/current?device='+f.da,f.a)).id,call.id);assert.equal((await f.req('/current?device='+f.db,f.b)).id,call.id);await f.req('/current?device='+f.da,f.a);
+ const accepted=await f.action(call.id,'accept',f.b,{protocol:2,resilient:true});assert.equal(accepted.id,call.id);assert.equal(accepted.status,'connecting');
+});

@@ -137,7 +137,7 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
                 Spacer(Modifier.weight(1f))
             }
         }
-        if(state.safetyCode.isNotBlank()&&(!videoMode||layout.controls))TextButton(onClick={safetyOpen=true},modifier=Modifier.align(Alignment.CenterHorizontally)){NativeText("Код проверки: ${state.safetyCode}",color=TextMain,fontSize=12.sp)}
+        if(state.safetyCode.isNotBlank()&&(!videoMode||layout.controls))TextButton(onClick={safetyOpen=true},modifier=Modifier.align(Alignment.CenterHorizontally)){NativeText("Код проверки: ${nativeCallSafetyEmojis(state.safetyCode)}",color=TextMain,fontSize=16.sp)}
         if (state.error.isNotBlank()) ErrorBanner(state.error)
         if (!videoMode || layout.controls || call.status == "ringing") {
         if (call.incoming && call.status == "ringing") Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -170,7 +170,7 @@ fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean 
     }
     }
     if (standalone) content() else Dialog(onDismissRequest = { minimize() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { NativeDialogSystemBars(); content() }
-    if(safetyOpen)AlertDialog(onDismissRequest={safetyOpen=false},title={NativeText("Код проверки звонка")},text={NativeText("${state.safetyCode}\n\nСравните код с собеседником по другому доверенному каналу. Если коды различаются, завершите звонок. Проверяются DTLS-ключи текущего звонка.")},confirmButton={TextButton(onClick={safetyOpen=false}){NativeText("Готово")}})
+    if(safetyOpen)AlertDialog(onDismissRequest={safetyOpen=false},title={NativeText("Код проверки звонка")},text={NativeText("${nativeCallSafetyEmojis(state.safetyCode)}\n\nПолный код: ${state.safetyCode}\n\nСравните код с собеседником по другому доверенному каналу. Если коды различаются, завершите звонок. Проверяются DTLS-ключи текущего звонка.")},confirmButton={TextButton(onClick={safetyOpen=false}){NativeText("Готово")}})
     if (routesOpen) AlertDialog(onDismissRequest = { routesOpen = false }, title = { NativeText("Аудиовыход") }, text = {
         Column { Crossfade(state.route,animationSpec=tween(180),label="active-audio-route"){label->Row(verticalAlignment=Alignment.CenterVertically){Icon(nativeRouteIcon(label),null,tint=Accent,modifier=Modifier.size(32.dp));NativeText("Сейчас: $label",modifier=Modifier.padding(12.dp))}}
             routes.forEach { route -> val selected=route.label==state.route;TextButton(enabled=!state.routePending,onClick = { NativeCalls.selectRoute(route.id) }) { Icon(nativeRouteIcon(route.label),null,tint=if(selected)Accent else Muted);NativeText(route.label,modifier=Modifier.weight(1f).padding(12.dp));if(selected)Icon(Icons.Outlined.Check,"Выбрано",tint=Accent) } }; if(state.routePending)LinearProgressIndicator(Modifier.fillMaxWidth());if (routes.isEmpty()) NativeText("Аудиоустройства не найдены") }

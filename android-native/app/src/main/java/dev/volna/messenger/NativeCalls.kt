@@ -11,7 +11,6 @@ import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
-import android.media.ToneGenerator
 import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
@@ -81,6 +80,41 @@ object NativeCalls {
     private var debugPollAt = 0L
     private var generation = 0
     private val pollWake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+    internal fun serverEvent(session:String,event:JSONObject){scope.launch{
+        if(!configuredFor(session))return@launch
+        if(event.optString("type")=="call.ended"&&event.optString("call_id")==state.value.call?.id){
+            val status=event.optJSONObject("payload")?.optString("status")
+            val reason=when(status){"declined"->"server_declined";"interrupted","missed"->"server_interrupted";else->"server_no_call"}
+            end(notifyServer=false,reason=reason)
+        }else pollWake.trySend(Unit)
+    }}
+    private suspend fun <T> online(version:()->Int,action:()->T):T = nativeCallNetworkRetry(valid={version()==generation},waiting={if(state.value.call!=null)mutableState.update{it.copy(phase="Ожидаем сеть…")}}){runInterruptible(Dispatchers.IO){action()}}
+    private suspend fun <T> online(version:Int,action:()->T):T = online({version},action)
+    private fun watchNetwork(){
+        val app=context?:return
+        if(networkCallback!=null)return
+        val manager=app.getSystemService(android.net.ConnectivityManager::class.java)?:return
+        fun signature():String{val n=manager.activeNetwork;val c=manager.getNetworkCapabilities(n);return "$n:${c?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)}:${c?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)}:${c?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)}"}
+        networkSignature=runCatching{signature()}.getOrDefault("")
+        val callback=object:android.net.ConnectivityManager.NetworkCallback(){
+            fun changed(){scope.launch{networkDebounce?.cancel();networkDebounce=scope.launch refresh@{
+                delay(400);if(token.isBlank())return@refresh
+                val current=runCatching{signature()}.getOrDefault("");if(current==networkSignature)return@refresh;networkSignature=current
+                networkReady=manager.activeNetwork!=null
+                val call=state.value.call?:return@refresh
+                debug(if(networkReady)"network_available" else "network_lost")
+                if(call.incoming&&call.status=="ringing"&&operation?.isActive!=true&&audioTrack==null){warmPeer?.job?.cancel();warmPeer=null;releasePeer();warmIncoming(call);return@refresh}
+                networkRestartPending=true;rollbackForNetwork=true
+                if(networkReady){recoveryJob?.cancel();recoveryJob=null;requestRecovery()}else{if(disconnectedAt==0L)disconnectedAt=SystemClock.elapsedRealtime();mutableState.update{it.copy(connected=false,phase="Ожидаем сеть…")}}
+                pollWake.trySend(Unit)
+            }}}
+            override fun onAvailable(network:android.net.Network)=changed()
+            override fun onLost(network:android.net.Network)=changed()
+            override fun onCapabilitiesChanged(network:android.net.Network,caps:android.net.NetworkCapabilities)=changed()
+        }
+        runCatching{manager.registerDefaultNetworkCallback(callback);networkCallback=callback}
+    }
+    private fun unwatchNetwork(){networkDebounce?.cancel();networkDebounce=null;val callback=networkCallback;networkCallback=null;context?.getSystemService(android.net.ConnectivityManager::class.java)?.let{runCatching{if(callback!=null)it.unregisterNetworkCallback(callback)}}}
     fun wake(session: String) { if (configuredFor(session)) pollWake.trySend(Unit) }
     private var pollJob: Job? = null
     private var clockJob: Job? = null
@@ -119,8 +153,16 @@ object NativeCalls {
     private var originalSpeaker = false
     private var ringtone: Ringtone? = null
     private var toneObserver: Job? = null
-    private var ringbackJob: Job? = null
-    private var ringback: ToneGenerator? = null
+    private var callSounds:NativeCallSoundPlayer?=null
+    private class WarmPeer(val callId:String,@Volatile var version:Int){var job:Deferred<PeerConnection?>?=null}
+    private var warmPeer:WarmPeer?=null
+    private var audioActivationStarted=false
+    private var networkRestartPending=false
+    private var rollbackForNetwork=false
+    private var networkReady=true
+    private var networkSignature=""
+    private var networkCallback:android.net.ConnectivityManager.NetworkCallback?=null
+    private var networkDebounce:Job?=null
     private var initialized = false
     private val frameObserver = VideoSink { lastVideoFrame = SystemClock.elapsedRealtime() }
 
@@ -137,13 +179,14 @@ object NativeCalls {
         pollJob?.cancel()
         clockJob?.cancel()
         toneObserver?.cancel()
-        stopRingback()
+        callSounds?.stop()
         context = appContext.applicationContext
         token = sessionToken
         val prefs = appContext.getSharedPreferences("volna-native", 0)
         device = prefs.getString("call_device", null)?.takeIf { it.matches(Regex("[a-f0-9]{32}")) }
             ?: UUID.randomUUID().toString().replace("-", "").also { prefs.edit().putString("call_device", it).apply() }
-        if (token.isBlank()) return
+        if (token.isBlank()) {unwatchNetwork();return}
+        watchNetwork()
         toneObserver = scope.launch {
             state.map { nativeOutgoingCallTone(it.call?.incoming ?: true,it.call?.status.orEmpty(),it.call?.ringReceived ?: false,it.connected) }
                 .distinctUntilChanged().collect { tone -> if (tone.isNotEmpty()) startRingback(tone) else stopRingback() }
@@ -162,7 +205,7 @@ object NativeCalls {
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (problem: Exception) {
                     if (state.value.call != null) { diagnosticFailure(problem,"poll");debug("poll_error",JSONObject().put("poll_age_ms",SystemClock.elapsedRealtime()-lastSuccess)) }
-                    if (version == generation && state.value.call != null && SystemClock.elapsedRealtime() - lastSuccess > 35_000) end("Нет связи с сервером", reason="poll_timeout")
+                    if (version == generation && state.value.call != null && SystemClock.elapsedRealtime() - lastSuccess > 180_000) end("Нет связи с сервером", reason="poll_timeout")
                 }
                 withTimeoutOrNull(nativeCallPollDelay(state.value.call!=null,state.value.connected,state.value.call?.reconnecting==true)) { pollWake.receive() }
             }
@@ -181,6 +224,7 @@ object NativeCalls {
             if (current.incoming && current.status == "ringing") {
                 mutableState.value = NativeCallState(call = current, phase = "Входящий звонок")
                 ring(current)
+                warmIncoming(current)
                 withContext(Dispatchers.IO){api.callAction(token,device,current.id,"ringing")}
             } else {
                 // A process restart cannot restore old DTLS keys. Release an abandoned device call.
@@ -207,7 +251,7 @@ object NativeCalls {
             mutableState.update { if (it.connected) it else it.copy(phase = "Соединяем…") }
         }
         if (pc != null) syncRecovery(current, pc)
-        if (pc != null && !state.value.connected && connectedAt == 0L && SystemClock.elapsedRealtime() - attemptAt > 60_000) end("Не удалось соединиться. Проверьте сеть и TURN", reason="connect_timeout")
+        if (pc != null && audioTrack != null && !state.value.connected && connectedAt == 0L && SystemClock.elapsedRealtime() - attemptAt > 180_000) end("Не удалось соединиться. Проверьте сеть и TURN", reason="connect_timeout")
     }
 
     fun start(chat: VolnaChat, video: Boolean = false) {
@@ -217,6 +261,7 @@ object NativeCalls {
         val session = token
         val version = ++generation
         cameraWanted = video
+        callSounds?.stop()
         NativeCallDiagnostics.begin()
         mutableState.value = NativeCallState(phase = "Подготовка звонка…", busy = true)
         operation = scope.launch {
@@ -233,14 +278,14 @@ object NativeCalls {
                 gather(pc)
                 checkVersion(version)
                 diagnosticStep("offer");NativeCallDiagnostics.step("Передача предложения звонка на сервер")
-                val ready = withContext(Dispatchers.IO) { api.callAction(session, device, call.id, "offer", localDescription(pc)) }
+                val ready = online(version) { api.callAction(session, device, call.id, "offer", localDescription(pc)) }
                 checkVersion(version)
                 mutableState.update { it.copy(call = ready, phase = "Устанавливаем соединение…", busy = false) }
                 NativeCallDiagnostics.step("Ожидание ответа собеседника")
             } catch (cancelled: CancellationException) {
                 created?.let { call -> scope.launch(Dispatchers.IO) { runCatching { api.callAction(session, device, call.id, "end", endReason="operation_cancelled") } } }
                 throw cancelled
-            } catch (problem: Exception) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось начать звонок", reason="start_error") } }
+            } catch (problem: Exception) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end(problem.message ?: "Не удалось начать звонок", reason=if(problem is NativeApiException&&problem.errorCode=="CALL_BUSY")"call_busy" else "start_error") } }
             catch (problem: LinkageError) { if (version == generation) { diagnosticFailure(problem);NativeCallDiagnostics.failure(problem); end("Не удалось загрузить WebRTC. Откройте диагностику звонка и обновите приложение.", reason="webrtc_unavailable") } }
             finally { if (version == generation) { mutableState.update { it.copy(busy = false) };pollWake.trySend(Unit) } }
         }
@@ -251,24 +296,25 @@ object NativeCalls {
         if (!call.incoming || call.status != "ringing" || operation?.isActive == true) return
         debug("accept_requested")
         val version = ++generation
+        warmPeer?.takeIf { it.callId==call.id }?.version=version
         NativeCallDiagnostics.begin()
         stopRinging()
         cameraWanted = video
         mutableState.update { it.copy(phase = "Подключаем микрофон…", busy = true) }
         operation = scope.launch {
             try {
-                val accepted = withContext(Dispatchers.IO) { api.callAction(token, device, call.id, "accept") }
+                val accepted = online(version) { api.callAction(token, device, call.id, "accept") }
                 checkVersion(version)
                 mutableState.update { it.copy(call = accepted) }
                 val pc = prepare(version, incoming = true)
-                setDescription(pc, call.offer ?: error("Нет предложения звонка"), local = false)
+                setDescription(pc, accepted?.offer ?: call.offer ?: error("Нет предложения звонка"), local = false)
                 // Reuse the transceiver created by the remote offer: both peers send and receive.
                 pc.transceivers.filter { it.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO }.forEach { it.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV }
                 setDescription(pc, createDescription(pc, offer = false), local = true)
                 gather(pc)
                 checkVersion(version)
                 diagnosticStep("answer");NativeCallDiagnostics.step("Передача ответа звонка на сервер")
-                val ready = withContext(Dispatchers.IO) { api.callAction(token, device, call.id, "answer", localDescription(pc)) }
+                val ready = online(version) { api.callAction(token, device, call.id, "answer", localDescription(pc)) }
                 checkVersion(version)
                 mutableState.update { it.copy(call = ready, phase = if (it.connected) "Разговор" else "Соединяем…", busy = false) }
                 updateScreenReady()
@@ -280,7 +326,56 @@ object NativeCalls {
         }
     }
 
-    private suspend fun prepare(version: Int, incoming: Boolean = false): PeerConnection {
+    private fun warmIncoming(call:VolnaCall) {
+        if(warmPeer?.callId==call.id)return
+        val ticket=WarmPeer(call.id,generation)
+        warmPeer=ticket
+        ticket.job=scope.async {
+            debug("warmup_started")
+            try { prepareNetwork(ticket).also { debug("warmup_ready") } }
+            catch(cancelled:CancellationException){throw cancelled}
+            catch(problem:Exception){if(warmPeer===ticket&&ticket.version==generation){releasePeer();debug("warmup_failed")};null}
+            catch(problem:LinkageError){if(warmPeer===ticket&&ticket.version==generation){releasePeer();debug("warmup_failed")};null}
+        }
+    }
+
+    private suspend fun prepare(version:Int,incoming:Boolean=false):PeerConnection {
+        val app=context?:error("Приложение не запущено")
+        val id=state.value.call?.id?:throw CancellationException("Звонок отменён")
+        val warmed=warmPeer?.takeIf { it.callId==id }
+        warmed?.version=version
+        val prepared=warmed?.job?.await()
+        checkVersion(version)
+        audioActivationStarted=true
+        val pc=prepared?:run { val ticket=WarmPeer(id,version);warmPeer=ticket;prepareNetwork(ticket) }
+        checkVersion(version)
+        diagnosticStep("microphone");NativeCallDiagnostics.step("Запуск сервиса микрофона")
+        CallService.ensureReady(app)
+        checkVersion(version)
+        diagnosticStep("audio_device");NativeCallDiagnostics.step("Получение аудиофокуса")
+        beginAudio(app)
+        val mediaFactory=factory?:error("Фабрика звонка освобождена")
+        NativeCallDiagnostics.step("Создание дорожки микрофона")
+        val source = mediaFactory.createAudioSource(MediaConstraints().apply {
+            optional.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
+            optional.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
+        })
+        audioSource = source
+        val track = mediaFactory.createAudioTrack("volna-audio", source)
+        audioTrack = track
+        val audioSender = checkNotNull(pc.addTrack(track, listOf("volna"))) { "Не удалось подключить микрофон к звонку" }
+        val audioParameters = audioSender.parameters
+        audioParameters.encodings.forEach { it.maxBitrateBps = 24_000 }
+        audioSender.setParameters(audioParameters)
+        NativeCallDiagnostics.step("Добавление канала демонстрации экрана")
+        if (!incoming) checkNotNull(pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV, listOf("volna")))) { "Не удалось подготовить видеоканал" }
+        attemptAt = SystemClock.elapsedRealtime()
+        diagnosticJob?.cancel()
+        diagnosticJob=scope.launch { while(version==generation&&peer===pc) { runCatching { pc.getStats { report -> if(version==generation&&peer===pc)diagnostic("rtc.stats",nativeCallStats(report.statsMap.values.map { NativeCallStat(it.id,it.type,it.members) })) } };delay(5_000) } }
+        return pc
+    }
+
+    private suspend fun prepareNetwork(ticket:WarmPeer): PeerConnection {
         val app = context ?: error("Приложение не запущено")
         // NetworkMonitor queries ConnectivityManager from JNI during ICE. An uncaught
         // SecurityException there aborts the native network thread instead of reaching Kotlin.
@@ -289,14 +384,9 @@ object NativeCalls {
             "В установленной сборке отсутствует разрешение ACCESS_NETWORK_STATE. Обновите приложение VLN."
         }
         diagnosticStep("turn_config");NativeCallDiagnostics.step("Получение настроек ICE/TURN")
-        val config = withContext(Dispatchers.IO) { api.callConfig(token, state.value.call?.id) }
+        val config = online({ticket.version}) { api.callConfig(token, ticket.callId) }
         check(config.optBoolean("relayConfigured") && (config.optJSONArray("iceServers")?.length() ?: 0) > 0) { "Звонки доступны только через TURN. Сервер TURN не настроен." }
-        checkVersion(version)
-        diagnosticStep("microphone");NativeCallDiagnostics.step("Запуск сервиса микрофона")
-        CallService.ensureReady(app)
-        checkVersion(version)
-        diagnosticStep("audio_device");NativeCallDiagnostics.step("Получение аудиофокуса")
-        beginAudio(app)
+        checkVersion(ticket.version)
         NativeCallDiagnostics.step("Загрузка WebRTC")
         if (!initialized) {
             PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(app).createInitializationOptions())
@@ -308,14 +398,14 @@ object NativeCalls {
         val module = JavaAudioDeviceModule.builder(app)
             .setUseHardwareAcousticEchoCanceler(false).setUseHardwareNoiseSuppressor(false)
             .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
-                override fun onWebRtcAudioRecordInitError(message: String) = mediaFailure(version, "Не удалось открыть микрофон", message)
-                override fun onWebRtcAudioRecordStartError(code: JavaAudioDeviceModule.AudioRecordStartErrorCode, message: String) = mediaFailure(version, "Не удалось включить микрофон", message)
-                override fun onWebRtcAudioRecordError(message: String) = mediaFailure(version, "Микрофон недоступен", message)
+                override fun onWebRtcAudioRecordInitError(message: String) = mediaFailure(ticket.version, "Не удалось открыть микрофон", message)
+                override fun onWebRtcAudioRecordStartError(code: JavaAudioDeviceModule.AudioRecordStartErrorCode, message: String) = mediaFailure(ticket.version, "Не удалось включить микрофон", message)
+                override fun onWebRtcAudioRecordError(message: String) = mediaFailure(ticket.version, "Микрофон недоступен", message)
             })
             .setAudioTrackErrorCallback(object : JavaAudioDeviceModule.AudioTrackErrorCallback {
-                override fun onWebRtcAudioTrackInitError(message: String) = mediaFailure(version, "Не удалось открыть динамик", message)
-                override fun onWebRtcAudioTrackStartError(code: JavaAudioDeviceModule.AudioTrackStartErrorCode, message: String) = mediaFailure(version, "Не удалось включить динамик", message)
-                override fun onWebRtcAudioTrackError(message: String) = mediaFailure(version, "Динамик недоступен", message)
+                override fun onWebRtcAudioTrackInitError(message: String) = mediaFailure(ticket.version, "Не удалось открыть динамик", message)
+                override fun onWebRtcAudioTrackStartError(code: JavaAudioDeviceModule.AudioTrackStartErrorCode, message: String) = mediaFailure(ticket.version, "Не удалось включить динамик", message)
+                override fun onWebRtcAudioTrackError(message: String) = mediaFailure(ticket.version, "Динамик недоступен", message)
             }).createAudioDeviceModule()
         audioModule = module
         NativeCallDiagnostics.step("Подготовка программного видеокодека VP8")
@@ -335,56 +425,41 @@ object NativeCalls {
         }
         val rtc = nativeCallRtcConfig(iceServers)
         diagnosticStep("peer_create");NativeCallDiagnostics.step("Создание соединения WebRTC")
-        val pc = mediaFactory.createPeerConnection(rtc, observer(version)) ?: error("Не удалось создать WebRTC")
+        val pc = mediaFactory.createPeerConnection(rtc, observer({ ticket.version }) { warmPeer===ticket }) ?: error("Не удалось создать WebRTC")
         peer = pc
         diagnostic("rtc.state",JSONObject().put("bundle_policy","max-bundle").put("candidate_pool_size",rtc.iceCandidatePoolSize))
-        NativeCallDiagnostics.step("Создание дорожки микрофона")
-        val source = mediaFactory.createAudioSource(MediaConstraints().apply {
-            optional.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
-            optional.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
-        })
-        audioSource = source
-        val track = mediaFactory.createAudioTrack("volna-audio", source)
-        audioTrack = track
-        val audioSender = checkNotNull(pc.addTrack(track, listOf("volna"))) { "Не удалось подключить микрофон к звонку" }
-        val audioParameters = audioSender.parameters
-        audioParameters.encodings.forEach { it.maxBitrateBps = 24_000 }
-        audioSender.setParameters(audioParameters)
-        NativeCallDiagnostics.step("Добавление канала демонстрации экрана")
-        if (!incoming) checkNotNull(pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV, listOf("volna")))) { "Не удалось подготовить видеоканал" }
-        attemptAt = SystemClock.elapsedRealtime()
-        mutableState.update { it.copy(relay = config.optBoolean("relayConfigured")) }
-        diagnosticJob?.cancel()
-        diagnosticJob=scope.launch { while(version==generation&&peer===pc) { runCatching { pc.getStats { report -> if(version==generation&&peer===pc)diagnostic("rtc.stats",nativeCallStats(report.statsMap.values.map { NativeCallStat(it.id,it.type,it.members) })) } };delay(5_000) } }
+        attemptAt=SystemClock.elapsedRealtime()
+        mutableState.update { it.copy(relay=config.optBoolean("relayConfigured")) }
         return pc
     }
 
     private fun mediaFailure(version: Int, label: String, detail: String) {
         scope.launch {
-            if (version != generation) return@launch
+            if (version != generation||!audioActivationStarted) return@launch
             diagnosticStep("audio_device");diagnosticFailure(IllegalStateException(label));NativeCallDiagnostics.failure(IllegalStateException(detail))
             end("$label. Проверьте разрешения и закройте другие приложения, использующие звук.", reason="audio_error")
         }
     }
 
-    private fun observer(version: Int) = object : PeerConnection.Observer {
-        override fun onSignalingChange(value: PeerConnection.SignalingState?) { if(version==generation)diagnostic("rtc.state",JSONObject().put("signaling",value?.name?.lowercase()?.replace('_','-'))) }
-        override fun onIceConnectionChange(value: PeerConnection.IceConnectionState?) { if(version==generation)diagnostic("rtc.state",JSONObject().put("ice",value?.name?.lowercase())) }
+    private fun observer(version: ()->Int,current:()->Boolean) = object : PeerConnection.Observer {
+        override fun onSignalingChange(value: PeerConnection.SignalingState?) { if(version()==generation&&current())diagnostic("rtc.state",JSONObject().put("signaling",value?.name?.lowercase()?.replace('_','-'))) }
+        override fun onIceConnectionChange(value: PeerConnection.IceConnectionState?) { if(version()==generation&&current())diagnostic("rtc.state",JSONObject().put("ice",value?.name?.lowercase())) }
         override fun onIceConnectionReceivingChange(value: Boolean) { }
-        override fun onIceGatheringChange(value: PeerConnection.IceGatheringState?) { if(version==generation)diagnostic("rtc.state",JSONObject().put("gathering",value?.name?.lowercase())) }
-        override fun onIceCandidateError(event: IceCandidateErrorEvent?) { if(version==generation&&event!=null)diagnostic("rtc.ice_error",JSONObject().put("ice_error",event.errorCode)) }
-        override fun onIceCandidate(value: IceCandidate?) { if(version==generation&&value!=null)diagnostic("rtc.candidate",nativeIceCandidateEvent(value.sdp)) }
+        override fun onIceGatheringChange(value: PeerConnection.IceGatheringState?) { if(version()==generation&&current())diagnostic("rtc.state",JSONObject().put("gathering",value?.name?.lowercase())) }
+        override fun onIceCandidateError(event: IceCandidateErrorEvent?) { if(version()==generation&&current()&&event!=null)diagnostic("rtc.ice_error",JSONObject().put("ice_error",event.errorCode)) }
+        override fun onIceCandidate(value: IceCandidate?) { if(version()==generation&&current()&&value!=null)diagnostic("rtc.candidate",nativeIceCandidateEvent(value.sdp)) }
         override fun onIceCandidatesRemoved(values: Array<out IceCandidate>?) { }
         override fun onAddStream(value: MediaStream?) { }
         override fun onRemoveStream(value: MediaStream?) { }
         override fun onDataChannel(value: DataChannel?) { }
         override fun onRenegotiationNeeded() { }
-        override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) { receiveTrack(receiver?.track(), version) }
-        override fun onTrack(transceiver: RtpTransceiver?) { receiveTrack(transceiver?.receiver?.track(), version) }
+        override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) { receiveTrack(receiver?.track(), version()) }
+        override fun onTrack(transceiver: RtpTransceiver?) { receiveTrack(transceiver?.receiver?.track(), version()) }
         override fun onConnectionChange(value: PeerConnection.PeerConnectionState?) {
             scope.launch {
-                if (version != generation) return@launch
+                if (version() != generation||!current()) return@launch
                 diagnostic("rtc.state",JSONObject().put("connection",value?.name?.lowercase()))
+                if(audioTrack==null)return@launch
                 when (value) {
                     PeerConnection.PeerConnectionState.CONNECTED -> {
                         disconnectedAt = 0L
@@ -642,6 +717,8 @@ object NativeCalls {
         val call = state.value.call; val session = token
         if (call != null) diagnostic("client.ended",JSONObject().put("stage",diagnosticStage).put("connected",state.value.connected).put("end_reason",reason).put("notify_server",notifyServer).put("call_status",call.status).put("has_peer",peer!=null).put("operation_active",operation?.isActive==true).put("telecom_audio",telecomAudio));diagnosticJob?.cancel();diagnosticJob=null
         generation++
+        warmPeer?.job?.cancel();warmPeer=null
+        audioActivationStarted=false;networkRestartPending=false;rollbackForNetwork=false
         operation?.cancel(); operation = null
         recoveryJob?.cancel(); recoveryJob = null; pendingRestart = null; pendingAnswer = null; appliedRestart = 0; reportedMedia = -1
         stopRinging()
@@ -649,14 +726,7 @@ object NativeCalls {
         stopCamera()
         stopScreenSharing()
         remoteTrack?.let { track -> runCatching { track.removeSink(frameObserver); videoSinks.forEach(track::removeSink) } }; remoteTrack = null
-        NativeCallDiagnostics.step("Освобождение соединения WebRTC")
-        runCatching { peer?.close() }; runCatching { peer?.dispose() }; peer = null
-        val track = audioTrack; audioTrack = null; runCatching { track?.dispose() }
-        val source = audioSource; audioSource = null; runCatching { source?.dispose() }
-        NativeCallDiagnostics.step("Освобождение фабрики WebRTC")
-        val oldFactory = factory; factory = null; runCatching { oldFactory?.dispose() }
-        NativeCallDiagnostics.step("Освобождение аудиоустройства")
-        val module = audioModule; audioModule = null; runCatching { module?.release() }
+        releasePeer()
         (context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.let { manager ->
             if ((focus != null || telecomAudio) && Build.VERSION.SDK_INT >= 31) runCatching { manager.clearCommunicationDevice() }
             focus?.let { request ->
@@ -669,7 +739,20 @@ object NativeCalls {
         mutableState.value = NativeCallState(error = message)
         NativeCallDiagnostics.finish(message)
         context?.let { runCatching { CallService.stop(it) } }
+        val finishTone=nativeCallEndTone(reason,call!=null)
+        if(finishTone.isNotEmpty())soundPlayer()?.effect(finishTone)
         if (notifyServer && call != null && session.isNotBlank()) scope.launch(Dispatchers.IO) { runCatching { api.callAction(session, device, call.id, "end", endReason=reason) } }
+    }
+
+    private fun releasePeer() {
+        NativeCallDiagnostics.step("Освобождение соединения WebRTC")
+        runCatching { peer?.close() }; runCatching { peer?.dispose() }; peer = null
+        val track = audioTrack; audioTrack = null; runCatching { track?.dispose() }
+        val source = audioSource; audioSource = null; runCatching { source?.dispose() }
+        NativeCallDiagnostics.step("Освобождение фабрики WebRTC")
+        val oldFactory = factory; factory = null; runCatching { oldFactory?.dispose() }
+        NativeCallDiagnostics.step("Освобождение аудиоустройства")
+        val module = audioModule; audioModule = null; runCatching { module?.release() }
     }
 
     private fun updateProtocolCall(call: VolnaCall) {
@@ -686,32 +769,42 @@ object NativeCalls {
         val call = state.value.call ?: return
         if (!call.mediaReporting || recoveryJob?.isActive == true) return
         val version=generation
-        recoveryJob=scope.launch { try { val updated=withContext(Dispatchers.IO){api.callProtocol(token,device,call.id,"ice-restart",JSONObject())};if(version==generation)updateProtocolCall(updated) }catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){} }
+        val network=networkRestartPending
+        recoveryJob=scope.launch { try {
+            val updated=online(version){api.callProtocol(token,device,call.id,"ice-restart",JSONObject().apply{if(network)put("network_change",true)})}
+            checkVersion(version);if(network)networkRestartPending=false;updateProtocolCall(updated)
+        }catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){} }
+
     }
 
     private fun syncRecovery(call: VolnaCall, pc: PeerConnection) {
         if (!call.mediaReporting || call.status != "active" || recoveryJob?.isActive == true) return
+        if(networkRestartPending&&networkReady){requestRecovery();return}
         val version=generation
         recoveryJob=scope.launch {
             try {
                 val epoch=call.restartGeneration
-                if(disconnectedAt>0&&!call.reconnecting){val updated=withContext(Dispatchers.IO){api.callProtocol(token,device,call.id,"ice-restart",JSONObject())};checkVersion(version);updateProtocolCall(updated);return@launch}
+                if(disconnectedAt>0&&!call.reconnecting){val updated=online(version){api.callProtocol(token,device,call.id,"ice-restart",JSONObject())};checkVersion(version);updateProtocolCall(updated);return@launch}
+                if(call.restartRequested&&!call.incoming&&rollbackForNetwork){
+                    if(pc.signalingState()==PeerConnection.SignalingState.HAVE_LOCAL_OFFER)setDescription(pc,JSONObject().put("type","rollback").put("sdp",""),true)
+                    pendingRestart=null;rollbackForNetwork=false
+                }
                 if(call.restartRequested&&!call.incoming&&pendingRestart==null&&pc.signalingState()==PeerConnection.SignalingState.STABLE){
                     setDescription(pc,createDescription(pc,true,restart=true),true);gather(pc);checkVersion(version)
                     pendingRestart=JSONObject().put("description",localDescription(pc)).put("restart_generation",epoch)
                 }
                 val pending=pendingRestart
                 if(pending!=null){
-                    if(epoch==pending.getInt("restart_generation")){val updated=withContext(Dispatchers.IO){api.callProtocol(token,device,call.id,"ice-restart",pending)};checkVersion(version);updateProtocolCall(updated);return@launch}
+                    if(epoch==pending.getInt("restart_generation")){val updated=online(version){api.callProtocol(token,device,call.id,"ice-restart",pending)};checkVersion(version);updateProtocolCall(updated);return@launch}
                     pendingRestart=null
                 }
                 if(epoch>appliedRestart){
-                    if(call.incoming&&call.offer!=null){if(pendingAnswer?.optInt("restart_generation",-1)!=epoch){setDescription(pc,call.offer,false);setDescription(pc,createDescription(pc,false),true);gather(pc);checkVersion(version);pendingAnswer=JSONObject().put("description",localDescription(pc)).put("restart_generation",epoch)};val response=pendingAnswer?:return@launch;val updated=withContext(Dispatchers.IO){api.callProtocol(token,device,call.id,"answer",response)};checkVersion(version);updateProtocolCall(updated);appliedRestart=epoch;pendingAnswer=null}
+                    if(call.incoming&&call.offer!=null){if(pendingAnswer?.optInt("restart_generation",-1)!=epoch){setDescription(pc,call.offer,false);setDescription(pc,createDescription(pc,false),true);gather(pc);checkVersion(version);pendingAnswer=JSONObject().put("description",localDescription(pc)).put("restart_generation",epoch)};val response=pendingAnswer?:return@launch;val updated=online(version){api.callProtocol(token,device,call.id,"answer",response)};checkVersion(version);updateProtocolCall(updated);appliedRestart=epoch;pendingAnswer=null}
                     else if(!call.incoming&&call.answer!=null){setDescription(pc,call.answer,false);checkVersion(version);appliedRestart=epoch}
                     else return@launch
                 }
                 if(peer!==pc||version!=generation)return@launch
-                if(state.value.connected&&reportedMedia!=epoch){val updated=withContext(Dispatchers.IO){api.callProtocol(token,device,call.id,"media-state",JSONObject().put("connected",true).put("restart_generation",epoch))};checkVersion(version);updateProtocolCall(updated);reportedMedia=epoch}
+                if(state.value.connected&&reportedMedia!=epoch){val updated=online(version){api.callProtocol(token,device,call.id,"media-state",JSONObject().put("connected",true).put("restart_generation",epoch))};checkVersion(version);updateProtocolCall(updated);reportedMedia=epoch}
                 val code=nativeCallSafetyCode(call.id,pc.localDescription?.description,pc.remoteDescription?.description)
                 mutableState.update{it.copy(safetyCode=code)}
             } catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){/* Polling retries signaling until the recovery lease expires. */}
@@ -720,7 +813,7 @@ object NativeCalls {
 
     private fun updateClock() {
         val now = SystemClock.elapsedRealtime()
-        if (disconnectedAt > 0 && now - disconnectedAt > 20_000) { end("Соединение звонка потеряно", reason="recovery_timeout"); return }
+        if (disconnectedAt > 0 && now - disconnectedAt > 180_000) { end("Соединение звонка потеряно", reason="recovery_timeout"); return }
         mutableState.update { it.copy(elapsed = if (connectedAt > 0) ((now - connectedAt) / 1000).toInt() else 0,
             remoteSharing = it.call?.peerSharing ?: (lastVideoFrame > 0 && now - lastVideoFrame < 4_000),
             remoteVideo = it.call?.peerVideo == true || it.call?.peerSharing != true && lastVideoFrame > 0 && now - lastVideoFrame < 4_000) }
@@ -795,16 +888,10 @@ object NativeCalls {
         val old = ringtone; ringtone = null; runCatching { old?.stop() }
         runCatching { context?.getSystemService(NotificationManager::class.java)?.cancel(CALL_NOTIFICATION) }
     }
-    private fun startRingback(kind: String) {
-        stopRingback()
-        ringback = runCatching { ToneGenerator(AudioManager.STREAM_VOICE_CALL, 55) }.getOrNull() ?: return
-        ringbackJob = scope.launch { while (isActive) { runCatching { ringback?.startTone(if(kind=="ringback")ToneGenerator.TONE_SUP_RINGTONE else ToneGenerator.TONE_PROP_BEEP2, if(kind=="ringback")1_000 else 120) }; delay(if(kind=="ringback")4_000 else 1_500) } }
-    }
-    private fun stopRingback() {
-        ringbackJob?.cancel(); ringbackJob = null
-        val tone = ringback; ringback = null
-        runCatching { tone?.stopTone(); tone?.release() }
-    }
+    private fun soundPlayer():NativeCallSoundPlayer? { val app=context?:return null;return callSounds?:NativeCallSoundPlayer(app).also{callSounds=it} }
+    private fun startRingback(kind:String){soundPlayer()?.loop(kind)}
+    private fun stopRingback(){callSounds?.stopLoop()}
+
     const val CALL_CHANNEL = "volna_incoming_calls"
     const val CALL_NOTIFICATION = 11031
 }

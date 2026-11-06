@@ -45,3 +45,8 @@ test('ICE recovery continues immediately after signaling and never wakes on unch
  h.setCall({restart_requested:true,reconnecting:true});await h.recovery.sync(h.call);assert.deepEqual(busy,[false,false]);assert.equal(h.offers(),1);
  h.stop();await h.recovery.sync(h.call);assert.deepEqual(busy,[false,false]);
 });
+
+test('network switch while recovering requests fresh ICE and rolls back pending local offer',async t=>{
+ const h=harness();t.after(h.stop);await h.recovery.disconnected();assert.equal(h.offers(),1);assert.equal(h.pc.signalingState,'have-local-offer');
+ await h.recovery.networkChanged();assert.ok(h.sent.some(x=>x.path.endsWith('/ice-restart')&&x.data.network_change===true));assert.equal(h.offers(),2,'new route gets a fresh offer instead of waiting on the old one');
+});

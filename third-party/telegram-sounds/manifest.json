@@ -1,0 +1,106 @@
+[
+  {
+    "repository": "DrKLO/Telegram",
+    "revision": "3de37c8cfb039452be7398909461da6288babf15",
+    "source": "TMessagesProj/src/main/res/raw/voip_ringback.mp3",
+    "target": "android-native/app/src/main/res/raw/voip_ringback.mp3",
+    "bytes": 6224,
+    "sha256": "9bd6a6e8b7e4d584a92315e3220934ec7b036072a16188866fc81da57214b9ca"
+  },
+  {
+    "repository": "DrKLO/Telegram",
+    "revision": "3de37c8cfb039452be7398909461da6288babf15",
+    "source": "TMessagesProj/src/main/res/raw/voip_connecting.mp3",
+    "target": "android-native/app/src/main/res/raw/voip_connecting.mp3",
+    "bytes": 7104,
+    "sha256": "d149da31793a6acc4d29fe4006e280b2a66099abc8d00f18262ffe0add942aa3"
+  },
+  {
+    "repository": "DrKLO/Telegram",
+    "revision": "3de37c8cfb039452be7398909461da6288babf15",
+    "source": "TMessagesProj/src/main/res/raw/voip_end.mp3",
+    "target": "android-native/app/src/main/res/raw/voip_end.mp3",
+    "bytes": 1184,
+    "sha256": "c6017b9100792c60cc0a4c81fc6567e969822ffe9a65f1e45dda5454ff146139"
+  },
+  {
+    "repository": "DrKLO/Telegram",
+    "revision": "3de37c8cfb039452be7398909461da6288babf15",
+    "source": "TMessagesProj/src/main/res/raw/voip_busy.mp3",
+    "target": "android-native/app/src/main/res/raw/voip_busy.mp3",
+    "bytes": 1184,
+    "sha256": "c6017b9100792c60cc0a4c81fc6567e969822ffe9a65f1e45dda5454ff146139"
+  },
+  {
+    "repository": "DrKLO/Telegram",
+    "revision": "3de37c8cfb039452be7398909461da6288babf15",
+    "source": "TMessagesProj/src/main/res/raw/voip_failed.mp3",
+    "target": "android-native/app/src/main/res/raw/voip_failed.mp3",
+    "bytes": 2216,
+    "sha256": "4777301b6eba13fa03489592053ff97a7d167c8b5be435b562495d8720b03f47"
+  },
+  {
+    "repository": "telegramdesktop/tdesktop",
+    "revision": "93624f698c9a883c3a76428b96d6573c4dd63a6d",
+    "source": "Telegram/Resources/sounds/call_incoming.mp3",
+    "target": "client/public/sounds/call_incoming.mp3",
+    "bytes": 50154,
+    "sha256": "4947040b18cb04625bbac3d649873173dd3ec2dcf8cb5fb0bb6fde6cd94e6097"
+  },
+  {
+    "repository": "telegramdesktop/tdesktop",
+    "revision": "93624f698c9a883c3a76428b96d6573c4dd63a6d",
+    "source": "Telegram/Resources/sounds/call_outgoing.mp3",
+    "target": "client/public/sounds/call_outgoing.mp3",
+    "bytes": 66454,
+    "sha256": "188c54ce60d9f52a9fdf5ccca5e6a0936905d4e0c9d2cc119d06595d6ad9c478"
+  },
+  {
+    "repository": "telegramdesktop/tdesktop",
+    "revision": "93624f698c9a883c3a76428b96d6573c4dd63a6d",
+    "source": "Telegram/Resources/sounds/call_connect.mp3",
+    "target": "client/public/sounds/call_connect.mp3",
+    "bytes": 27584,
+    "sha256": "55c2971ea069fa44e585b164993e85361a177e4835702b7fbcc184cde5ca555d"
+  },
+  {
+    "repository": "telegramdesktop/tdesktop",
+    "revision": "93624f698c9a883c3a76428b96d6573c4dd63a6d",
+    "source": "Telegram/Resources/sounds/call_end.mp3",
+    "target": "client/public/sounds/call_end.mp3",
+    "bytes": 25703,
+    "sha256": "182d87848a26c752e263d306d77dab96550aaf15e4ee47b01baad655ef72a511"
+  },
+  {
+    "repository": "telegramdesktop/tdesktop",
+    "revision": "93624f698c9a883c3a76428b96d6573c4dd63a6d",
+    "source": "Telegram/Resources/sounds/call_busy.mp3",
+    "target": "client/public/sounds/call_busy.mp3",
+    "bytes": 85889,
+    "sha256": "8a0e8892c526ae1cf217942e216158394b2ed1669a300b9617d72cb6d887284c"
+  },
+  {
+    "repository": "DrKLO/Telegram",
+    "revision": "3de37c8cfb039452be7398909461da6288babf15",
+    "source": "LICENSE",
+    "target": "third-party/telegram-sounds/android-LICENSE",
+    "bytes": 18092,
+    "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+  },
+  {
+    "repository": "telegramdesktop/tdesktop",
+    "revision": "93624f698c9a883c3a76428b96d6573c4dd63a6d",
+    "source": "LICENSE",
+    "target": "third-party/telegram-sounds/desktop-LICENSE",
+    "bytes": 35850,
+    "sha256": "a728b65d02eeaf6b50c075a33b76107c652c3e5a12ff67f53682c83d47a23e1e"
+  },
+  {
+    "repository": "DrKLO/Telegram",
+    "revision": "3de37c8cfb039452be7398909461da6288babf15",
+    "source": "TMessagesProj/src/main/res/raw/voip_failed.mp3",
+    "target": "client/public/sounds/call_failed.mp3",
+    "bytes": 2216,
+    "sha256": "4777301b6eba13fa03489592053ff97a7d167c8b5be435b562495d8720b03f47"
+  }
+]

@@ -1,25 +1,27 @@
 import {economicalAudioDescription} from './call-bandwidth.mjs';
 import {callSafetyCode} from '../../shared/call-safety.mjs';
 export class CallRecovery {
- constructor({pc,getCall,request,onCall,onPhase,onFailure,onSafety,isCurrent,device,gather,onProgress=null,timeout=20000}){Object.assign(this,{pc,getCall,request,onCall,onPhase,onFailure,onSafety,isCurrent,device,gather,onProgress,timeout});this.generation=0;this.busy=false;this.deadline=null;this.reported=-1;this.pending=null;this.closed=false;this.needsRestart=false;this.pendingAnswer=null;this.progressPending=false;}
+ constructor({pc,getCall,request,onCall,onPhase,onFailure,onSafety,isCurrent,device,gather,onProgress=null,timeout=20000}){Object.assign(this,{pc,getCall,request,onCall,onPhase,onFailure,onSafety,isCurrent,device,gather,onProgress,timeout});this.generation=0;this.busy=false;this.deadline=null;this.reported=-1;this.pending=null;this.closed=false;this.needsRestart=false;this.pendingAnswer=null;this.progressPending=false;this.freshNetwork=false;this.rollbackNeeded=false;}
  valid(){return !this.closed&&this.isCurrent();}
  dispose(){this.closed=true;clearTimeout(this.deadline);this.deadline=null;}
  async safety(){if(!this.valid())return;const c=this.getCall();const code=await callSafetyCode(c?.id,this.pc.localDescription?.sdp,this.pc.remoteDescription?.sdp);if(this.valid())this.onSafety(code);}
  async send(op,data={}){const c=this.getCall();if(!c||!this.valid())return null;const result=await this.request(`/calls/${c.id}/${op}`,{device:this.device,...data});if(this.valid()&&result?.id===c.id){this.onCall(result);this.progressPending=true;}return result;}
+ async networkChanged(){this.freshNetwork=true;this.rollbackNeeded=true;return this.disconnected();}
  async disconnected(){
   if(!this.valid())return;
   const c=this.getCall();this.reported=-1;this.needsRestart=true;this.onPhase('Восстанавливаем соединение…');
   if(!this.deadline)this.deadline=setTimeout(()=>{if(this.valid())this.onFailure('Звонок прерван: не удалось восстановить соединение');},this.timeout);
   if(!c?.media_reporting)return;
-  try{await this.send('ice-restart');await this.sync(this.getCall());}catch{/* Polling retries while the bounded recovery timer runs. */}
+  try{if(c.status!=='active')return;await this.send('ice-restart',this.freshNetwork?{network_change:true}:{});this.freshNetwork=false;await this.sync(this.getCall());}catch{/* Polling retries while the bounded recovery timer runs. */}
  }
  async sync(c){
   if(!this.valid()||this.busy||!c?.media_reporting||c.status!=='active')return;
   this.busy=true;
   try{
    const epoch=c.restart_generation||0;
-   if(this.needsRestart&&!c.reconnecting){await this.send('ice-restart');this.needsRestart=false;return;}
+   if(this.needsRestart&&(!c.reconnecting||this.freshNetwork)){await this.send('ice-restart',this.freshNetwork?{network_change:true}:{});this.freshNetwork=false;this.needsRestart=false;return;}
    if(c.reconnecting)this.needsRestart=false;
+   if(c.restart_requested&&!c.incoming&&this.rollbackNeeded){if(this.pc.signalingState==='have-local-offer')await this.pc.setLocalDescription({type:'rollback'});if(!this.valid())return;this.pending=null;this.rollbackNeeded=false;}
    if(c.restart_requested&&!c.incoming&&!this.pending&&this.pc.signalingState==='stable'){
     const offer=economicalAudioDescription(await this.pc.createOffer({iceRestart:true}));if(!this.valid())return;
     await this.pc.setLocalDescription(offer);await this.gather(this.pc);if(!this.valid())return;

@@ -1,8 +1,17 @@
-export function callTone(call,connected=false){if(!call||connected)return '';if(call.incoming)return call.status==='ringing'?'incoming':'';if(call.status==='preparing')return 'setup';if(call.status==='ringing')return call.ring_received?'ringback':'setup';return '';}
+export function callTone(call,connected=false){if(!call||connected)return '';if(call.incoming&&call.status==='ringing')return 'incoming';if(call.status==='ringing')return call.ring_received?'ringback':'setup';if(['preparing','connecting','active'].includes(call.status))return 'setup';return '';}
+export function callEndTone(reason,hadCall=true){
+ if(['other_device','call_replaced','session_reset','component_unmount','abandoned_call','operation_cancelled'].includes(reason))return '';
+ if(['call_busy','server_declined'].includes(reason))return 'busy';
+ if(['start_error','accept_error','answer_error','webrtc_unavailable','audio_error','audio_focus_lost','telecom_audio_lost','service_error','service_destroyed','uncaught_error','poll_timeout','connect_timeout','recovery_timeout','server_interrupted'].includes(reason))return 'failed';
+ return hadCall?'end':'';
+}
 export class CallTones{
- constructor({createContext=()=>new(window.AudioContext||window.webkitAudioContext)(),timers=globalThis}={}){this.createContext=createContext;this.timers=timers;this.context=null;this.timer=null;this.nodes=[];this.kind='';}
- unlock(){try{this.context??=this.createContext();this.context.resume().catch(()=>{});}catch{}}
- set(kind){if(kind===this.kind)return;this.stop();this.kind=kind;if(!kind)return;this.unlock();const beep=()=>{const ctx=this.context;if(!ctx||ctx.state!=='running')return;const oscillator=ctx.createOscillator(),gain=ctx.createGain(),now=ctx.currentTime,duration=kind==='ringback'?1:kind==='setup'?.12:.3;oscillator.frequency.value=kind==='ringback'?425:kind==='setup'?440:660;gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(.045,now+.02);gain.gain.setValueAtTime(.045,now+duration-.03);gain.gain.linearRampToValueAtTime(0,now+duration);oscillator.connect(gain);gain.connect(ctx.destination);const item={oscillator,gain};this.nodes.push(item);oscillator.onended=()=>{oscillator.disconnect();gain.disconnect();this.nodes=this.nodes.filter(node=>node!==item);};oscillator.start(now);oscillator.stop(now+duration);};beep();this.timer=this.timers.setInterval(beep,kind==='ringback'?4000:kind==='setup'?1500:1800);}
- stop(){if(this.timer!==null)this.timers.clearInterval(this.timer);this.timer=null;this.kind='';for(const {oscillator,gain}of this.nodes){try{oscillator.stop();oscillator.disconnect();gain.disconnect();}catch{}}this.nodes=[];}
- close(){this.stop();this.context?.close().catch(()=>{});this.context=null;}
+ constructor({createAudio=src=>new Audio(src),baseUrl=globalThis.document?.baseURI||'http://localhost/'}={}){this.createAudio=createAudio;this.baseUrl=baseUrl;this.audio=null;this.kind='';}
+ unlock(){try{this.audio?.play()?.catch(()=>{});}catch{}}
+ set(kind){if(kind===this.kind)return;this.stop();if(!kind)return;const files={incoming:'call_incoming.mp3',ringback:'call_outgoing.mp3',setup:'call_connect.mp3',end:'call_end.mp3',busy:'call_busy.mp3',failed:'call_failed.mp3'};if(!files[kind])return;
+  try{const audio=this.createAudio(new URL('sounds/'+files[kind],this.baseUrl).href);this.audio=audio;this.kind=kind;audio.loop=['incoming','ringback','setup'].includes(kind);audio.volume=.45;audio.preload='auto';audio.onended=()=>{if(this.audio===audio){this.audio=null;this.kind='';}};audio.play()?.catch(()=>{});}catch{this.stop();}
+ }
+ play(kind){this.set(kind);}
+ stop(){const audio=this.audio;this.audio=null;this.kind='';if(audio){audio.onended=null;try{audio.pause();audio.currentTime=0;}catch{}}}
+ close(){this.stop();}
 }
