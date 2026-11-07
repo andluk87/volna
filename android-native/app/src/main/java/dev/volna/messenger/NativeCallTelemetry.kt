@@ -15,14 +15,17 @@ internal object NativeCallTelemetry {
     private val queue=Channel<Item>(64,BufferOverflow.DROP_OLDEST)
     private val api by lazy { NativeApi(BuildConfig.API_BASE_URL,requestTimeoutSeconds=5) }
     @Volatile private var latest:Item? = null
+    private val retryUntil=java.util.concurrent.ConcurrentHashMap<Long,Long>()
     private var warningAt=0L
     private val processId=UUID.randomUUID().toString().replace("-", "")
     private var sequence=0L
-    init { scope.launch { for(item in queue)try { api.callDiagnostic(item.session,item.body) } catch(problem:Exception) {
+    init { scope.launch { for(item in queue)try { val now=android.os.SystemClock.elapsedRealtime();retryUntil.entries.removeIf{it.value<=now};if((retryUntil[NativeCredentials.accountId(item.session)]?:0L)>now)continue;if(System.currentTimeMillis()-item.body.optLong("client_time")<=120000)api.callDiagnostic(item.session,item.body) } catch(problem:Exception) {
+        if(problem is NativeApiException&&problem.status==429)retryUntil[NativeCredentials.accountId(item.session)]=android.os.SystemClock.elapsedRealtime()+nativeCallRetryDelay(problem)
         synchronized(this@NativeCallTelemetry) { if(latest===item){val copy=JSONObject(item.body.toString()).put("report_id",UUID.randomUUID().toString().replace("-", "")).put("delivery_error_type",problem.javaClass.simpleName);if(problem is NativeApiException)copy.put("delivery_http_status",problem.status);latest=Item(item.session,copy)} }
         val now=android.os.SystemClock.elapsedRealtime();if(now-warningAt>10000){warningAt=now;Log.w("VolnaCallTelemetry","delivery_failed status=${(problem as? NativeApiException)?.status?:0} type=${problem.javaClass.simpleName}")}
     } } }
     fun header(session:String):String? {
+        if(android.os.SystemClock.elapsedRealtime()<(retryUntil[NativeCredentials.accountId(session)]?:0L))return null
         val item=latest?:return null
         return nativeCallDiagnosticHeader(session,item.session,item.body,System.currentTimeMillis())
     }
@@ -40,6 +43,8 @@ internal fun nativeCallStats(rows:List<NativeCallStat>):JSONObject {
     val out=JSONObject();val totals=mutableMapOf("bytes_sent" to 0L,"bytes_received" to 0L,"packets_sent" to 0L,"packets_received" to 0L,"packets_lost" to 0L)
     for(row in rows){val keys=when(row.type){"outbound-rtp"->listOf("bytesSent" to "bytes_sent","packetsSent" to "packets_sent");"inbound-rtp"->listOf("bytesReceived" to "bytes_received","packetsReceived" to "packets_received","packetsLost" to "packets_lost");else->emptyList()};for((source,target)in keys)totals[target]=totals.getValue(target)+((row.members[source] as? Number)?.toLong()?:0)}
     for((key,value)in totals)out.put(key,value)
+    val audio=rows.filter{(it.members["kind"]?:it.members["mediaType"])=="audio"&&it.members["isRemote"]!=true}
+    for((type,key,source)in listOf(Triple("inbound-rtp","audio_packets_received","packetsReceived"),Triple("outbound-rtp","audio_packets_sent","packetsSent"))){val tracks=audio.filter{it.type==type};if(tracks.isNotEmpty())out.put(key,tracks.sumOf{(it.members[source] as? Number)?.toLong()?:0L})}
     val selected=rows.firstOrNull{it.type=="transport"&&it.members["selectedCandidatePairId"]!=null}?.members?.get("selectedCandidatePairId")
     val pair=rows.firstOrNull{it.id==selected}?:rows.firstOrNull{it.type=="candidate-pair"&&it.members["state"]=="succeeded"&&it.members["nominated"]==true}
     pair?.let { val local=rows.firstOrNull{r->r.id==it.members["localCandidateId"]};local?.members?.get("candidateType")?.let{value->if(value in listOf("relay","host","srflx","prflx"))out.put("candidate_type",value)};local?.members?.get("protocol")?.let{value->if(value in listOf("udp","tcp"))out.put("protocol",value)};(it.members["currentRoundTripTime"] as? Number)?.let{rtt->out.put("rtt_ms",(rtt.toDouble()*1000).toLong())} }

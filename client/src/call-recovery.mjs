@@ -1,18 +1,19 @@
 import {economicalAudioDescription} from './call-bandwidth.mjs';
 import {callSafetyCode} from '../../shared/call-safety.mjs';
 export class CallRecovery {
- constructor({pc,getCall,request,onCall,onPhase,onFailure,onSafety,isCurrent,device,gather,onProgress=null,timeout=20000}){Object.assign(this,{pc,getCall,request,onCall,onPhase,onFailure,onSafety,isCurrent,device,gather,onProgress,timeout});this.generation=0;this.busy=false;this.deadline=null;this.reported=-1;this.pending=null;this.closed=false;this.needsRestart=false;this.pendingAnswer=null;this.progressPending=false;this.freshNetwork=false;this.rollbackNeeded=false;}
+ constructor({pc,getCall,request,onCall,onPhase,onFailure,onSafety,isCurrent,device,gather,onProgress=null,onSignalingError=()=>{},timeout=20000}){Object.assign(this,{pc,getCall,request,onCall,onPhase,onFailure,onSafety,isCurrent,device,gather,onProgress,onSignalingError,timeout});this.generation=0;this.busy=false;this.deadline=null;this.reported=-1;this.pending=null;this.closed=false;this.needsRestart=false;this.pendingAnswer=null;this.progressPending=false;this.freshNetwork=false;this.rollbackNeeded=false;}
  valid(){return !this.closed&&this.isCurrent();}
  dispose(){this.closed=true;clearTimeout(this.deadline);this.deadline=null;}
  async safety(){if(!this.valid())return;const c=this.getCall();const code=await callSafetyCode(c?.id,this.pc.localDescription?.sdp,this.pc.remoteDescription?.sdp);if(this.valid())this.onSafety(code);}
  async send(op,data={}){const c=this.getCall();if(!c||!this.valid())return null;const result=await this.request(`/calls/${c.id}/${op}`,{device:this.device,...data});if(this.valid()&&result?.id===c.id){this.onCall(result);this.progressPending=true;}return result;}
+ error(error){const now=Date.now();if(!this.lastError||now-this.lastError>=5000){this.lastError=now;this.onSignalingError(error,this.getCall()?.restart_generation||0);}}
  async networkChanged(){this.freshNetwork=true;this.rollbackNeeded=true;return this.disconnected();}
  async disconnected(){
   if(!this.valid())return;
   const c=this.getCall();this.reported=-1;this.needsRestart=true;this.onPhase('Восстанавливаем соединение…');
   if(!this.deadline)this.deadline=setTimeout(()=>{if(this.valid())this.onFailure('Звонок прерван: не удалось восстановить соединение');},this.timeout);
   if(!c?.media_reporting)return;
-  try{if(c.status!=='active')return;await this.send('ice-restart',this.freshNetwork?{network_change:true}:{});this.freshNetwork=false;await this.sync(this.getCall());}catch{/* Polling retries while the bounded recovery timer runs. */}
+  try{if(c.status!=='active')return;await this.send('ice-restart',this.freshNetwork?{network_change:true}:{});this.freshNetwork=false;await this.sync(this.getCall());}catch(error){this.error(error);/* Polling retries while the bounded recovery timer runs. */}
  }
  async sync(c){
   if(!this.valid()||this.busy||!c?.media_reporting||c.status!=='active')return;
@@ -37,8 +38,8 @@ export class CallRecovery {
     else return;
    }
    if(this.valid()&&this.pc.connectionState==='connected'&&this.reported!==epoch){await this.send('media-state',{connected:true,restart_generation:epoch});if(this.valid())this.reported=epoch;}
-   if(this.valid()&&!this.getCall()?.reconnecting&&this.pc.connectionState==='connected'){clearTimeout(this.deadline);this.deadline=null;}
+   if(this.valid()&&!this.getCall()?.reconnecting&&this.pc.connectionState==='connected'){clearTimeout(this.deadline);this.deadline=null;this.onPhase('Разговор');}
    await this.safety();
-  }finally{this.busy=false;const progressed=this.progressPending;this.progressPending=false;if(progressed&&this.valid())this.onProgress?.();}
+  }catch(error){this.error(error);throw error;}finally{this.busy=false;const progressed=this.progressPending;this.progressPending=false;if(progressed&&this.valid())this.onProgress?.();}
  }
 }

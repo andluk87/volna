@@ -1,3 +1,4 @@
+import {retryAfterMs} from '../../shared/retry-after.mjs';
 import {DEMO_TOKEN,demoRequest,demoEvents,demoBlob,demoUpload} from './demo-api.mjs';
 import {uploadTransport} from './upload-transport.mjs';
 import {sessionFetch} from './session.mjs';
@@ -5,7 +6,7 @@ export const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/,'');
 export async function request(path, token, data, signal, method, extraHeaders) {
   if(token===DEMO_TOKEN)return demoRequest(path,data,method||(data===undefined?'GET':'POST'),signal);
   const res = await sessionFetch(API + '/api' + path, { method: method || (data === undefined ? 'GET' : 'POST'), headers: { ...extraHeaders, ...(token ? {Authorization:'Bearer '+token}:{}), ...(data === undefined ? {} : {'Content-Type':'application/json'}) }, ...(data === undefined ? {} : {body:JSON.stringify(data)}), signal });
-  const value = await res.json(); if (!res.ok) throw Object.assign(new Error(value.error || 'Ошибка запроса'), {status:res.status,code:value.code,suggestions:value.suggestions}); return value;
+  const value = await res.json(); if (!res.ok) throw Object.assign(new Error(value.error || 'Ошибка запроса'), {status:res.status,code:value.code,suggestions:value.suggestions,...(res.status===429?{retryAfterMs:retryAfterMs({...value,header:res.headers.get("Retry-After")})}:{})}); return value;
 }
 export async function events(token, signal, onEvent, onStatus, onUnauthorized) {
   if(token===DEMO_TOKEN)return demoEvents(signal,onEvent,onStatus);

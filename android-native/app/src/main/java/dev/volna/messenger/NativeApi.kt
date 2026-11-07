@@ -529,7 +529,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
     }
     private fun nullableText(row: JSONObject, key: String): String? = row.optString(key).takeIf { it.isNotBlank() && it != "null" }
     private fun apiError(body: String, code: Int): Exception = try {
-        NativeApiException(code, JSONObject(body).optString("error").ifBlank { "Ошибка сервера ($code)" })
+        JSONObject(body).let{NativeApiException(code,it.optString("error").ifBlank { "Ошибка сервера ($code)" },it.optString("code"),it.optLong("retry_at"),it.optLong("server_time"))}
     } catch (_: Exception) { NativeApiException(code, "Ошибка сервера ($code)") }
 }
 

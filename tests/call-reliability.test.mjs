@@ -121,3 +121,8 @@ test('resilient incoming ringing pauses during outage and resumes on same call',
  f.advance(60000);assert.equal((await f.req('/current?device='+f.da,f.a)).id,call.id);assert.equal((await f.req('/current?device='+f.db,f.b)).id,call.id);await f.req('/current?device='+f.da,f.a);
  const accepted=await f.action(call.id,'accept',f.b,{protocol:2,resilient:true});assert.equal(accepted.id,call.id);assert.equal(accepted.status,'connecting');
 });
+
+test('delayed end for the original call cannot terminate a newer call of the same account',async t=>{
+ const f=fixture(t),old=await f.connected();await f.action(old.id,'end',f.a);const next=await f.start();
+ assert.notEqual(next.id,old.id);await f.action(old.id,'end',f.a);const current=await f.req('/current?device='+f.da,f.a);assert.equal(current.id,next.id);assert.equal(f.row(next.id).ended,null);
+});

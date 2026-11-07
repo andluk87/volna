@@ -16,5 +16,5 @@ test('three devices polling do not exhaust account messaging; a noisy session ca
  for(const token of tokens)for(let i=0;i<100;i++)assert.equal((await get(poll,token)).status,200);
  assert.equal((await get('/chats')).status,200);
  for(let i=0;i<80;i++)assert.equal((await get(poll)).status,200);
- assert.equal((await get(poll)).status,429);assert.equal((await get('/calls/current?device='+'b'.repeat(32))).status,200,'another window of the same session is independent');assert.equal((await get(poll,tokens[1])).status,200);assert.equal((await get('/calls/config')).status,200);assert.equal((await get('/chats')).status,200);
+ const limited=await get(poll);assert.equal(limited.status,429);assert.ok(Number(limited.headers.get('Retry-After'))>0);const delay=await limited.json();assert.ok(delay.retry_at>delay.server_time);assert.equal((await get('/calls/current?device='+'b'.repeat(32))).status,200,'another window of the same session is independent');assert.equal((await get(poll,tokens[1])).status,200);assert.equal((await get('/calls/config')).status,200);assert.equal((await get('/chats')).status,200);
 });

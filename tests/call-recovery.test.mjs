@@ -10,11 +10,11 @@ test('DTLS safety: same cross-platform code in both directions, binds call and b
  assert.equal(await callSafetyCode(id,sdp('aa'),sdp('bb')),code);assert.equal(code,'741D · 4E0E · 0821 · 471C');
 });
 function harness(incoming=false){
- let call={id,status:'active',media_reporting:true,incoming,restart_generation:0,reconnecting:false},alive=true,offers=0,answers=0,fail=false;const sent=[];
+ let call={id,status:'active',media_reporting:true,incoming,restart_generation:0,reconnecting:false},alive=true,offers=0,answers=0,fail=false;const sent=[],phases=[],errors=[];
  const description=(type,byte)=>({type,sdp:sdp(byte),toJSON(){return {type,sdp:this.sdp};}});
  const pc={connectionState:'connected',signalingState:'stable',localDescription:description(incoming?'answer':'offer','AA'),remoteDescription:description(incoming?'offer':'answer','BB'),createOffer:async()=>{offers++;return description('offer','CC');},createAnswer:async()=>{answers++;return description('answer','DD');},setLocalDescription:async d=>{pc.localDescription={...d,toJSON:()=>d};pc.signalingState=d.type==='offer'?'have-local-offer':'stable';},setRemoteDescription:async d=>{pc.remoteDescription=d;pc.signalingState=d.type==='offer'?'have-remote-offer':'stable';}};
- const recovery=new CallRecovery({pc,getCall:()=>call,request:async(path,data)=>{sent.push({path,data});if(path.endsWith('ice-restart')){if(data.description)call={...call,restart_generation:1,restart_requested:false,offer:data.description,answer:null};else call={...call,reconnecting:true,restart_requested:true};}if(path.endsWith('answer'))call={...call,answer:data.description};if(fail){fail=false;throw Error('response lost');}return call;},onCall:c=>{call=c;},onPhase:()=>{},onFailure:()=>{},onSafety:()=>{},isCurrent:()=>alive,device:id,gather:async()=>{}});
- return {pc,recovery,sent,get call(){return call;},setCall:c=>{call={...call,...c};},loseResponse:()=>{fail=true;},stop:()=>{alive=false;recovery.dispose();},offers:()=>offers,answers:()=>answers};
+ const recovery=new CallRecovery({pc,getCall:()=>call,request:async(path,data)=>{sent.push({path,data});if(path.endsWith('ice-restart')){if(data.description)call={...call,restart_generation:1,restart_requested:false,offer:data.description,answer:null};else call={...call,reconnecting:true,restart_requested:true};}if(path.endsWith('answer'))call={...call,answer:data.description};if(fail){fail=false;throw Error('response lost');}return call;},onCall:c=>{call=c;},onPhase:phase=>phases.push(phase),onSignalingError:(error,epoch)=>errors.push({error,epoch}),onFailure:()=>{},onSafety:()=>{},isCurrent:()=>alive,device:id,gather:async()=>{}});
+ return {pc,recovery,sent,phases,errors,get call(){return call;},setCall:c=>{call={...call,...c};},loseResponse:()=>{fail=true;},stop:()=>{alive=false;recovery.dispose();},offers:()=>offers,answers:()=>answers};
 }
 test('ICE recovery: caller retries lost restart response, applies answer once, reports current generation and disposes',async t=>{
  const h=harness();t.after(h.stop);await h.recovery.sync(h.call);assert.equal(h.sent.at(-1).data.restart_generation,0);
@@ -49,4 +49,9 @@ test('ICE recovery continues immediately after signaling and never wakes on unch
 test('network switch while recovering requests fresh ICE and rolls back pending local offer',async t=>{
  const h=harness();t.after(h.stop);await h.recovery.disconnected();assert.equal(h.offers(),1);assert.equal(h.pc.signalingState,'have-local-offer');
  await h.recovery.networkChanged();assert.ok(h.sent.some(x=>x.path.endsWith('/ice-restart')&&x.data.network_change===true));assert.equal(h.offers(),2,'new route gets a fresh offer instead of waiting on the old one');
+});
+
+test('signaling failures are reported once and stable connected polls restore conversation phase',async t=>{
+ const h=harness();t.after(h.stop);h.loseResponse();await assert.rejects(h.recovery.sync(h.call),/response lost/);assert.equal(h.errors.length,1);assert.equal(h.errors[0].epoch,0);
+ await h.recovery.sync(h.call);assert.equal(h.phases.at(-1),'Разговор');const count=h.phases.length;h.stop();assert.equal(h.phases.length,count,'dispose never restores an ended conversation');
 });

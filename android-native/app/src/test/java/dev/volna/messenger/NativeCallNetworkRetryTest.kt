@@ -16,6 +16,13 @@ class NativeCallNetworkRetryTest {
   var clock=0L
   try{nativeCallNetworkRetry(valid={true},now={clock},pause={clock+=it}){throw IOException("offline")};fail("expected timeout")}catch(expected:IOException){assertEquals(180000L,clock)}
  }
+ @Test fun rateLimitUsesServerClockAndDeadline()= runBlocking {
+  var clock=0L;var attempts=0
+  val value=nativeCallNetworkRetry(valid={true},now={clock},pause={clock+=it}){if(++attempts==1)throw NativeApiException(429,"limited",retryAt=160000,serverTime=100000);"ok"}
+  assertEquals("ok",value);assertEquals(60000L,clock)
+  attempts=0;clock=0
+  try{nativeCallNetworkRetry(valid={true},now={clock},pause={clock+=it}){attempts++;throw NativeApiException(429,"limited",retryAt=400000,serverTime=100000)};fail("expected deadline")}catch(expected:NativeApiException){assertEquals(180000L,clock);assertEquals(1,attempts)}
+ }
  @Test fun emojisAreFourAndDeterministic(){
   assertEquals("🍡 🐜 🐅 🐖",nativeCallSafetyEmojis("741D · 4E0E · 0821 · 471C"))
   assertEquals("",nativeCallSafetyEmojis(""))
