@@ -58,7 +58,7 @@ object NativeCalls {
         scope.launch(Dispatchers.IO){queue.flush(force){value->endApi.callAction(session,value.getString("device"),value.getString("call_id"),"end",endReason=value.optString("end_reason"))}}
     }
     private var recoveryErrorAt=0L
-    private fun recoveryFailure(problem:Exception,epoch:Int){val now=SystemClock.elapsedRealtime();if(recoveryErrorAt==0L||now-recoveryErrorAt>=5000){recoveryErrorAt=now;diagnostic("client.error",JSONObject().put("stage","restart").put("restart_generation",epoch).put("error_type",problem.javaClass.simpleName).apply{if(problem is NativeApiException)put("http_status",problem.status)})}}
+    private fun recoveryFailure(problem:Exception,epoch:Int){val now=SystemClock.elapsedRealtime();if(recoveryErrorAt==0L||now-recoveryErrorAt>=5000){recoveryErrorAt=now;diagnosticFailure(problem,"restart",epoch)}}
 
     @Volatile private var token = ""
     internal fun accountId():Long = NativeCredentials.accountId(token)
@@ -68,7 +68,7 @@ object NativeCalls {
     private var diagnosticJob: Job? = null
     private fun diagnostic(event:String,fields:JSONObject=JSONObject()) { NativeCallTelemetry.send(token,device,state.value.call?.id,event,networkSnapshot(fields).put("generation",generation)) }
     private fun diagnosticStep(stage:String) { diagnosticStage=stage;diagnostic("client.stage",JSONObject().put("stage",stage)) }
-    private fun diagnosticFailure(problem:Throwable,stage:String=diagnosticStage) { diagnostic("client.error",JSONObject().put("stage",stage).put("error_type",if(problem is LinkageError)"LinkageError" else problem.javaClass.simpleName).apply { if(problem is NativeApiException)put("http_status",problem.status) }) }
+    private fun diagnosticFailure(problem:Throwable,stage:String=diagnosticStage,epoch:Int?=null) { diagnostic("client.error",JSONObject().put("stage",stage).put("error_type",if(problem is LinkageError)"LinkageError" else if(problem is NativeCallTransportException)problem.cause?.javaClass?.simpleName else problem.javaClass.simpleName).apply { if(problem is NativeApiException)put("http_status",problem.status);if(epoch!=null)put("restart_generation",epoch);if(problem is NativeCallTransportException){put("transport_stage",problem.transportStage);put("elapsed_ms",problem.elapsedMs)} }) }
     internal fun debug(action:String,fields:JSONObject=JSONObject(),call:VolnaCall?=state.value.call) { NativeCallTelemetry.send(token,device,call?.id,"client.lifecycle",networkSnapshot(fields).put("generation",generation).put("lifecycle",action).put("has_peer",peer!=null).put("operation_active",operation?.isActive==true).put("call_status",call?.status?:"none")) }
     private fun networkSnapshot(fields:JSONObject):JSONObject {
         runCatching {
@@ -279,6 +279,7 @@ object NativeCalls {
         debug("start_requested")
         val session = token;val ownerDevice=device;val ownerQueue=endQueue
         val version = ++generation
+        val clientId=UUID.randomUUID().toString()
         cameraWanted = video
         callSounds?.stop()
         NativeCallDiagnostics.begin()
@@ -290,9 +291,13 @@ object NativeCalls {
                 withTimeoutOrNull(6000){while(queue?.pending()==true){flushEnds();delay(100)}}
                 check(queue?.pending()!=true){"Предыдущий звонок завершится после восстановления связи с сервером"}
                 diagnosticStep("start");NativeCallDiagnostics.step("Создание звонка на сервере")
-                withContext(Dispatchers.IO) { created = api.startCall(session, ownerDevice, chat.id, video) }
+                var retryReportedAt=0L
+                created=nativeCallNetworkRetry(valid={version==generation},waiting={mutableState.update{it.copy(phase="Нет ответа от сервера. Повторяем запрос…")}},onRetry={problem->
+                    val now=SystemClock.elapsedRealtime();if(retryReportedAt==0L||now-retryReportedAt>=5000){retryReportedAt=now;diagnosticFailure(problem,"start");debug("start_retry")}
+                }){runInterruptible(Dispatchers.IO){api.startCall(session,ownerDevice,chat.id,video,clientId=clientId)}}
                 checkVersion(version)
                 val call = created ?: error("Сервер не создал звонок")
+                check(call.status in listOf("preparing","ringing")){"Этот вызов уже завершён. Повторите звонок"}
                 mutableState.update { it.copy(call = call) }
                 val pc = prepare(version)
                 val description = createDescription(pc, offer = true)

@@ -1023,7 +1023,7 @@ private fun VolnaNativeApp(authReturnUrl: String?, openChatId: Long?, openMessag
                     finally { busy = false }
                 }
             }
-            if (callState.call != null && !callState.minimized && !NativeCallLayout.inPip) NativeCallScreen(callState, token)
+            if ((callState.call != null || callState.busy) && !callState.minimized && !NativeCallLayout.inPip) NativeCallScreen(callState, token)
         }
     }
 }

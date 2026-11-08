@@ -47,7 +47,11 @@ import org.webrtc.SurfaceViewRenderer
 @Composable
 fun NativeCallScreen(state: NativeCallState, token: String, standalone: Boolean = false, pip: Boolean = false, onMinimize: (() -> Unit)? = null) {
     val context = LocalContext.current
-    val original = state.call ?: return
+    val original = state.call
+    if(original==null){
+        if(state.busy)NativeCallPreparingDialog(state.phase){NativeCalls.end(reason="user_hangup")}
+        return
+    }
     val account = NativeCredentials.accountId(token).takeIf{it>0}?:context.getSharedPreferences("volna-native", Context.MODE_PRIVATE).getLong("user_id", 0)
     val accountName=remember(account){NativeAccounts.list(context).firstOrNull{it.user.id==account}?.user?.name.orEmpty()}
     val contactNames = rememberNativeContactNames(account)
@@ -265,3 +269,8 @@ private fun NativeCameraPreviewScreen(state: NativeCallState, onScreen: () -> Un
 }
 
 private fun nativeRouteIcon(label:String)=when{label.startsWith("Динамик")->Icons.Outlined.VolumeUp;label.startsWith("Bluetooth")->Icons.Outlined.Bluetooth;label.contains("гарнитура",ignoreCase=true)->Icons.Outlined.Headphones;else->Icons.Outlined.PhoneAndroid}
+
+@Composable
+internal fun NativeCallPreparingDialog(phase:String,onCancel:()->Unit){
+    AlertDialog(onDismissRequest=onCancel,title={Text("Подготовка звонка")},text={Column(verticalArrangement=Arrangement.spacedBy(16.dp)){CircularProgressIndicator();Text(phase)}},confirmButton={TextButton(onClick=onCancel){Text("Отменить")}})
+}

@@ -71,6 +71,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .followRedirects(false)
+        .eventListenerFactory { request -> request.request().tag(NativeCallTransportTrace::class.java) ?: okhttp3.EventListener.NONE }
         .addInterceptor { chain ->
             val original = chain.request()
             val supplied = original.header("Authorization")?.removePrefix("Bearer ")
@@ -79,6 +80,7 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
             val first = chain.proceed(request.build())
             if (first.code != 401 || supplied.isNullOrBlank() || NativeCredentials.refresh(supplied) == null) first
             else {
+                original.tag(NativeCallTransportTrace::class.java)?.stage="auth_refresh"
                 val updated = try { NativeCredentials.refreshGate.refresh {
                     val current = NativeCredentials.resolve(supplied)
                     if (current != request.build().header("Authorization")?.removePrefix("Bearer ")) current
@@ -102,19 +104,24 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 
     private fun call(path: String, method: String = "GET", token: String? = null, data: JSONObject? = null): JSONObject {
+        val trace=if(path.startsWith("/calls/"))NativeCallTransportTrace() else null
         val builder = Request.Builder().url(base + "/api" + path).header("Accept", "application/json")
+        if(trace!=null)builder.tag(NativeCallTransportTrace::class.java,trace)
         if (!token.isNullOrBlank()) { builder.header("Authorization", "Bearer $token");if(path.startsWith("/calls/")&&path!="/calls/diagnostics")NativeCallTelemetry.header(token)?.let{builder.header("X-Volna-Call-Diagnostics",it)} }
         if (method == "POST") builder.post((data ?: JSONObject()).toString().toRequestBody(jsonType))
         if (method == "PATCH") builder.patch((data ?: JSONObject()).toString().toRequestBody(jsonType))
         if (method == "DELETE") builder.delete()
         val client = if (path.endsWith("/transcribe")) http.newBuilder().readTimeout(960, TimeUnit.SECONDS).build() else http
+        try {
         val response = client.newCall(builder.build()).execute()
         response.use {
+            trace?.stage="response_body"
             val text = it.body?.string().orEmpty()
             val value = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
             if (!it.isSuccessful) throw NativeApiException(it.code, value.optString("error").ifBlank { "Ошибка сервера (${it.code})" }, value.optString("code"), value.optLong("retry_at"), value.optLong("server_time"))
             return value
         }
+        }catch(problem:java.io.IOException){if(trace!=null)throw NativeCallTransportException(trace.stage,trace.elapsedMs(),problem);throw problem}
     }
 
     fun otpConfig(): JSONObject = call("/auth/config")
@@ -447,8 +454,8 @@ class NativeApi(baseUrl: String, requestTimeoutSeconds:Long=0) {
         }
     }
 
-    fun startCall(token: String, device: String, chatId: Long, video: Boolean = false): VolnaCall {
-        val data = JSONObject().put("device", device).put("chat_id", chatId).put("video", video).put("protocol", 2).put("resilient",true).put("client_id", UUID.randomUUID().toString())
+    fun startCall(token: String, device: String, chatId: Long, video: Boolean = false,clientId:String=UUID.randomUUID().toString()): VolnaCall {
+        val data = JSONObject().put("device", device).put("chat_id", chatId).put("video", video).put("protocol", 2).put("resilient",true).put("client_id",clientId)
         return parseCall(nativeRetryCallMutation { call("/calls/start", "POST", token, data) })
     }
 
