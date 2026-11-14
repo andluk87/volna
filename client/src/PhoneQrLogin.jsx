@@ -1,7 +1,9 @@
+import DesktopLogin from './DesktopLogin';
 import React,{useEffect,useState} from 'react';
 import {API,request} from './api';
 import {qrSvgPath} from './qr-code.mjs';
-export default function PhoneQrLogin({onSession}){
+export default function PhoneQrLogin(props){return window.volnaDesktop?<DesktopLogin {...props}/>:<BrowserQrLogin {...props}/>;}
+function BrowserQrLogin({onSession}){
  const invite=new URLSearchParams(location.search).get('invite')||'';
  const android=/Android/i.test(navigator.userAgent);
  const androidInvite=!window.volnaDesktop&&(android||/Windows/i.test(navigator.userAgent))&&/^[a-f0-9]{48}$/.test(invite);

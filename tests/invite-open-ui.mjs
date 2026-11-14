@@ -16,12 +16,12 @@ try{
   const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/api/auth/qr/**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(route.request().url().endsWith('/request')?{id:'fixture',poll_token:'fixture',qr_text:'volna://login/'+'b'.repeat(43),expires_in:180}:{status:'pending'})}));
   await page.goto(`http://127.0.0.1:5196/qa-invite-open.html?invite=${invite}`);
-  await page.getByRole('heading',{name:handoff?'Приглашение в Волну':'Вход по QR'}).waitFor();
+  await page.getByRole('heading',{name:handoff?'Приглашение в Волну':platform==='electron'?'Волна для Windows':'Вход по QR'}).waitFor();if(platform==='electron'){await page.getByRole('button',{name:'Начать общение',exact:true}).click();await page.getByRole('heading',{name:'Сканируйте с телефона'}).waitFor();}
   const link=page.getByRole('link',{name:'Открыть в Волне',exact:true});
   if(handoff){await link.waitFor();assert.equal(await link.getAttribute('href'),'volna://invite/'+invite);assert.equal(await page.getByRole('link',{name:'Установить приложение'}).getAttribute('href'),android?'/download/volna-android.apk':'/download/volna-windows.exe');await mkdir(new URL('../work/auth94',import.meta.url),{recursive:true});await page.screenshot({path:new URL('../work/auth94/invite-android.png',import.meta.url).pathname});}
   else assert.equal(await link.count(),0);
   if(handoff){assert.equal(await page.getByRole('heading',{name:'Вход по QR'}).count(),0);await page.getByRole('button',{name:'Продолжить в браузере'}).click();await page.getByRole('heading',{name:'Вход по QR'}).waitFor();}
-  await page.goto('http://127.0.0.1:5196/qa-invite-open.html?invite=invalid');await page.getByRole('heading',{name:'Вход по QR'}).waitFor();assert.equal(await page.getByRole('link',{name:'Открыть в Волне',exact:true}).count(),0);
+  await page.goto('http://127.0.0.1:5196/qa-invite-open.html?invite=invalid');await page.getByRole('heading',{name:platform==='electron'?'Волна для Windows':'Вход по QR'}).waitFor();assert.equal(await page.getByRole('link',{name:'Открыть в Волне',exact:true}).count(),0);
   assert.deepEqual(errors,[]);await context.close();
  }
  const desktopContext=await browser.newContext();

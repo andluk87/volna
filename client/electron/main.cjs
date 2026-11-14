@@ -1,9 +1,11 @@
+const {desktopPreferences}=require('./desktop-preferences.cjs');
+const {monochromeTray}=require('./monochrome-tray.cjs');
 const {createSessionLog}=require('./session-log.cjs');
 const {photoPayload}=require('./photo-files.cjs');
 const {mediaFullscreen}=require('./media-fullscreen.cjs');
 const {windowChromeOptions,applyWindowChrome}=require('./window-chrome.cjs');
 const {mediaPermissions}=require('./media-permissions.cjs');
-const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage,screen,powerMonitor,nativeImage}=require('electron');
+const {app,BrowserWindow,protocol,net,session,dialog,ipcMain,shell,Tray,Menu,Notification,desktopCapturer,safeStorage,screen,powerMonitor,nativeImage,nativeTheme,systemPreferences}=require('electron');
 const {unreadOverlay}=require('./unread-overlay.cjs');
 const {systemFocusState}=require('./focus-assist.cjs');
 const {notificationState}=require('./notification-state.cjs');
@@ -18,6 +20,7 @@ app.setPath('userData',path.join(app.getPath('appData'),'Volna'));
 app.setName('VLN');
 protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true}}]);
 app.commandLine.appendSwitch('autoplay-policy','no-user-gesture-required');
+const overlayWindows=new WeakSet();let preferenceStore,desktopSettings;
 const appWindows=new Set(),editorFocus=new WeakMap(),transfers=new Set();
 let messageToasts,pendingInvite=null,desktopReady=false;
 function openInvitation(url){const code=invitationCode(url,config?.apiBase);if(!code)return false;pendingInvite=code;if(desktopReady){show();if(!win.webContents.isLoading())win.webContents.send('desktop:invite',code);}return true;}
@@ -27,8 +30,8 @@ const show=()=>{if(!win||win.isDestroyed())createWindow();if(win.isMinimized())w
 function createWindow(chatId=null,accountId=null){
  const secondary=chatId!==null;
  const stateFile=path.join(app.getPath('userData'),'window-state.json'),saved=readWindowState(stateFile);
- const window=new BrowserWindow({...restoredBounds(saved,screen.getAllDisplays()),...windowChromeOptions(process.platform),minWidth:390,minHeight:500,title:'VLN',backgroundColor:'#17212b',autoHideMenuBar:true,show:false,icon:path.join(app.getAppPath(),'dist/icons/icon-192.png'),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false,spellcheck:true,additionalArguments:secondary?['--volna-chat-window']:[]}});
- const contents=window.webContents;appWindows.add(window);if(!secondary)win=window;window.on('closed',()=>{appWindows.delete(window);transfers.delete(contents);});
+ const window=new BrowserWindow({...restoredBounds(saved,screen.getAllDisplays()),...(desktopSettings?.systemFrame?{}:windowChromeOptions(process.platform)),minWidth:390,minHeight:500,title:'VLN',backgroundColor:'#17212b',autoHideMenuBar:true,show:false,icon:path.join(app.getAppPath(),'dist/icons/icon-192.png'),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false,spellcheck:true,additionalArguments:[...(secondary?['--volna-chat-window']:[]),...(desktopSettings?.systemFrame?['--volna-system-frame']:[])]}});
+ const contents=window.webContents;if(!desktopSettings?.systemFrame&&process.platform==='win32')overlayWindows.add(window);window.setSkipTaskbar(desktopSettings?.taskbar===false);contents.setZoomFactor(desktopSettings?.systemScale===false?desktopSettings.scale:1);contents.on('did-finish-load',()=>contents.setZoomFactor(desktopSettings?.systemScale===false?desktopSettings.scale:1));appWindows.add(window);if(!secondary)win=window;window.on('closed',()=>{appWindows.delete(window);transfers.delete(contents);});
  if(!secondary){trackWindowState(window,stateFile);if(saved.maximized===true)window.maximize();}
  window.on('focus',()=>window.flashFrame(false));
  window.once('ready-to-show',()=>window.show());
@@ -52,6 +55,7 @@ if(!app.requestSingleInstanceLock())app.quit();else{
  app.on('open-url',(event,url)=>{event.preventDefault();openInvitation(url);});
 
  app.whenReady().then(async()=>{
+  preferenceStore=desktopPreferences(path.join(app.getPath('userData'),'desktop-settings.json'));desktopSettings=preferenceStore.get();
   const sessionLog=createSessionLog({directory:path.join(app.getPath('userData'),'logs'),version:app.getVersion()});sessionLog.write('app-start');
   config=validateConfig(JSON.parse(fs.readFileSync(path.join(__dirname,'config.json'),'utf8')));
   if(app.isPackaged)app.setAsDefaultProtocolClient('volna');
@@ -72,13 +76,22 @@ if(!app.requestSingleInstanceLock())app.quit();else{
    try{const sources=await desktopCapturer.getSources({types:['screen','window'],thumbnailSize:{width:320,height:180},fetchWindowIcons:true}),selected=await pickScreen(win,sources);if(!request.frame.isDestroyed()&&selected)callback({video:selected});else callback({});}catch{callback({});}
   });
   spellingDictionary=ignoredSpelling(session.defaultSession,path.join(app.getPath('userData'),'ignored-spelling.json'));
-  Menu.setApplicationMenu(null);createWindow();desktopReady=true;tray=new Tray(path.join(root,'icons/icon-192.png'));tray.setToolTip('VLN');
-  tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть VLN',click:show},{label:'Проверить обновления',click:()=>{show();updates.check(true);}},{label:'Журнал авторизации',click:()=>{sessionLog.write('log-open');shell.showItemInFolder(sessionLog.file);}},{type:'separator'},{label:'Выйти',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',show);
+  Menu.setApplicationMenu(null);createWindow();desktopReady=true;
+  const syncTray=()=>{if(!desktopSettings.tray){tray?.destroy();tray=undefined;return;}const icon=desktopSettings.monochrome?nativeImage.createFromBuffer(monochromeTray(nativeTheme.shouldUseDarkColorsForSystemIntegratedUI??nativeTheme.shouldUseDarkColors)):path.join(root,'icons/icon-192.png');if(tray){tray.setImage(icon);return;}tray=new Tray(icon);tray.setToolTip('VLN');tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть VLN',click:show},{label:'Проверить обновления',click:()=>{show();updates.check(true);}},{label:'Журнал авторизации',click:()=>{sessionLog.write('log-open');shell.showItemInFolder(sessionLog.file);}},{type:'separator'},{label:'Выйти',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',show);};syncTray();nativeTheme.on('updated',syncTray);
   const idleFile=path.join(app.getPath('userData'),'update-settings.json');let idleInstall=false;try{idleInstall=JSON.parse(fs.readFileSync(idleFile,'utf8')).idleInstall===true;}catch{}
-  const {autoUpdater}=require('electron-updater');updates=createUpdates({idleInstall,idleSeconds:()=>powerMonitor.getSystemIdleTime(),saveIdleInstall:value=>{const temp=idleFile+'.tmp';fs.writeFileSync(temp,JSON.stringify({idleInstall:value}),{mode:0o600});fs.renameSync(temp,idleFile);},updater:autoUpdater,version:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',publish:state=>{if(!win.isDestroyed())win.webContents.send('desktop:update-state',state);},inCall:()=>activeCall||transfers.size>0,isSessionBusy:()=>sessionRefresh?.pending()===true,install:()=>{quitting=true;autoUpdater.quitAndInstall(true,true);}});
+  const {autoUpdater}=require('electron-updater');updates=createUpdates({autoUpdate:desktopSettings.autoUpdate,idleInstall,idleSeconds:()=>powerMonitor.getSystemIdleTime(),saveIdleInstall:value=>{const temp=idleFile+'.tmp';fs.writeFileSync(temp,JSON.stringify({idleInstall:value}),{mode:0o600});fs.renameSync(temp,idleFile);},updater:autoUpdater,version:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',publish:state=>{if(!win.isDestroyed())win.webContents.send('desktop:update-state',state);},inCall:()=>activeCall||transfers.size>0,isSessionBusy:()=>sessionRefresh?.pending()===true,install:()=>{quitting=true;autoUpdater.quitAndInstall(true,true);}});
+  autoUpdater.allowPrerelease=desktopSettings.beta;
+  const systemAccent=()=>{const color=systemPreferences.getAccentColor();if(!/^[a-f0-9]{8}$/i.test(color))throw Error('Не удалось определить системный цвет');return '#'+color.slice(0,6);};
+  const publishAccent=()=>{if(!desktopSettings.systemAccent)return;try{const color=systemAccent();for(const window of appWindows)window.webContents.send('desktop:accent',color);}catch{}};
+  systemPreferences.on('accent-color-changed',publishAccent);
+  ipc('desktop:system-accent',systemAccent);
+  ipc('desktop:preferences',()=>({...desktopSettings,version:app.getVersion()}));
+  ipc('desktop:set-preferences',(patch,event)=>{if(!patch||typeof patch!=='object'||Array.isArray(patch))throw Error('Invalid preferences');if(patch.systemAccent===true)systemAccent();desktopSettings=preferenceStore.set(patch);updates.setAutoUpdate(desktopSettings.autoUpdate);autoUpdater.allowPrerelease=desktopSettings.beta;syncTray();publishAccent();for(const window of appWindows){window.setSkipTaskbar(!desktopSettings.taskbar);window.webContents.setZoomFactor(desktopSettings.systemScale?1:desktopSettings.scale);}return {...desktopSettings,version:app.getVersion()};});
+  ipc('desktop:connection-settings',()=>shell.openExternal('ms-settings:network-proxy'));
+  ipc('desktop:restart',()=>{if(activeCall||transfers.size||sessionRefresh?.pending())throw Error('Завершите звонок и дождитесь сохранения сеанса');if(updates.snapshot().status==='ready'&&updates.snapshot().deferred)return updates.install();quitting=true;app.relaunch();app.quit();return true;});
   ipc('desktop:media-fullscreen',(value,event)=>mediaFullscreen(BrowserWindow.fromWebContents(event.sender),value));
   ipc('desktop:save-photo',async(value,event)=>{const photo=photoPayload(value);const result=await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender),{title:'Сохранить фото',defaultPath:path.join(app.getPath('pictures'),photo.name)});if(result.canceled||!result.filePath)return {saved:false};await fs.promises.writeFile(result.filePath,photo.bytes);if(photo.reveal)shell.showItemInFolder(result.filePath);return {saved:true};});
-  ipc('desktop:window-theme',(theme,event)=>applyWindowChrome(BrowserWindow.fromWebContents(event.sender),theme,process.platform));
+  ipc('desktop:window-theme',(theme,event)=>{const window=BrowserWindow.fromWebContents(event.sender);if(!overlayWindows.has(window))return false;return applyWindowChrome(window,theme,process.platform);});
   ipc('desktop:editor-focus',(value,event)=>{editorFocus.set(event.sender,value===true);});
   ipc('desktop:open-window',value=>{if(!Number.isSafeInteger(value?.chatId)||value.chatId<1||!Number.isSafeInteger(value.accountId)||value.accountId<1)throw Error('Invalid chat');createWindow(value.chatId,value.accountId);return true;});
   ipc('desktop:start-call',value=>{if(!Number.isSafeInteger(value?.chatId)||value.chatId<1||!Number.isSafeInteger(value.accountId)||value.accountId<1||typeof value.video!=='boolean')throw Error('Invalid call');show();win.webContents.send('desktop:start-call',value);return true;});

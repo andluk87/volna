@@ -6,6 +6,7 @@ import Dialog from './Dialog';
 import {wallpaperBlob,saveWallpaper} from './background.mjs';
 export function useAppearance(){
  const [settings,setSettings]=useState(()=>{try{const raw=localStorage.getItem('volna.appearance');return normalizeAppearance(raw?JSON.parse(raw):{theme:localStorage.getItem('volna.theme')||'system',...(window.volnaDesktop?{size:14,radius:8}:{})});}catch{return {...defaults};}});
+ useEffect(()=>{const bridge=window.volnaDesktop;if(!bridge)return;let live=true;const apply=color=>{if(live&&/^#[a-f0-9]{6}$/i.test(color||''))setSettings(current=>normalizeAppearance({...current,accent:color}));};const stop=bridge.onSystemAccent?.(apply);bridge.preferences?.().then(value=>value.systemAccent?bridge.systemAccent?.():null).then(apply).catch(()=>{});return()=>{live=false;stop?.();};},[settings.accent]);
  const [wallpaperRevision,setWallpaperRevision]=useState(0);
  useEffect(()=>{const changed=()=>setWallpaperRevision(v=>v+1);window.addEventListener('volna-wallpaper',changed);return()=>window.removeEventListener('volna-wallpaper',changed);},[]);
  useEffect(()=>{let live=true,url;document.documentElement.style.removeProperty('--wallpaper-image');if(settings.background==='image')wallpaperBlob().then(blob=>{if(live&&blob){url=URL.createObjectURL(blob);document.documentElement.style.setProperty('--wallpaper-image',`url("${url}")`);}}).catch(()=>{});return()=>{live=false;if(url)URL.revokeObjectURL(url);};},[settings.background,wallpaperRevision]);

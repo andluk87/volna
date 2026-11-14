@@ -1,0 +1,5 @@
+const fs=require('node:fs');
+const defaults={language:'ru',autoUpdate:true,beta:false,tray:true,monochrome:false,taskbar:true,systemFrame:false,systemAccent:false,systemScale:true,scale:1};
+function normalizeDesktopPreferences(value={}){const v=value&&typeof value==='object'?value:{},result={...defaults};for(const key of ['autoUpdate','beta','tray','monochrome','taskbar','systemFrame','systemAccent','systemScale'])if(typeof v[key]==='boolean')result[key]=v[key];if(['ru','en'].includes(v.language))result.language=v.language;if(Number.isFinite(v.scale))result.scale=Math.round(Math.min(2,Math.max(.75,v.scale))*100)/100;if(!result.tray&&!result.taskbar)result.taskbar=true;return result;}
+function desktopPreferences(file){let value;try{value=normalizeDesktopPreferences(JSON.parse(fs.readFileSync(file,'utf8')));}catch{value={...defaults};}return {get:()=>({...value}),set(patch){const next=normalizeDesktopPreferences({...value,...patch});const temp=file+'.tmp';fs.writeFileSync(temp,JSON.stringify(next),{mode:0o600});fs.renameSync(temp,file);value=next;return {...value};}};}
+module.exports={defaults,normalizeDesktopPreferences,desktopPreferences};

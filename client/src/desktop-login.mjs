@@ -1,0 +1,4 @@
+export const loginCountries=[['RU','7'],['KZ','7'],['BY','375'],['UA','380'],['US','1'],['GB','44'],['DE','49'],['FR','33'],['TR','90'],['AM','374'],['GE','995'],['AZ','994'],['UZ','998'],['KG','996'],['TJ','992'],['IL','972']];
+export function loginSecret(){const bytes=crypto.getRandomValues(new Uint8Array(32));return btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');}
+export function desktopPhone(prefix,number){if(!/^[1-9]\d{0,3}$/.test(String(prefix).replace(/\D/g,'')))throw Error('phone');const value='+'+String(prefix).replace(/\D/g,'')+String(number).replace(/\D/g,'');if(!/^\+[1-9]\d{7,14}$/.test(value))throw Error('phone');return value;}
+export const desktopDefaults={language:'ru',autoUpdate:true,beta:false,tray:true,monochrome:false,taskbar:true,systemFrame:false,systemAccent:false,systemScale:true,scale:1};

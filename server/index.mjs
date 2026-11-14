@@ -105,7 +105,7 @@ export function createApp({ pushSender, callLogOptions={}, callDebugOptions={}, 
     if (++item.count > max) throw Object.assign(fail(429, 'Слишком много запросов. Подождите минуту'),{retry_at:item.until});
   };
   const disconnect=(uid,token)=>{presenceService?.removeSession(token);for(const stream of streams.get(uid)||[])if(stream.sessionToken===token)stream.end();};
-  const phoneService=phoneAuth({db,smsOptions,json,body,userById,auth,disconnect,onLoginCode:event=>loginCodeService?.deliver(event),onChallengeChanged:()=>loginCodeService?.refresh(),loginCheck:(uid)=>{if(uid&&db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(uid)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');if(!uid&&!readAdminSettings(db).registration_enabled)throw fail(403,'Регистрация новых пользователей временно закрыта');},...phoneAuthOptions});
+  const phoneService=phoneAuth({db,smsOptions,json,body,userById,auth,disconnect,onLoginCode:event=>loginCodeService?.deliver(event),onNewSession:event=>loginCodeService?.newSession(event),onChallengeChanged:()=>loginCodeService?.refresh(),loginCheck:(uid)=>{if(uid&&db.prepare('SELECT admin_blocked FROM users WHERE id=?').get(uid)?.admin_blocked)throw fail(403,'Аккаунт заблокирован администратором');if(!uid&&!readAdminSettings(db).registration_enabled)throw fail(403,'Регистрация новых пользователей временно закрыта');},...phoneAuthOptions});
   const handleAppearance = accountAppearance({db,body,json});
   const handleFolders = folders({db,body,json,publish});
   const handleProfiles = profiles({db,uploads,auth,publish,userById,json,body});

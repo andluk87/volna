@@ -1,3 +1,4 @@
+import {desktopAuth} from './desktop-auth.mjs';
 import {androidSmsHashes,maskedPhone} from './sms-message.mjs';
 import {createSmsRouter} from './sms-providers.mjs';
 export {notificoreSender} from './sms-providers.mjs';
@@ -15,7 +16,7 @@ export function normalizePhone(value){
 }
 export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,smsOptions={},clock=Date.now,
   codeGenerator=()=>String(randomInt(0,1000000)).padStart(6,'0'),trustProxy=process.env.AUTH_TRUST_PROXY==='1',
-  loginCheck=()=>{},onLoginCode=()=>{},onChallengeChanged=()=>{},logger=event=>console.info('[sms]',JSON.stringify(event)),
+  loginCheck=()=>{},onLoginCode=()=>{},onNewSession=()=>{},onChallengeChanged=()=>{},logger=event=>console.info('[sms]',JSON.stringify(event)),
   referenceStart=Number(process.env.SMS_REFERENCE_START||0),smsReady,appHashes=androidSmsHashes()}){
   const sms=createSmsRouter({db,...smsOptions});sender??=sms.send;const isSmsReady=()=>typeof smsReady==='function'?smsReady():smsReady??sms.ready();
   if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='phone_verified_at'))db.exec('ALTER TABLE users ADD COLUMN phone_verified_at INTEGER NOT NULL DEFAULT 0');
@@ -62,6 +63,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
   const android=session=>{if(db.prepare('SELECT platform FROM refresh_sessions WHERE access_id=?').get(session.token)?.platform!=='android')throw fail(403,'Подтвердите вход в Android-приложении');};
   const cookies=req=>Object.fromEntries(String(req.headers.cookie||'').split(';').map(part=>part.trim().split('=')).filter(pair=>pair.length===2));
   const cookie=(name,value,age)=>`${name}=${value}; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=${age}`;
+  function notifySession(req,result){if(result.platform==='windows'&&result.token)try{onNewSession({userId:result.user.id,platform:result.platform,agent:agent(req),ip:ip(req),created:clock()});}catch{log({event:'session-notification-failed'});}}
   function deliver(req,res,result,select=true){
     if(result.platform==='web'&&result.refresh_token){
       const age=Math.max(0,Math.floor((result.refresh_expires-clock())/1000)),uid=result.user.id;
@@ -72,6 +74,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
   }
   const limits=new Map();
   const challengeInfo=row=>({challenge_id:row.id,sms_session_id:row.id,masked_phone:maskedPhone(row.phone),otp_length:6,expires_at:row.expires,resend_available_at:row.created+60000,server_time:clock(),status:row.expires<=clock()&&row.status==='sent'?'expired':row.status,sms_nonce:row.id.slice(0,8),sms_retriever:!!row.app_hash,expires_in:Math.max(0,Math.ceil((row.expires-clock())/1000)),resend_after:Math.max(0,Math.ceil((row.created+60000-clock())/1000))});
+  const desktop=desktopAuth({db,body,json,clock,normalizePhone,hmac,codeGenerator,ip,audit,transaction,issue,deliver:(req,res,result)=>{notifySession(req,result);deliver(req,res,result);},onLoginCode,onChallengeChanged,loginCheck,log});
   async function handle(req,res,url){
     const v1=url.pathname.startsWith('/api/v1/auth/otp/');
     const operation=v1?url.pathname.slice('/api/v1/auth/otp/'.length):'';
@@ -80,6 +83,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
     if(path==='/api/auth/config'&&req.method==='GET'){json(res,200,{mode:'phone-qr-v1',sms_enabled:isSmsReady(),sms_retriever_hashes:appHashes});return true;}
     if(!path.startsWith('/api/auth/')&&!v1)return false;
     const address=ip(req),now=clock();let bucket=limits.get(address);if(!bucket||bucket.until<now){bucket={count:0,until:now+60000};limits.set(address,bucket);}if(++bucket.count>240)throw fail(429,'Подождите минуту','RATE_LIMITED',bucket.until);
+    if(url.pathname.startsWith('/api/auth/desktop/'))return desktop(req,res,url);
     if(path==='/api/auth/accounts'&&req.method==='GET'){
       const jar=cookies(req),accounts=[];
       for(const [name,value] of Object.entries(jar)){const match=name.match(/^volna\.refresh\.([1-9]\d*)$/);if(!match||!Number.isSafeInteger(Number(match[1]))||!/^[A-Za-z0-9_-]{43}$/.test(value))continue;const row=db.prepare("SELECT user_id FROM refresh_sessions WHERE refresh_hash=? AND expires>? AND platform='web'").get(tokenHash(value),clock());if(row&&row.user_id===Number(match[1])&&!accounts.some(a=>a.id===row.user_id)){const user=userById(row.user_id,true);if(user)accounts.push(user);}}
@@ -205,7 +209,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
       if(row.status==='approved'){
         const result=transaction(()=>{const current=db.prepare('SELECT * FROM qr_challenges WHERE id=?').get(row.id);if(current.status!=='approved')throw fail(410,'QR уже использован');
           if(!db.prepare('SELECT 1 FROM refresh_sessions r JOIN sessions s ON r.access_id=s.token WHERE r.id=? AND s.user_id=? AND r.platform=\'android\' AND r.expires>?').get(row.approved_by,row.user_id,clock())){db.prepare("UPDATE qr_challenges SET status='rejected' WHERE id=?").run(row.id);return {status:'rejected'};}
-          db.prepare("UPDATE qr_challenges SET status='used' WHERE id=?").run(row.id);return {status:'used',...issue(row.user_id,row.platform,req)};});deliver(req,res,result);
+          db.prepare("UPDATE qr_challenges SET status='used' WHERE id=?").run(row.id);return {status:'used',...issue(row.user_id,row.platform,req)};});notifySession(req,result);deliver(req,res,result);
       }else json(res,200,{status:row.status});return true;
     }
     if(['/api/auth/qr/scan','/api/auth/qr/confirm'].includes(path)&&post){
@@ -228,6 +232,7 @@ export function phoneAuth({db,body,json,userById,auth,disconnect=()=>{},sender,s
   function cleanup(){
     const now=clock();for(const [key,row] of limits)if(row.until<now)limits.delete(key);db.prepare('DELETE FROM sessions WHERE token IN (SELECT access_id FROM refresh_sessions WHERE expires<?)').run(now);
     db.prepare('DELETE FROM sms_challenges WHERE created<?').run(now-7*86400000);
+    db.prepare('DELETE FROM desktop_login_challenges WHERE created<?').run(now-7*86400000);
     db.prepare('DELETE FROM qr_challenges WHERE expires<?').run(now-3600000);
     db.prepare('DELETE FROM auth_audit WHERE created<?').run(now-30*86400000);
   }
