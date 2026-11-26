@@ -84,6 +84,10 @@ Window::Window(Api *api, QWidget *parent) : QMainWindow(parent), _api(api) {
         _pendingChat = 0;
         _presenceTimer.stop();
         _chatRefreshTimer.stop();
+        _chatRetryAt = 0;
+        _refreshChatsBusy = false;
+        _chatRetryDelay = 2000;
+        _chatLoadError.clear();
         if (_calls) {
             _calls->deleteLater();
             _calls = nullptr;
@@ -470,15 +474,40 @@ void Window::loggedIn() {
     presence();
 }
 void Window::refreshChats() {
-    if (!_userId || _refreshChatsBusy)
+    if (!_userId || _refreshChatsBusy || QDateTime::currentMSecsSinceEpoch() < _chatRetryAt)
         return;
     _refreshChatsBusy = true;
-    _api->request("/chats", noData(), [this](ApiResult result) {
+    if (_chatRows.isEmpty()) {
+        _reloadChats->setText("Загрузка чатов…");
+        _reloadChats->setEnabled(false);
+        _reloadChats->show();
+    }
+    auto owner = _userId;
+    _api->request("/chats", noData(), [this, owner](ApiResult result) {
+        if (owner != _userId)
+            return;
         _refreshChatsBusy = false;
         if (!result.ok()) {
-            error(result.error);
+            _chatLoadError = result.error;
+            error(_chatLoadError);
+            auto delay = int(std::clamp(std::max(qint64(_chatRetryDelay), result.retryMs),
+                                        qint64(2000), qint64(2147400000)));
+            _chatRetryAt = QDateTime::currentMSecsSinceEpoch() + delay;
+            _chatRefreshTimer.start(delay);
+            _chatRetryDelay = std::min(_chatRetryDelay * 2, 30000);
+            _reloadChats->setText("Повторить загрузку чатов");
+            _reloadChats->setEnabled(false);
+            _reloadChats->show();
+            QTimer::singleShot(delay, this, [this] { _reloadChats->setEnabled(true); });
             return;
         }
+        if (!_chatLoadError.isEmpty() && _error->text() == _chatLoadError)
+            error({});
+        _chatLoadError.clear();
+        _chatRetryAt = 0;
+        _chatRetryDelay = 2000;
+        _chatRefreshTimer.start(60000);
+        _reloadChats->hide();
         _chatRows = result.value.toArray();
         showChats();
         if (_chatId) {

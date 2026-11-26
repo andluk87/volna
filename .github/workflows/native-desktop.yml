@@ -48,13 +48,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Include corresponding application source
         shell: pwsh
-        run: git archive --format=zip --output=build-native/Volna-Native-0.1.1-source.zip HEAD
+        run: git archive --format=zip --output=build-native/Volna-Native-0.1.2-source.zip HEAD
       - uses: actions/upload-artifact@v4
         with:
-          name: Volna-Native-0.1.1-windows-x64
+          name: Volna-Native-0.1.2-windows-x64
           path: |
-            build-native/Volna-Native-Setup-0.1.1.exe
-            build-native/Volna-Native-0.1.1-windows-x64.zip
-            build-native/Volna-Native-0.1.1-source.zip
+            build-native/Volna-Native-Setup-0.1.2.exe
+            build-native/Volna-Native-0.1.2-windows-x64.zip
+            build-native/Volna-Native-0.1.2-source.zip
           if-no-files-found: error
           retention-days: 30

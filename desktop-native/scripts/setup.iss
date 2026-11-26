@@ -7,7 +7,7 @@
 [Setup]
 AppId={{D2ED77EF-5BE0-463F-80BD-B712F00CE013}
 AppName=Volna Desktop Native
-AppVersion=0.1.1
+AppVersion=0.1.2
 AppPublisher=Volna
 AppPublisherURL=https://github.com/andluk87/volna
 DefaultDirName={localappdata}\Programs\Volna Desktop Native
@@ -17,7 +17,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDirectory}
-OutputBaseFilename=Volna-Native-Setup-0.1.1
+OutputBaseFilename=Volna-Native-Setup-0.1.2
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

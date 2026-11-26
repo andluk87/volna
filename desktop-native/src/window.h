@@ -74,7 +74,10 @@ class Window : public QMainWindow {
     QWidget *_errorFrame, *_folderRail, *_searchBar;
     QLineEdit *_chatSearch;
     QListWidget *_searchResults;
-    QPushButton *_emoji, *_latest;
+    QPushButton *_emoji, *_latest, *_reloadChats;
+    int _chatRetryDelay = 2000;
+    qint64 _chatRetryAt = 0;
+    QString _chatLoadError;
     QJsonArray _folders;
     QString _folderId = "builtin_all";
     QJsonObject _selectedFolder{{"rule", "all"}};

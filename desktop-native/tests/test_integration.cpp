@@ -111,6 +111,29 @@ class Integration : public QObject {
         QVERIFY(api->acceptSession(value));
         QVERIFY(!call(api, "/chats").value.toArray().isEmpty());
     }
+    void timeoutReadRecovery() {
+        Api probe(QUrl(config.value("url").toString()), dir.filePath("timeout"));
+        control("/stall-health", {});
+        QVERIFY(call(&probe, "/health", QJsonValue::Undefined, false).ok());
+        auto recent = probe.diagnostics();
+        QCOMPARE(recent.size(), 2);
+        QCOMPARE(recent[0].toObject().value("network_error").toString(), QString("TimeoutError"));
+        QCOMPARE(recent[1].toObject().value("status").toInt(), 200);
+        QVERIFY(!recent[1].toObject().value("http2").toBool());
+    }
+    void boundedReadRecovery() {
+        control("/fail-chats", {{"count", 2}});
+        auto unavailable = call(api, "/chats");
+        QCOMPARE(unavailable.status, 503);
+        auto recent = api->diagnostics();
+        QVERIFY(recent.size() >= 2);
+        QCOMPARE(recent.at(recent.size() - 1).toObject().value("status").toInt(), 503);
+        QCOMPARE(recent.at(recent.size() - 2).toObject().value("status").toInt(), 503);
+        QVERIFY(call(api, "/chats").ok());
+        call(api, "/users?q=private-search-marker");
+        QVERIFY(!QJsonDocument(api->diagnostics()).toJson().contains("private-search-marker"));
+        QVERIFY(!QJsonDocument(api->diagnostics()).toJson().contains(api->token().toUtf8()));
+    }
     void messagesAndRetry() {
         auto path = "/chats/" + QString::number(config.value("chat").toInt()) + "/messages";
         QJsonObject data{{"text", "Нативное сообщение ✓"},
@@ -227,9 +250,14 @@ class Integration : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(code->isVisible(), 10000);
         code->setText(
             control("/code", {{"user_id", config.value("idC")}}).value("code").toString());
+        control("/fail-chats", {{"count", 2}});
         QTest::mouseClick(window.findChild<QPushButton *>("verifyCode"), Qt::LeftButton);
+        auto reload = window.findChild<QPushButton *>("reloadChats");
+        QTRY_VERIFY_WITH_TIMEOUT(reload->isVisible() && reload->text().contains("Повторить"), 10000);
         auto chats = window.findChild<QListWidget *>("chats");
         QTRY_VERIFY_WITH_TIMEOUT(chats->isVisible() && chats->count() > 0, 15000);
+        QTRY_VERIFY(!reload->isVisible());
+        QTRY_VERIFY(!window.findChild<QLabel *>("error")->isVisible());
         QTRY_VERIFY_WITH_TIMEOUT(
             window.findChild<CallBridge *>() && window.findChild<CallBridge *>()->ready, 30000);
         for (int i = 0; i < chats->count(); ++i)

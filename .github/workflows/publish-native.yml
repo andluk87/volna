@@ -8,7 +8,7 @@ on:
       tag:
         description: Existing native release tag
         required: true
-        default: native-v0.1.1
+        default: native-v0.1.2
 permissions:
   actions: read
   contents: write
@@ -41,6 +41,8 @@ jobs:
           sha256sum "Volna-Native-Setup-$version.exe" "Volna-Native-$version-windows-x64.zip" "Volna-Native-$version-source.zip" > SHA256SUMS.txt
           cat > notes.md <<NOTES
           Предварительная сборка Volna Desktop Native $version для Windows 10/11 x64.
+
+          Сетевое исправление: поток SSE изолирован от обычных запросов; безопасные GET повторяются один раз через HTTP/1.1 после временной ошибки. Список чатов автоматически восстанавливается с ограниченной частотой. Диагностика содержит последние операции, время, код HTTP и сетевую ошибку без токенов и содержимого переписки.
 
           Обновлённый интерфейс: боковая панель папок, аватары, компактные сообщения, растущее поле ввода, эмодзи, поиск по переписке и календарь перехода к дате. Просмотр фотографий с масштабированием и навигацией внутри альбома.
 

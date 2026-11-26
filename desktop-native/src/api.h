@@ -2,6 +2,7 @@
 #include "session_store.h"
 #include "sse.h"
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QJsonValue>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -42,6 +43,7 @@ class Api : public QObject {
     QNetworkAccessManager *network() {
         return &_network;
     }
+    QJsonArray diagnostics() const { return _diagnostics; }
     void request(QString path, QJsonValue data, ApiCallback callback, bool authorized = true,
                  QByteArray method = {});
     void upload(const QString &file, ApiCallback callback);
@@ -62,10 +64,13 @@ class Api : public QObject {
 
   private:
     void send(QString path, QJsonValue data, ApiCallback callback, bool authorized,
-              QByteArray method, int attempt);
+              QByteArray method, int attempt, int transportAttempt = 0, bool http1 = false);
+    void recordRequest(QString path, QByteArray method, QNetworkReply *reply, qint64 started);
     void scheduleRefresh();
     QUrl _origin;
-    QNetworkAccessManager _network;
+    QNetworkAccessManager _network, _eventNetwork;
+    QJsonArray _diagnostics;
+    bool _preferHttp1 = false;
     SessionStore _store;
     QJsonObject _session;
     bool _refreshing = false, _unsaved = false, _eventsWanted = false, _streamConnected = false;

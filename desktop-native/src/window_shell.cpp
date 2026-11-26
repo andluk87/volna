@@ -86,6 +86,11 @@ QWidget *Window::messenger() {
     bar->addWidget(_filter, 1);
     bar->addWidget(create);
     left->addWidget(top);
+    _reloadChats = button("Загрузка чатов…", "reloadChats");
+    _reloadChats->setEnabled(false);
+    _reloadChats->hide();
+    left->addWidget(_reloadChats);
+    connect(_reloadChats, &QPushButton::clicked, this, &Window::refreshChats);
     _chats = new QListWidget;
     _chats->setObjectName("chats");
     _chats->setItemDelegate(new ChatDelegate(_avatars, _chats));
@@ -766,7 +771,8 @@ void Window::settings() {
                          {"qt", qVersion()},
                          {"server", _api->origin().toString()},
                          {"tls", QSslSocket::activeBackend()},
-                         {"tls_available", QSslSocket::supportsSsl()}};
+                         {"tls_available", QSslSocket::supportsSsl()},
+                         {"requests", _api->diagnostics()}};
         qApp->clipboard()->setText(QString::fromUtf8(QJsonDocument(info).toJson()));
         diagnostic->setText("Диагностика скопирована");
     });

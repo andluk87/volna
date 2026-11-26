@@ -43,6 +43,7 @@ QNetworkRequest Api::networkRequest(const QString &path, bool authorized) const 
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::ManualRedirectPolicy);
     request.setTransferTimeout(20000);
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, !_preferHttp1);
     if (authorized && !token().isEmpty())
         request.setRawHeader("Authorization", "Bearer " + token().toLatin1());
     return request;
@@ -88,7 +89,7 @@ void Api::request(QString path, QJsonValue data, ApiCallback callback, bool auth
     send(path, data, std::move(callback), authorized, method, 0);
 }
 void Api::send(QString path, QJsonValue data, ApiCallback callback, bool authorized,
-               QByteArray method, int attempt) {
+               QByteArray method, int attempt, int transportAttempt, bool http1) {
     if (authorized && token().isEmpty()) {
         callback({401, {}, {}, "Войдите в аккаунт"});
         return;
@@ -102,16 +103,43 @@ void Api::send(QString path, QJsonValue data, ApiCallback callback, bool authori
         bytes = data.isObject() ? QJsonDocument(data.toObject()).toJson(QJsonDocument::Compact)
                                 : QJsonDocument(data.toArray()).toJson(QJsonDocument::Compact);
     }
+    if (http1)
+        request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     auto sentToken = token();
-    auto reply = _network.sendCustomRequest(request, method, bytes);
+    auto owner = _session.value("user").toObject().value("id");
+    auto started = QDateTime::currentMSecsSinceEpoch();
+    auto reply = method == "GET" && bytes.isEmpty()
+                     ? _network.get(request)
+                     : _network.sendCustomRequest(request, method, bytes);
     connect(reply, &QNetworkReply::finished, this, [=, this] {
         auto result = readResult(reply);
+        recordRequest(path, method, reply, started);
+        auto code = reply->error();
         reply->deleteLater();
+        bool transient = code == QNetworkReply::TimeoutError ||
+                         code == QNetworkReply::RemoteHostClosedError ||
+                         code == QNetworkReply::TemporaryNetworkFailureError ||
+                         code == QNetworkReply::NetworkSessionFailedError ||
+                         code == QNetworkReply::ProtocolFailure ||
+                         code == QNetworkReply::UnknownNetworkError;
+        if (method == "GET" && transportAttempt == 0 &&
+            (transient || result.status == 502 || result.status == 503 || result.status == 504)) {
+            QTimer::singleShot(750, this, [=, this] {
+                if (authorized && owner != _session.value("user").toObject().value("id")) {
+                    callback({401, {}, {}, "Сеанс изменился. Запрос отменён"});
+                    return;
+                }
+                send(path, data, callback, authorized, method, attempt, 1, true);
+            });
+            return;
+        }
+        if (http1 && result.ok())
+            _preferHttp1 = true;
         if (authorized && result.status == 401 && attempt == 0) {
             refresh(
                 [=, this](ApiResult renewed) {
                     if (renewed.ok())
-                        send(path, data, callback, true, method, 1);
+                        send(path, data, callback, true, method, 1, transportAttempt, http1);
                     else
                         callback(renewed);
                 },
@@ -120,6 +148,19 @@ void Api::send(QString path, QJsonValue data, ApiCallback callback, bool authori
         }
         callback(result);
     });
+}
+void Api::recordRequest(QString path, QByteArray method, QNetworkReply *reply, qint64 started) {
+    // Never retain query strings, request/response bodies, credentials or headers.
+    _diagnostics.append(QJsonObject{
+        {"time", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+        {"path", path.section('?', 0, 0)}, {"method", QString::fromLatin1(method)},
+        {"elapsed_ms", QDateTime::currentMSecsSinceEpoch() - started},
+        {"status", reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()},
+        {"http2", reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool()},
+        {"network_error", QString::fromLatin1(QMetaEnum::fromType<QNetworkReply::NetworkError>()
+                                                 .valueToKey(reply->error()))}});
+    while (_diagnostics.size() > 40)
+        _diagnostics.removeFirst();
 }
 bool Api::acceptSession(QJsonObject session) {
     if (session.value("token").toString().size() != 43 ||
@@ -279,8 +320,13 @@ void Api::startEvents() {
     auto request = networkRequest("/events");
     request.setTransferTimeout(0);
     request.setRawHeader("Accept", "text/event-stream");
-    auto reply = _network.get(request);
+    auto reply = _eventNetwork.get(request);
     _events = reply;
+    auto watchdog = new QTimer(reply);
+    watchdog->setSingleShot(true);
+    watchdog->start(30000);
+    connect(watchdog, &QTimer::timeout, reply, &QNetworkReply::abort);
+    connect(reply, &QNetworkReply::readyRead, watchdog, [watchdog] { watchdog->start(65000); });
     _parser.clear();
     auto sentToken = token();
     connect(reply, &QNetworkReply::readyRead, this, [this, reply] {
