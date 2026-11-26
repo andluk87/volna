@@ -8,8 +8,8 @@
 #include <QStandardPaths>
 #ifdef Q_OS_WIN
 #define NOMINMAX
+#include <QtCore/qt_windows.h>
 #include <wincrypt.h>
-#include <windows.h>
 #endif
 SessionStore::SessionStore(QString origin, QString directory) {
     if (directory.isEmpty())
