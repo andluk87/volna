@@ -856,6 +856,7 @@ void Window::postPending(qint64 chat) {
                           renderMessages();
                       }
                       composerState();
+                      error({});
                       _api->retrySave();
                       refreshChats();
                   });

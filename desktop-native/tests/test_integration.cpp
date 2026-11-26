@@ -224,6 +224,8 @@ class Integration : public QObject {
         QTest::mouseClick(window.findChild<QPushButton *>("verifyCode"), Qt::LeftButton);
         auto chats = window.findChild<QListWidget *>("chats");
         QTRY_VERIFY_WITH_TIMEOUT(chats->isVisible() && chats->count() > 0, 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            window.findChild<CallBridge *>() && window.findChild<CallBridge *>()->ready, 30000);
         for (int i = 0; i < chats->count(); ++i)
             if (chats->item(i)->data(Qt::UserRole).toInt() == config.value("chatC").toInt())
                 QTest::mouseClick(chats->viewport(), Qt::LeftButton, Qt::NoModifier,
@@ -301,6 +303,14 @@ class Integration : public QObject {
                           "__rtpPackets=all.flatMap(s=>[...s.values()]).filter(s=>s.type==='"
                           "inbound-rtp').reduce((n,s)=>n+(s.packetsReceived||0),0))");
         QTRY_VERIFY_WITH_TIMEOUT(javascript(viewB, "window.__rtpPackets||0").toInt() > 0, 10000);
+        javascript(viewA, "document.querySelector('[aria-label=\"Свернуть звонок, чтобы открыть "
+                          "переписку\"]').click()");
+        QTRY_VERIFY(!a.isVisible());
+        QVERIFY(a.active());
+        a.start(QJsonObject{{"id", config.value("chat")}}, false);
+        QTRY_VERIFY(
+            javascript(viewA, "!!document.querySelector('.call-panel:not(.call-minimized)')")
+                .toBool());
         int refreshed = 0;
         api->refresh([&](ApiResult result) {
             if (result.ok())
@@ -343,6 +353,14 @@ class Integration : public QObject {
             javascript(viewA, "document.querySelector('video.call-video-remote')?.videoWidth>0")
                 .toBool(),
             20000);
+        QTRY_VERIFY_WITH_TIMEOUT(javascript(viewA, "!document.querySelector('video.call-video-"
+                                                   "remote').classList.contains('camera-hidden')")
+                                     .toBool(),
+                                 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(javascript(viewB, "!document.querySelector('video.call-video-"
+                                                   "remote').classList.contains('camera-hidden')")
+                                     .toBool(),
+                                 10000);
         QTest::qWait(500);
         auto screenshot = qEnvironmentVariable("VOLNA_NATIVE_SCREENSHOTS");
         if (!screenshot.isEmpty())

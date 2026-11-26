@@ -3,7 +3,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join,resolve,extname} from 'node:path';
+import {join,resolve,extname,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createApp} from '../server/index.mjs';
 let counter=510000,loseMessage=false;const sms=[],origins=[],directory=mkdtempSync(join(tmpdir(),'volna-native-test-'));
@@ -17,7 +17,7 @@ const front=http.createServer(async(req,res)=>{
   }
   return app.server.emit('request',req,res);
  }
- try{const path=new URL(req.url,'http://local').pathname;const file=resolve(webRoot,'.'+decodeURIComponent(path));if(!file.startsWith(webRoot+'/'))throw Error();const content=await readFile(file);const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.png':'image/png','.mp3':'audio/mpeg','.json':'application/json'};res.writeHead(200,{'Content-Type':mime[extname(file)]||'application/octet-stream','Cache-Control':'no-store'});res.end(content);}catch{res.writeHead(404);res.end();}
+ try{const path=new URL(req.url,'http://local').pathname;const file=resolve(webRoot,'.'+decodeURIComponent(path));if(!file.startsWith(webRoot+sep))throw Error();const content=await readFile(file);const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.png':'image/png','.mp3':'audio/mpeg','.json':'application/json'};res.writeHead(200,{'Content-Type':mime[extname(file)]||'application/octet-stream','Cache-Control':'no-store'});res.end(content);}catch{res.writeHead(404);res.end();}
 });
 await new Promise(r=>front.listen(0,'127.0.0.1',r));const url='http://127.0.0.1:'+front.address().port;origins.push(url);
 async function call(path,data,token){const response=await fetch(url+'/api'+path,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(data===undefined?{}:{body:JSON.stringify(data)})});if(!response.ok)throw Error(await response.text());return response.json();}

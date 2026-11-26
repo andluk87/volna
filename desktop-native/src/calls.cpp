@@ -120,6 +120,7 @@ Calls::Calls(Api *api, QWidget *parent) : QDialog(parent), _api(api) {
         } else
             hide();
     });
+    connect(_bridge, &CallBridge::minimized, this, &QWidget::hide);
     connect(_bridge, &CallBridge::problem, this,
             [this](QString message) { emit problem(message); });
     connect(_bridge, &CallBridge::attachmentReady, this, &Calls::attachmentReady);
@@ -161,6 +162,7 @@ void Calls::start(QJsonObject chat, bool video) {
         return;
     }
     if (active()) {
+        emit _bridge->command("show", {});
         show();
         raise();
         return;

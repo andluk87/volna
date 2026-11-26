@@ -1,3 +1,13 @@
 html,body,#root{height:100%;margin:0;background:#17212b;color:#f5f5f5}.native-call-host{min-height:100%;padding:16px}.native-call-ready{color:#708499}.native-call-host [role=alert]{position:relative;z-index:1000;padding:12px;background:#3a2935;border-radius:8px}.native-media{display:flex;flex-direction:column;gap:20px;align-items:center;justify-content:center;min-height:300px}.native-media video{max-width:100%;max-height:80vh}.native-media audio{width:90%}.native-call-host .call-panel{inset:0!important;max-width:none;max-height:none;width:100%;height:100%;border-radius:0;margin:0;transform:none!important}
 
 html,body,button,input,select{font-family:"Segoe UI",Arial,sans-serif}
+/* The dedicated native window has its own viewport, not a floating web card. */
+.native-call-host .call-panel:not(.call-minimized){display:flex;flex-direction:column;gap:0;padding:18px 20px;overflow:hidden}
+.native-call-host .call-panel .call-topbar{order:0;flex:0 0 40px;margin:0}
+.native-call-host .call-panel .call-person{order:1;flex:1 1 auto;margin:0;padding:12px 0;justify-content:center}
+.native-call-host .call-panel.has-video .call-person{display:none}
+.native-call-host .call-panel.has-video .call-video-stage{position:relative;inset:auto;order:1;flex:1 1 auto;width:100%;min-height:130px;margin:12px 0;border-radius:14px}
+.native-call-host .call-panel .call-safety{order:2;flex:0 0 auto;margin:6px auto}
+.native-call-host .call-panel .call-controls{order:3;flex:0 0 auto;margin:12px 0;gap:18px}
+.native-call-host .call-panel .audio-output{order:4;flex:0 0 auto;width:100%;max-width:480px;margin:0 auto}
+.native-call-host .call-panel .call-background-hint{order:5;flex:0 0 auto;margin:10px 0 0;font-size:11px}

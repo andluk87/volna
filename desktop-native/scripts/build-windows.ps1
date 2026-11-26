@@ -15,6 +15,12 @@ $Stage = Join-Path $Root "$BuildDirectory/package/VolnaDesktopNative"
 New-Item -ItemType Directory -Path $Stage -Force | Out-Null
 Run 'cmake' @('--install', $BuildDirectory, '--prefix', $Stage)
 Run "$QtDirectory/bin/windeployqt.exe" @('--release', '--compiler-runtime', '--no-translations', "$Stage/VolnaDesktop.exe")
+foreach ($RuntimeFile in @('QtWebEngineProcess.exe', 'Qt6WebEngineCore.dll', 'resources/qtwebengine_resources.pak', 'platforms/qwindows.dll', 'tls/qschannelbackend.dll')) {
+    if (-not (Test-Path "$Stage/$RuntimeFile")) { throw "Missing deployed runtime: $RuntimeFile" }
+}
+$Smoke = Start-Process -FilePath "$Stage/VolnaDesktop.exe" -ArgumentList '--version' -PassThru
+if (-not $Smoke.WaitForExit(20000)) { $Smoke.Kill(); throw 'Packaged client did not start within 20 seconds.' }
+if ($Smoke.ExitCode -ne 0) { throw "Packaged client failed to start ($($Smoke.ExitCode))" }
 Copy-Item 'desktop-native/third_party/qt' "$Stage/licenses/qt" -Recurse -Force
 Copy-Item 'desktop-native/README.md' "$Stage/README.md"
 $Archive = Join-Path $Root "$BuildDirectory/Volna-Native-0.1.0-windows-x64.zip"

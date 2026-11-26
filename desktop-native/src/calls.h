@@ -10,6 +10,9 @@ class CallBridge : public QObject {
     Api *api;
     Q_INVOKABLE QVariantMap session() const;
     Q_INVOKABLE void loaded();
+    Q_INVOKABLE void minimize() {
+        emit minimized();
+    }
     Q_INVOKABLE void recording(bool active) {
         emit recordingChanged(active);
     }
@@ -23,6 +26,7 @@ class CallBridge : public QObject {
     void refreshFinished(QString id, int status, QVariantMap session);
     void activityChanged(bool active, bool incoming);
     void engineReady();
+    void minimized();
     void recordingChanged(bool active);
     void problem(QString message);
     void attachmentReady(QJsonObject attachment);
