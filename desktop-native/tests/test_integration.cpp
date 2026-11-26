@@ -4,6 +4,7 @@
 #include "widgets.h"
 #include "window.h"
 #include <QCalendarWidget>
+#include <QClipboard>
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -333,7 +334,7 @@ class Integration : public QObject {
             QCOMPARE(chats->item(i)->data(Qt::UserRole + 1).toJsonObject().value("kind").toString(),
                      QString("group"));
         QTest::mouseClick(all, Qt::LeftButton);
-        bool settingsSeen = false, daySaved = false;
+        bool settingsSeen = false, daySaved = false, networkReportOk = false;
         QTimer::singleShot(150, &window, [&] {
             auto settings = window.findChild<QDialog *>("settingsDialog");
             if (!settings)
@@ -349,10 +350,32 @@ class Integration : public QObject {
                     daySaved = screenshot.isEmpty() || window.grab().save(screenshot + "/day.png");
                     toggle->setChecked(original);
                 }
+            settings->findChild<QPushButton *>("checkNetwork")->click();
+            auto check = settings->findChild<QDialog *>("networkCheckDialog");
+            QElapsedTimer deadline;
+            deadline.start();
+            while (deadline.elapsed() < 10000) {
+                int healthy = 0;
+                for (auto status : check->findChildren<QLabel *>("networkCheckStatus"))
+                    healthy += status->text().contains("HTTP 200");
+                if (healthy == 2) break;
+                QTest::qWait(20);
+            }
+            check->findChild<QPushButton *>("copyNetworkCheck")->click();
+            auto report = QJsonDocument::fromJson(qApp->clipboard()->text().toUtf8()).object();
+            networkReportOk = report.value("checks").toArray().size() == 2;
+            for (auto value : report.value("checks").toArray()) {
+                auto row = value.toObject();
+                networkReportOk = networkReportOk && row.value("ok").toBool();
+                auto trace = row.value("requests").toArray().at(0).toObject();
+                networkReportOk = networkReportOk && trace.value("sent_ms").toInteger(-1) >= 0 &&
+                                  trace.value("headers_ms").toInteger(-1) >= 0;
+            }
+            check->close();
             settings->accept();
         });
         QTest::mouseClick(window.findChild<QPushButton *>("nativeSettings"), Qt::LeftButton);
-        QVERIFY(settingsSeen && daySaved);
+        QVERIFY(settingsSeen && daySaved && networkReportOk);
         bool menuSeen = false;
         QTimer::singleShot(150, &window, [&] {
             auto menu = window.findChild<QMenu *>("mainMenuPopup");

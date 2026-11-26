@@ -43,7 +43,10 @@ class Api : public QObject {
     QNetworkAccessManager *network() {
         return &_network;
     }
-    QJsonArray diagnostics() const { return _diagnostics; }
+    QJsonArray diagnostics() const;
+    QString networkMode() const { return _networkMode; }
+    void setNetworkMode(QString mode);
+    void probeHealth(ApiCallback callback);
     void request(QString path, QJsonValue data, ApiCallback callback, bool authorized = true,
                  QByteArray method = {});
     void upload(const QString &file, ApiCallback callback);
@@ -65,11 +68,14 @@ class Api : public QObject {
   private:
     void send(QString path, QJsonValue data, ApiCallback callback, bool authorized,
               QByteArray method, int attempt, int transportAttempt = 0, bool http1 = false);
-    void recordRequest(QString path, QByteArray method, QNetworkReply *reply, qint64 started);
+    void trackReply(QString path, QByteArray method, QNetworkReply *reply);
+    QJsonObject describeReply(QNetworkReply *reply, bool pending) const;
     void scheduleRefresh();
     QUrl _origin;
     QNetworkAccessManager _network, _eventNetwork;
     QJsonArray _diagnostics;
+    QList<QPointer<QNetworkReply>> _activeReplies;
+    QString _networkMode;
     bool _preferHttp1 = false;
     SessionStore _store;
     QJsonObject _session;

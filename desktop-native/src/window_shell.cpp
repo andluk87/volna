@@ -4,6 +4,8 @@
 #include <QButtonGroup>
 #include <QCalendarWidget>
 #include <QClipboard>
+#include <QComboBox>
+#include <QHostInfo>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDialogButtonBox>
@@ -715,7 +717,17 @@ void Window::settings() {
     dialog.setObjectName("settingsDialog");
     dialog.setWindowTitle("Настройки");
     dialog.setFixedWidth(440);
-    auto layout = new QVBoxLayout(&dialog);
+    dialog.resize(440, std::min(720, screen()->availableGeometry().height() - 70));
+    auto outer = new QVBoxLayout(&dialog);
+    outer->setContentsMargins(0, 0, 0, 0);
+    auto scroll = new QScrollArea;
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto body = new QWidget;
+    scroll->setWidget(body);
+    outer->addWidget(scroll);
+    auto layout = new QVBoxLayout(body);
     layout->setContentsMargins(24, 20, 24, 20);
     layout->setSpacing(18);
     layout->addWidget(label("Настройки", "dialogTitle"));
@@ -763,17 +775,25 @@ void Window::settings() {
     });
     layout->addWidget(label("ПОДКЛЮЧЕНИЕ", "sectionTitle"));
     layout->addWidget(label(_api->origin().host(), "subtitle"));
+    auto connection = new QComboBox;
+    connection->setObjectName("networkMode");
+    connection->addItem("Прямое подключение (без прокси)", "direct");
+    connection->addItem("Системные настройки прокси", "system");
+    connection->setCurrentIndex(connection->findData(_api->networkMode()));
+    layout->addWidget(connection);
+    auto restart = label("Изменение подключения применяется после перезапуска", "subtitle");
+    restart->setWordWrap(true);
+    layout->addWidget(restart);
+    connect(connection, &QComboBox::currentIndexChanged, &dialog, [connection] {
+        QSettings().setValue("network/mode", connection->currentData().toString());
+    });
+    auto check = button("Проверить подключение", "checkNetwork");
+    layout->addWidget(check);
+    connect(check, &QPushButton::clicked, &dialog, [this, &dialog] { checkNetwork(&dialog); });
     auto diagnostic = button("Копировать диагностику подключения", "settingsAction");
     layout->addWidget(diagnostic);
     connect(diagnostic, &QPushButton::clicked, &dialog, [this, diagnostic] {
-        QJsonObject info{{"app", "Volna Native Desktop"},
-                         {"version", VOLNA_NATIVE_VERSION},
-                         {"qt", qVersion()},
-                         {"server", _api->origin().toString()},
-                         {"tls", QSslSocket::activeBackend()},
-                         {"tls_available", QSslSocket::supportsSsl()},
-                         {"requests", _api->diagnostics()}};
-        qApp->clipboard()->setText(QString::fromUtf8(QJsonDocument(info).toJson()));
+        qApp->clipboard()->setText(QString::fromUtf8(QJsonDocument(connectionReport()).toJson()));
         diagnostic->setText("Диагностика скопирована");
     });
     layout->addWidget(label("Волна Desktop · " VOLNA_NATIVE_VERSION, "subtitle"));
@@ -813,4 +833,57 @@ void Window::resizeEvent(QResizeEvent *event) {
             renderMessages(true);
         });
     }
+}
+
+QJsonObject Window::connectionReport() const {
+    return {{"app", "Volna Native Desktop"}, {"version", VOLNA_NATIVE_VERSION},
+            {"qt", qVersion()}, {"server", _api->origin().toString()},
+            {"tls", QSslSocket::activeBackend()}, {"tls_available", QSslSocket::supportsSsl()},
+            {"network_mode", _api->networkMode()}, {"dns", _networkDns},
+            {"checks", _networkChecks}, {"requests", _api->diagnostics()}};
+}
+void Window::checkNetwork(QWidget *parent) {
+    auto popup = new QDialog(parent);
+    popup->setObjectName("networkCheckDialog");
+    popup->setAttribute(Qt::WA_DeleteOnClose);
+    popup->setWindowTitle("Проверка подключения");
+    popup->resize(460, 280);
+    auto layout = new QVBoxLayout(popup);
+    layout->addWidget(label("Проверка подключения", "dialogTitle"));
+    auto description = label("Проверяется доступность сервера без входа в аккаунт. Коды входа не запрашиваются.");
+    description->setWordWrap(true);
+    layout->addWidget(description);
+    _networkChecks = {};
+    _networkDns = {};
+    QPointer<QDialog> alive(popup);
+    QHostInfo::lookupHost(_api->origin().host(), popup, [this](const QHostInfo &info) {
+        QJsonArray addresses;
+        for (auto value : info.addresses()) addresses.append(value.toString());
+        _networkDns = {{"error", int(info.error())}, {"addresses", addresses}};
+    });
+    for (auto mode : {QString("direct"), QString("system")}) {
+        auto status = label((mode == "direct" ? "Прямое подключение" : "Системный прокси") + QString(": проверка…"));
+        status->setObjectName("networkCheckStatus");
+        status->setWordWrap(true);
+        layout->addWidget(status);
+        auto probe = new Api(_api->origin(), {}, popup);
+        probe->setNetworkMode(mode);
+        probe->probeHealth([this, alive, status, probe, mode](ApiResult result) {
+            if (!alive) return;
+            auto trace = probe->diagnostics();
+            _networkChecks.append(QJsonObject{{"mode", mode}, {"ok", result.ok()}, {"requests", trace}});
+            status->setText((mode == "direct" ? "Прямое подключение: " : "Системный прокси: ") +
+                (result.ok() ? "сервер доступен (HTTP 200)" : result.error));
+        });
+    }
+    auto copy = button("Копировать диагностику", "copyNetworkCheck");
+    layout->addWidget(copy);
+    connect(copy, &QPushButton::clicked, popup, [this, copy] {
+        qApp->clipboard()->setText(QString::fromUtf8(QJsonDocument(connectionReport()).toJson()));
+        copy->setText("Диагностика скопирована");
+    });
+    auto done = button("Закрыть", "primary");
+    layout->addWidget(done);
+    connect(done, &QPushButton::clicked, popup, &QDialog::close);
+    popup->show();
 }

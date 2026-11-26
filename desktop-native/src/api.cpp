@@ -1,6 +1,11 @@
 #include "api.h"
 #include "network_error.h"
 #include <QDateTime>
+#include <QElapsedTimer>
+#include <QNetworkProxy>
+#include <QSettings>
+#include <QSslConfiguration>
+#include <QSslCipher>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -14,6 +19,7 @@
 #include <utility>
 Api::Api(QUrl origin, QString directory, QObject *parent)
     : QObject(parent), _origin(origin), _store(origin.toString(), directory) {
+    setNetworkMode(QSettings().value("network/mode", "direct").toString());
     _origin.setPath({});
     _origin.setQuery(QString());
     _origin.setFragment({});
@@ -107,13 +113,12 @@ void Api::send(QString path, QJsonValue data, ApiCallback callback, bool authori
         request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     auto sentToken = token();
     auto owner = _session.value("user").toObject().value("id");
-    auto started = QDateTime::currentMSecsSinceEpoch();
     auto reply = method == "GET" && bytes.isEmpty()
                      ? _network.get(request)
                      : _network.sendCustomRequest(request, method, bytes);
+    trackReply(path, method, reply);
     connect(reply, &QNetworkReply::finished, this, [=, this] {
         auto result = readResult(reply);
-        recordRequest(path, method, reply, started);
         auto code = reply->error();
         reply->deleteLater();
         bool transient = code == QNetworkReply::TimeoutError ||
@@ -149,18 +154,89 @@ void Api::send(QString path, QJsonValue data, ApiCallback callback, bool authori
         callback(result);
     });
 }
-void Api::recordRequest(QString path, QByteArray method, QNetworkReply *reply, qint64 started) {
-    // Never retain query strings, request/response bodies, credentials or headers.
-    _diagnostics.append(QJsonObject{
+void Api::setNetworkMode(QString mode) {
+    _networkMode = mode == "system" ? "system" : "direct";
+    auto proxy = QNetworkProxy(_networkMode == "direct" ? QNetworkProxy::NoProxy
+                                                       : QNetworkProxy::DefaultProxy);
+    _network.setProxy(proxy);
+    _eventNetwork.setProxy(proxy);
+}
+void Api::trackReply(QString path, QByteArray method, QNetworkReply *reply) {
+    auto clock = std::make_shared<QElapsedTimer>();
+    clock->start();
+    reply->setProperty("trace_path", path.section('?', 0, 0));
+    reply->setProperty("trace_method", QString::fromLatin1(method));
+    reply->setProperty("trace_mode", _networkMode);
+    reply->setProperty("trace_started", QDateTime::currentMSecsSinceEpoch());
+    for (auto key : {"connecting_ms", "encrypted_ms", "sent_ms", "headers_ms"})
+        reply->setProperty(key, qint64(-1));
+    auto mark = [reply, clock](const char *key) {
+        if (reply->property(key).toLongLong() < 0)
+            reply->setProperty(key, clock->elapsed());
+    };
+    connect(reply, &QNetworkReply::socketStartedConnecting, reply, [mark] { mark("connecting_ms"); });
+    connect(reply, &QNetworkReply::encrypted, reply, [mark] { mark("encrypted_ms"); });
+    connect(reply, &QNetworkReply::requestSent, reply, [mark] { mark("sent_ms"); });
+    connect(reply, &QNetworkReply::metaDataChanged, reply, [mark] { mark("headers_ms"); });
+    connect(reply, &QNetworkReply::sslErrors, reply, [reply](const QList<QSslError> &errors) {
+        QVariantList codes;
+        for (const auto &error : errors)
+            codes.append(int(error.error()));
+        reply->setProperty("ssl_error_codes", codes);
+    });
+    connect(reply, &QNetworkReply::downloadProgress, reply, [reply](qint64 received, qint64) {
+        reply->setProperty("received_bytes", received);
+    });
+    _activeReplies.removeIf([](auto value) { return value.isNull(); });
+    _activeReplies.append(QPointer<QNetworkReply>(reply));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, clock] {
+        reply->setProperty("elapsed_ms", clock->elapsed());
+        _diagnostics.append(describeReply(reply, false));
+        _activeReplies.removeAll(QPointer<QNetworkReply>(reply));
+        while (_diagnostics.size() > 40)
+            _diagnostics.removeFirst();
+    });
+}
+QJsonObject Api::describeReply(QNetworkReply *reply, bool pending) const {
+    // Retain no query strings, bodies, certificates, credentials or headers.
+    auto ssl = reply->sslConfiguration();
+    QJsonObject result{
         {"time", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
-        {"path", path.section('?', 0, 0)}, {"method", QString::fromLatin1(method)},
-        {"elapsed_ms", QDateTime::currentMSecsSinceEpoch() - started},
+        {"path", reply->property("trace_path").toString()},
+        {"method", reply->property("trace_method").toString()},
+        {"mode", reply->property("trace_mode").toString()},
+        {"pending", pending},
+        {"elapsed_ms", pending ? QDateTime::currentMSecsSinceEpoch() - reply->property("trace_started").toLongLong()
+                                : reply->property("elapsed_ms").toLongLong()},
         {"status", reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()},
         {"http2", reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool()},
-        {"network_error", QString::fromLatin1(QMetaEnum::fromType<QNetworkReply::NetworkError>()
-                                                 .valueToKey(reply->error()))}});
-    while (_diagnostics.size() > 40)
-        _diagnostics.removeFirst();
+        {"http2_allowed", reply->request().attribute(QNetworkRequest::Http2AllowedAttribute).toBool()},
+        {"cipher", ssl.sessionCipher().name()},
+        {"tls_protocol", int(ssl.sessionProtocol())},
+        {"ssl_error_codes", QJsonArray::fromVariantList(reply->property("ssl_error_codes").toList())},
+        {"received_bytes", reply->property("received_bytes").toLongLong()},
+        {"network_error", QString::fromLatin1(QMetaEnum::fromType<QNetworkReply::NetworkError>().valueToKey(reply->error()))}};
+    for (auto key : {"connecting_ms", "encrypted_ms", "sent_ms", "headers_ms"})
+        result.insert(key, reply->property(key).toLongLong());
+    return result;
+}
+QJsonArray Api::diagnostics() const {
+    auto result = _diagnostics;
+    for (auto reply : _activeReplies)
+        if (reply)
+            result.append(describeReply(reply, true));
+    return result;
+}
+void Api::probeHealth(ApiCallback callback) {
+    auto request = networkRequest("/health", false);
+    request.setTransferTimeout(7000);
+    auto reply = _network.get(request);
+    trackReply("/health", "GET", reply);
+    connect(reply, &QNetworkReply::finished, this, [reply, callback] {
+        auto result = readResult(reply);
+        reply->deleteLater();
+        callback(result);
+    });
 }
 bool Api::acceptSession(QJsonObject session) {
     if (session.value("token").toString().size() != 43 ||
@@ -285,6 +361,7 @@ void Api::upload(const QString &file, ApiCallback callback) {
                       QMimeDatabase().mimeTypeForFile(file).name());
     request.setRawHeader("X-File-Name", QUrl::toPercentEncoding(QFileInfo(file).fileName()));
     auto reply = _network.post(request, input);
+    trackReply("/uploads", "POST", reply);
     connect(reply, &QNetworkReply::finished, this, [=] {
         auto result = readResult(reply);
         reply->deleteLater();
@@ -321,6 +398,7 @@ void Api::startEvents() {
     request.setTransferTimeout(0);
     request.setRawHeader("Accept", "text/event-stream");
     auto reply = _eventNetwork.get(request);
+    trackReply("/events", "GET", reply);
     _events = reply;
     auto watchdog = new QTimer(reply);
     watchdog->setSingleShot(true);

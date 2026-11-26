@@ -29,6 +29,8 @@ class Window : public QMainWindow {
     QWidget *login();
     QWidget *messenger();
     void settings();
+    void checkNetwork(QWidget *parent);
+    QJsonObject connectionReport() const;
     void mainMenu();
     void contacts();
     void savedMessages();
@@ -78,7 +80,8 @@ class Window : public QMainWindow {
     int _chatRetryDelay = 2000;
     qint64 _chatRetryAt = 0;
     QString _chatLoadError;
-    QJsonArray _folders;
+    QJsonArray _folders, _networkChecks;
+    QJsonObject _networkDns;
     QString _folderId = "builtin_all";
     QJsonObject _selectedFolder{{"rule", "all"}};
     qint64 _anchor = 0;

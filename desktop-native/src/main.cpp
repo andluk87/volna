@@ -72,6 +72,8 @@ int main(int argc, char **argv) {
             {"tls_available", QSslSocket::supportsSsl()},
             {"tls_backend", QSslSocket::activeBackend()},
             {"tls_backends", QJsonArray::fromStringList(QSslSocket::availableBackends())},
+            {"network_mode", probe.networkMode()},
+            {"trace", probe.diagnostics()},
             {"requests", requests}};
         QFile file(parser.value("network-report"));
         if (!file.open(QIODevice::WriteOnly))

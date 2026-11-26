@@ -4,6 +4,7 @@
 #include "theme.h"
 #include "widgets.h"
 #include <QFile>
+#include <QNetworkProxy>
 #include <QTemporaryDir>
 #include <QtTest>
 class NativeTests : public QObject {
@@ -21,6 +22,16 @@ class NativeTests : public QObject {
         QTest::keyClick(&editor, Qt::Key_Return);
         QCOMPARE(sends.count(), 1);
         QCOMPARE(editor.toPlainText(), QString("first\nsecond"));
+    }
+    void networkMode() {
+        Api api(QUrl("https://example.com"));
+        api.setNetworkMode("direct");
+        QCOMPARE(api.network()->proxy().type(), QNetworkProxy::NoProxy);
+        api.setNetworkMode("system");
+        QCOMPARE(api.network()->proxy().type(), QNetworkProxy::DefaultProxy);
+        api.setNetworkMode("unknown");
+        QCOMPARE(api.networkMode(), QString("direct"));
+        QCOMPARE(api.network()->proxy().type(), QNetworkProxy::NoProxy);
     }
     void origins() {
         QVERIFY(Api::validOrigin(QUrl("https://volna.lknet.ru")));

@@ -40,9 +40,9 @@ Get-Content "$Root/$BuildDirectory/network-probe.json"
 if ($NetworkProbe.ExitCode -ne 0) { throw "Packaged HTTPS probe failed ($($NetworkProbe.ExitCode))" }
 Copy-Item 'desktop-native/third_party/qt' "$Stage/licenses/qt" -Recurse -Force
 Copy-Item 'desktop-native/README.md' "$Stage/README.md"
-$Archive = Join-Path $Root "$BuildDirectory/Volna-Native-0.1.2-windows-x64.zip"
+$Archive = Join-Path $Root "$BuildDirectory/Volna-Native-0.1.3-windows-x64.zip"
 Compress-Archive -Path "$Stage/*" -DestinationPath $Archive -Force
 $Compiler = "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe"
 if (-not (Test-Path $Compiler)) { throw 'Inno Setup 6 not found; portable ZIP has been built.' }
 Run $Compiler @("/DStageDir=$Stage", "/DOutputDirectory=$Root/$BuildDirectory", 'desktop-native/scripts/setup.iss')
-Get-FileHash -Algorithm SHA256 $Archive, "$Root/$BuildDirectory/Volna-Native-Setup-0.1.2.exe" | Format-Table
+Get-FileHash -Algorithm SHA256 $Archive, "$Root/$BuildDirectory/Volna-Native-Setup-0.1.3.exe" | Format-Table
