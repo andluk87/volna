@@ -33,6 +33,11 @@ foreach ($Variable in @('QT_PLUGIN_PATH', 'QML2_IMPORT_PATH', 'QML_IMPORT_PATH')
 $Smoke = [System.Diagnostics.Process]::Start($SmokeInfo)
 if (-not $Smoke.WaitForExit(20000)) { $Smoke.Kill(); throw 'Packaged client did not start within 20 seconds.' }
 if ($Smoke.ExitCode -ne 0) { throw "Packaged client failed to start ($($Smoke.ExitCode))" }
+$SmokeInfo.Arguments = "--check-network --network-report `"$Root/$BuildDirectory/network-probe.json`""
+$NetworkProbe = [System.Diagnostics.Process]::Start($SmokeInfo)
+if (-not $NetworkProbe.WaitForExit(50000)) { $NetworkProbe.Kill(); throw 'Packaged HTTPS probe timed out.' }
+Get-Content "$Root/$BuildDirectory/network-probe.json"
+if ($NetworkProbe.ExitCode -ne 0) { throw "Packaged HTTPS probe failed ($($NetworkProbe.ExitCode))" }
 Copy-Item 'desktop-native/third_party/qt' "$Stage/licenses/qt" -Recurse -Force
 Copy-Item 'desktop-native/README.md' "$Stage/README.md"
 $Archive = Join-Path $Root "$BuildDirectory/Volna-Native-0.1.0-windows-x64.zip"

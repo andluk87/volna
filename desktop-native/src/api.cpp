@@ -1,9 +1,11 @@
 #include "api.h"
+#include "network_error.h"
 #include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QMetaEnum>
 #include <QMimeDatabase>
 #include <QRandomGenerator>
 #include <QRegularExpression>
@@ -64,9 +66,21 @@ static ApiResult readResult(QNetworkReply *reply) {
     if (result.status < 200 || result.status >= 300)
         result.error = result.value.toObject().value("error").toString(
             result.status ? QString("Ошибка сервера (%1)").arg(result.status)
-                          : "Нет связи с сервером. Проверьте подключение");
+                          : nativeNetworkError(reply->error()));
     else if (reply->error() != QNetworkReply::NoError)
         result.error = "Передача прервана. Повторите запрос";
+    if (reply->error() != QNetworkReply::NoError) {
+        result.networkDetail =
+            QString::fromLatin1(
+                QMetaEnum::fromType<QNetworkReply::NetworkError>().valueToKey(reply->error())) +
+            ": " + reply->errorString();
+        if (!result.status)
+            result.error +=
+                " (" +
+                QString::fromLatin1(
+                    QMetaEnum::fromType<QNetworkReply::NetworkError>().valueToKey(reply->error())) +
+                ")";
+    }
     return result;
 }
 void Api::request(QString path, QJsonValue data, ApiCallback callback, bool authorized,

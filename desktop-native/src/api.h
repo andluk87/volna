@@ -13,6 +13,7 @@ struct ApiResult {
     QJsonValue value;
     QByteArray bytes;
     QString error;
+    QString networkDetail;
     qint64 retryMs = 0;
     bool ok() const {
         return status >= 200 && status < 300 && error.isEmpty();
