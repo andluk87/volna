@@ -12,6 +12,9 @@ on:
 permissions:
   actions: read
   contents: write
+concurrency:
+  group: native-publish-${{ inputs.tag }}
+  cancel-in-progress: false
 jobs:
   publish:
     runs-on: ubuntu-24.04
@@ -60,8 +63,30 @@ jobs:
           NOTES
           if gh release view "$RELEASE_TAG" --json isDraft > existing.json 2>/dev/null; then
             test "$(jq -r .isDraft existing.json)" = true
-            gh release upload "$RELEASE_TAG" --clobber "Volna-Native-Setup-$version.exe" "Volna-Native-$version-windows-x64.zip" "Volna-Native-$version-source.zip" SHA256SUMS.txt
-            gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false --title "Volna Desktop Native $version — Windows preview" --notes-file notes.md
           else
-            gh release create "$RELEASE_TAG" --verify-tag --prerelease --latest=false --title "Volna Desktop Native $version — Windows preview" --notes-file notes.md "Volna-Native-Setup-$version.exe" "Volna-Native-$version-windows-x64.zip" "Volna-Native-$version-source.zip" SHA256SUMS.txt
+            gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --latest=false --title "Volna Desktop Native $version — Windows preview" --notes-file notes.md
           fi
+          verify_asset() {
+            gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" > release-state.json || return 1
+            python3 - "$1" <<'PYVERIFY'
+          import hashlib, json, pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          release = json.loads(pathlib.Path('release-state.json').read_text())
+          asset = next((row for row in release['assets'] if row['name'] == path.name), {})
+          expected = 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
+          sys.exit(0 if asset.get('state') == 'uploaded' and asset.get('size') == path.stat().st_size and asset.get('digest') == expected else 1)
+          PYVERIFY
+          }
+          for asset in "Volna-Native-Setup-$version.exe" "Volna-Native-$version-windows-x64.zip" "Volna-Native-$version-source.zip" SHA256SUMS.txt; do
+            if verify_asset "$asset"; then continue; fi
+            uploaded=0
+            for attempt in 1 2 3; do
+              if timeout 180 gh release upload "$RELEASE_TAG" --clobber "$asset" && verify_asset "$asset"; then
+                uploaded=1
+                break
+              fi
+              sleep 2
+            done
+            test "$uploaded" = 1
+          done
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false --title "Volna Desktop Native $version — Windows preview" --notes-file notes.md
