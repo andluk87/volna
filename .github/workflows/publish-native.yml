@@ -1,0 +1,61 @@
+name: Publish verified native preview
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Volna Native Desktop build run
+        required: true
+      tag:
+        description: Existing native release tag
+        required: true
+        default: native-v0.1.0
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      BUILD_RUN: ${{ inputs.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Verify source and build, download and publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^native-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          version=${RELEASE_TAG#native-v}
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > build-run.json
+          test "$(jq -r .head_sha build-run.json)" = "$(git rev-parse HEAD)"
+          test "$(jq -r .conclusion build-run.json)" = success
+          test "$(jq -r .name build-run.json)" = 'Volna Native Desktop'
+          gh run download "$BUILD_RUN" --name "Volna-Native-$version-windows-x64" --dir release
+          cd release
+          sha256sum "Volna-Native-Setup-$version.exe" "Volna-Native-$version-windows-x64.zip" "Volna-Native-$version-source.zip" > SHA256SUMS.txt
+          cat > notes.md <<NOTES
+          Первая предварительная сборка Volna Desktop Native $version для Windows 10/11 x64.
+
+          Нативный интерфейс Qt/C++: вход по QR или коду в служебном чате Волны, чаты, сообщения, файлы, голосовые, аудио- и видеозвонки, трей, день/ночь и защищённый сеанс DPAPI. Qt/WebEngine и Visual C++ Runtime включены в пакет. Приложение устанавливается отдельно от действующей Волны.
+
+          Использованы палитры Telegram Desktop и QR-генератор из его зависимостей. Это самостоятельный клиент протокола Волны, а не полный перенос Telegram Desktop. Звонки используют общий механизм Волны в Qt WebEngine. Управление группами, несколько аккаунтов, стикеры/реакции, расписание, автообновление нативного установщика и демонстрация экрана пока не перенесены. Установщик не подписан цифровой подписью.
+
+          Перед проверкой звонков обновите Web на сервере: нужна страница native-call.html. Авторизация совместима с сервером 0.12.112. Команда обновления и ограничения: https://github.com/$GH_REPO/blob/$RELEASE_TAG/UPDATE-NATIVE-0.1.0.md
+
+          Проверки: сборка Windows, запуск упакованного приложения без Qt SDK, DPAPI, интеграционные сценарии на локальном API, 299 Node-тестов, регрессии существующего интерфейса и сеансов. На Linux проверены реальные аудио- и видеозвонки через coturn, RTP и кадры, обновление сеанса без разрыва, сворачивание, завершение и голосовые. Эти звонки используют тестовые устройства Chromium; физические устройства и переключение сетей Windows требуют проверки на компьютере.
+
+          Файлы: установщик x64, portable ZIP (распаковать целиком и запустить VolnaDesktop.exe), соответствующие исходники и SHA256SUMS.txt. Новый клиент GPL-3.0-or-later; QR — MIT; лицензии Qt включены.
+          NOTES
+          if gh release view "$RELEASE_TAG" --json isDraft > existing.json 2>/dev/null; then
+            test "$(jq -r .isDraft existing.json)" = true
+            gh release upload "$RELEASE_TAG" --clobber "Volna-Native-Setup-$version.exe" "Volna-Native-$version-windows-x64.zip" "Volna-Native-$version-source.zip" SHA256SUMS.txt
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false --title "Volna Desktop Native $version — Windows preview" --notes-file notes.md
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --prerelease --latest=false --title "Volna Desktop Native $version — Windows preview" --notes-file notes.md "Volna-Native-Setup-$version.exe" "Volna-Native-$version-windows-x64.zip" "Volna-Native-$version-source.zip" SHA256SUMS.txt
+          fi
