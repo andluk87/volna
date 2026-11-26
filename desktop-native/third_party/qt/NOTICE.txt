@@ -1,0 +1,21 @@
+The Windows distribution dynamically links unmodified Qt libraries supplied by
+The Qt Company: Qt Core, Gui, Widgets, Network, Qml, Quick, Positioning,
+WebChannel and WebEngine (including Chromium and its third-party components).
+
+Qt 6.8.3 source: https://download.qt.io/archive/qt/6.8/6.8.3/single/
+Module repositories and the matching tag v6.8.3:
+https://code.qt.io/cgit/qt/qtbase.git/
+https://code.qt.io/cgit/qt/qtdeclarative.git/
+https://code.qt.io/cgit/qt/qtwebchannel.git/
+https://code.qt.io/cgit/qt/qtwebengine.git/
+https://code.qt.io/cgit/qt/qtpositioning.git/
+
+Qt modules are used under their open-source license terms, with license texts
+included here. Chromium and third-party credits are included in Qt WebEngine
+and in its matching source archive (src/3rdparty/chromium/LICENSE and credits).
+You may replace the Qt DLLs with compatible builds; this application does not
+perform binary signature checks or prevent relinking against modified Qt.
+No Qt source modifications were made. Application source is supplied alongside
+the installer and is licensed GPL-3.0-or-later (desktop-native/third_party/
+telegramdesktop/LICENSE). The QR generator retains its MIT license in its header.
+Microsoft runtime libraries, where deployed, retain Microsoft's license terms.

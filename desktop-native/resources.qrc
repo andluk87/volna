@@ -1,0 +1,1 @@
+<RCC><qresource prefix="/volna"><file alias="night.theme">third_party/telegramdesktop/night.tdesktop-theme</file><file alias="day.theme">third_party/telegramdesktop/day.tdesktop-theme</file><file alias="icon.png">../client/public/icons/icon-192.png</file></qresource></RCC>

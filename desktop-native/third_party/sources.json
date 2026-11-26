@@ -1,0 +1,26 @@
+{
+  "telegramdesktop": {
+    "url": "https://github.com/telegramdesktop/tdesktop",
+    "tag": "v6.3.3",
+    "commit": "476e66d027fa93898f20dc731a8d294a411cd89d",
+    "files": [
+      "Telegram/Resources/night.tdesktop-theme (colors.tdesktop-theme)",
+      "Telegram/Resources/day-blue.tdesktop-theme (colors.tdesktop-theme)",
+      "LICENSE",
+      "LEGAL"
+    ]
+  },
+  "qr": {
+    "url": "https://github.com/nayuki/QR-Code-generator",
+    "commit": "720f62bddb7226106071d4728c292cb1df519ceb",
+    "via": "Telegram/ThirdParty/QR at the pinned tdesktop commit"
+  },
+  "sha256": {
+    "telegramdesktop/LICENSE": "30e52a0e4d8207c631458d98be89adcadf5b60e2608fe9c9a3eff1cde1877c8e",
+    "telegramdesktop/night.tdesktop-theme": "9f6e0cdf85cad2e9baa33885e7bb102d5f63f06039c920908d3fb29fc50cbd8d",
+    "telegramdesktop/LEGAL": "d99f86f0c2b7f2057f2d6c2122a303af2171d778210b47159090ff9501511bea",
+    "telegramdesktop/day.tdesktop-theme": "7bb89d0c0f337eeb6697919da9dffeac4548558a04a4cd59477237139f06a745",
+    "qrcodegen/qrcodegen.hpp": "b779c3b156cf7a57ce789d6fee4fc991ccc2913774d26c909d22bb8f26b2a793",
+    "qrcodegen/qrcodegen.cpp": "1f3b3fcdac6954c32cf583ccd02ec9b5901f756a38c461acedc70be4a77d3757"
+  }
+}

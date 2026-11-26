@@ -1,0 +1,38 @@
+name: Volna Native Desktop
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, native-desktop]
+    paths: ['desktop-native/**', '.github/workflows/native-desktop.yml', 'client/src/NativeCallHost.jsx', 'client/src/native-call.css', 'client/native-call.html']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          modules: 'qtwebengine qtwebchannel qtpositioning'
+          cache: true
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build, test and package native Windows client
+        shell: pwsh
+        run: ./desktop-native/scripts/build-windows.ps1
+      - name: Include corresponding application source
+        shell: pwsh
+        run: git archive --format=zip --output=build-native/Volna-Native-0.1.0-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Volna-Native-0.1.0-windows-x64
+          path: |
+            build-native/Volna-Native-Setup-0.1.0.exe
+            build-native/Volna-Native-0.1.0-windows-x64.zip
+            build-native/Volna-Native-0.1.0-source.zip
+          if-no-files-found: error
+          retention-days: 30
