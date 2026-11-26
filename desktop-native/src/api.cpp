@@ -133,7 +133,7 @@ void Api::send(QString path, QJsonValue data, ApiCallback callback, bool authori
             });
             return;
         }
-        if (http1 && result.ok())
+        if (http1 && result.status > 0)
             _preferHttp1 = true;
         if (authorized && result.status == 401 && attempt == 0) {
             refresh(

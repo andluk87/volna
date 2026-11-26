@@ -125,6 +125,7 @@ class Integration : public QObject {
         control("/fail-chats", {{"count", 2}});
         auto unavailable = call(api, "/chats");
         QCOMPARE(unavailable.status, 503);
+        QVERIFY(!api->networkRequest("/auth/refresh").attribute(QNetworkRequest::Http2AllowedAttribute).toBool());
         auto recent = api->diagnostics();
         QVERIFY(recent.size() >= 2);
         QCOMPARE(recent.at(recent.size() - 1).toObject().value("status").toInt(), 503);
