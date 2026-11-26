@@ -25,8 +25,11 @@ jobs:
         shell: pwsh
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm --prefix client ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm --prefix client run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python desktop-native/scripts/verify-sources.py
       - uses: ilammy/msvc-dev-cmd@v1
         with:

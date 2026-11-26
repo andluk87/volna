@@ -15,7 +15,7 @@ import {Avatar,Icon} from './ui';
 import {filterChats,dateLabel} from './chat-layout.mjs';
 import {CHAT_ROW_HEIGHT,SIDEBAR_STORAGE,normalizeFolders,chatsInFolder} from './sidebar-state.mjs';
 import InstallApp from './InstallApp';
-import Appearance,{appearancePages} from './Appearance';
+import Appearance,{appearancePages} from './Appearance.jsx';
 import {formatTime} from './appearance.mjs';
 import FolderSettings from './FolderSettings';
 import useAccountFolders from './useAccountFolders';

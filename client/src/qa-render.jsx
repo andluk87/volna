@@ -20,7 +20,7 @@ import Calls from './Calls';
 import Notifications from './Notifications';
 import RecordingBar from './RecordingBar';
 import useDrafts from './useDrafts';
-import Appearance,{useAppearance} from './Appearance';
+import Appearance,{useAppearance} from './Appearance.jsx';
 import Dialog from './Dialog';
 import Topics from './Topics';
 import PublicProfile from './PublicProfile';

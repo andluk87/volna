@@ -63,7 +63,7 @@ void Theme::apply(QApplication &app) const {
  QLineEdit,QPlainTextEdit{border:0;border-bottom:2px solid %3;padding:10px;background:transparent;selection-background-color:%5;}
  QLineEdit:focus,QPlainTextEdit:focus{border-bottom-color:%5;}
  QListWidget{border:0;background:%1;outline:0;} QListWidget::item{border:0;padding:7px;} QListWidget::item:selected{background:%5;}
- QListWidget#messages{background:%6;} QScrollArea{border:0;} QMenu{background:%1;padding:5px;} QMenu::item{padding:9px 22px;} QMenu::item:selected{background:%3;}
+ QListWidget#messages{background:%6;} QListWidget#messages::item{padding:0;margin:0;} QScrollArea{border:0;} QMenu{background:%1;padding:5px;} QMenu::item{padding:9px 22px;} QMenu::item:selected{background:%3;}
  QSplitter::handle{background:%3;width:1px;} QScrollBar:vertical{width:7px;background:transparent;} QScrollBar::handle:vertical{background:%3;border-radius:3px;min-height:20px;} QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}
  )")
             .arg(bg, fg, over, sub, accent,

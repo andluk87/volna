@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QScrollBar>
 #include <QTemporaryDir>
 #include <QWebEngineProfile>
 #include <QWebEngineScript>
@@ -230,11 +231,23 @@ class Integration : public QObject {
         auto messages = window.findChild<QListWidget *>("messages");
         QTRY_VERIFY(messages->count() > 0);
         auto editor = window.findChild<QPlainTextEdit *>("editor");
+        control("/lose-message", {});
         editor->setPlainText("Проверка нативной отправки. Сообщение с несколькими строками и "
                              "эмодзи 👋\nЧаты и звонки работают через сервер Волны.");
         QTest::mouseClick(window.findChild<QPushButton *>("sendMessage"), Qt::LeftButton);
+        auto retry = window.findChild<QPushButton *>("sendMessage");
+        QTRY_VERIFY_WITH_TIMEOUT(retry->text() == "Повторить отправку" && retry->isEnabled(),
+                                 10000);
+        QVERIFY(editor->isReadOnly());
+        const auto sentText = editor->toPlainText();
+        QTest::mouseClick(retry, Qt::LeftButton);
         QTRY_VERIFY_WITH_TIMEOUT(editor->toPlainText().isEmpty(), 10000);
+        QCOMPARE(control("/message-count", {{"text", sentText}}).value("count").toInt(), 1);
         QTest::qWait(100);
+        for (auto text : messages->findChildren<QLabel *>())
+            if (text->text().startsWith("Проверка нативной отправки"))
+                QVERIFY(text->height() >= text->heightForWidth(text->width()));
+        QVERIFY(messages->horizontalScrollBar()->maximum() == 0);
         if (!screenshot.isEmpty())
             QVERIFY(window.grab().save(screenshot + "/chat.png"));
     }
@@ -323,14 +336,31 @@ class Integration : public QObject {
                 .toBool(),
             45000);
         QTRY_VERIFY_WITH_TIMEOUT(
-            javascript(viewB, "[...document.querySelectorAll('video')].some(v=>v.videoWidth>0)")
+            javascript(viewB, "document.querySelector('video.call-video-remote')?.videoWidth>0")
                 .toBool(),
             20000);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            javascript(viewA, "document.querySelector('video.call-video-remote')?.videoWidth>0")
+                .toBool(),
+            20000);
+        QTest::qWait(500);
         auto screenshot = qEnvironmentVariable("VOLNA_NATIVE_SCREENSHOTS");
         if (!screenshot.isEmpty())
             QVERIFY(a.grab().save(screenshot + "/call.png"));
         javascript(viewA, "document.querySelector('[aria-label=\"Завершить звонок\"]').click()");
         QTRY_VERIFY_WITH_TIMEOUT(!a.active() && !b.active(), 10000);
+    }
+    void restoredSession() {
+#ifdef Q_OS_WIN
+        Api restored(QUrl(config.value("url").toString()), dir.path());
+        QSignalSpy changes(&restored, &Api::sessionChanged);
+        restored.restore();
+        QVERIFY(!changes.isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!restored.busy(), 10000);
+        QVERIFY(call(&restored, "/me").ok());
+#else
+        QVERIFY(!SessionStore::persistentAvailable());
+#endif
     }
     void cleanupTestCase() {
         if (api)

@@ -331,6 +331,7 @@ QWidget *Window::messenger() {
     body->addWidget(_older);
     _messages = new QListWidget;
     _messages->setObjectName("messages");
+    _messages->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     _messages->setSelectionMode(QAbstractItemView::NoSelection);
     _messages->setSpacing(2);
     _messages->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
@@ -779,11 +780,12 @@ void Window::renderMessages(bool preserve) {
         if (!attachment.isEmpty())
             width = maxBubble;
         bubble->setFixedWidth(width);
-        row->resize(_messages->viewport()->width(), 1);
-        outer->activate();
-        int height = outer->totalHeightForWidth(_messages->viewport()->width());
-        item->setSizeHint(
-            {_messages->viewport()->width(), std::max(height, row->sizeHint().height())});
+        text->setFixedHeight(
+            std::max(text->fontMetrics().height(), text->heightForWidth(width - 24)));
+        content->activate();
+        int bubbleHeight = content->totalHeightForWidth(width);
+        bubble->setMinimumHeight(bubbleHeight);
+        item->setSizeHint({0, bubbleHeight + 4});
         _messages->setItemWidget(item, row);
     }
     if (preserve)

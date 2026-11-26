@@ -51,7 +51,7 @@ import Notifications from './Notifications';
 import NotificationStartup from './NotificationStartup';
 import RecordingBar from './RecordingBar';
 import useDrafts from './useDrafts';
-import Appearance,{useAppearance} from './Appearance';
+import Appearance,{useAppearance} from './Appearance.jsx';
 import Dialog from './Dialog';
 import Topics from './Topics';
 import ForumNavigation,{useForumInfo} from './ForumNavigation';

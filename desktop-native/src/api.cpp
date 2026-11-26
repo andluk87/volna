@@ -142,7 +142,14 @@ void Api::restore() {
         emit problem(error);
     if (saved.isEmpty())
         return;
+    if (saved.value("token").toString().size() != 43 ||
+        saved.value("refresh_token").toString().size() != 43 ||
+        saved.value("user").toObject().value("id").toInt() < 1) {
+        emit problem("Сохранённый сеанс повреждён. Войдите заново");
+        return;
+    }
     _session = saved;
+    emit sessionChanged(_session); // Keep the signed-in shell during a transient outage.
     refresh([](ApiResult) {});
 }
 void Api::scheduleRefresh() {
