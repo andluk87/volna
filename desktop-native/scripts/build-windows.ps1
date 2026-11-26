@@ -26,7 +26,7 @@ foreach ($RuntimeFile in @('QtWebEngineProcess.exe', 'Qt6WebEngineCore.dll', 're
 }
 $SmokeInfo = [System.Diagnostics.ProcessStartInfo]::new()
 $SmokeInfo.FileName = "$Stage/VolnaDesktop.exe"
-$SmokeInfo.Arguments = '--version'
+$SmokeInfo.Arguments = '--verify-runtime'
 $SmokeInfo.UseShellExecute = $false
 $SmokeInfo.Environment['PATH'] = (($env:PATH -split ';') | Where-Object { $_ -and -not $_.StartsWith($QtDirectory, [System.StringComparison]::OrdinalIgnoreCase) }) -join ';'
 foreach ($Variable in @('QT_PLUGIN_PATH', 'QML2_IMPORT_PATH', 'QML_IMPORT_PATH')) { $SmokeInfo.Environment.Remove($Variable) | Out-Null }

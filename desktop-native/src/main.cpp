@@ -19,8 +19,12 @@ int main(int argc, char **argv) {
     parser.setApplicationDescription("Volna native desktop · Qt/C++");
     parser.addHelpOption();
     parser.addVersionOption();
+    parser.addOption(
+        {"verify-runtime", "Verify bundled runtime and exit without opening a window"});
     parser.addOption({"server", "Volna HTTPS server origin", "origin", VOLNA_DEFAULT_SERVER});
     parser.process(app);
+    if (parser.isSet("verify-runtime"))
+        return 0;
     QUrl origin(parser.value("server"));
     if (!Api::validOrigin(origin)) {
         QMessageBox::critical(nullptr, "Волна",
