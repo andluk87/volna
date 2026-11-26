@@ -11,3 +11,5 @@ html,body,button,input,select{font-family:"Segoe UI",Arial,sans-serif}
 .native-call-host .call-panel .call-controls{order:3;flex:0 0 auto;margin:12px 0;gap:18px}
 .native-call-host .call-panel .audio-output{order:4;flex:0 0 auto;width:100%;max-width:480px;margin:0 auto}
 .native-call-host .call-panel .call-background-hint{order:5;flex:0 0 auto;margin:10px 0 0;font-size:11px}
+.native-call-host .call-video-stage .call-preview-drag{position:absolute;background:transparent!important;border:0;padding:0;margin:0;box-shadow:none}
+.native-call-host .call-control.share,.native-call-host .call-control[aria-label="Сменить камеру"]{display:none}
