@@ -1,5 +1,6 @@
 #include "window.h"
 #include "chat_delegate.h"
+#include "image_viewer.h"
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
@@ -25,39 +26,36 @@
 static QJsonValue noData() {
     return QJsonValue::Undefined;
 }
-static QPushButton *button(QString text, QString name, QWidget *parent = nullptr) {
-    auto b = new QPushButton(text, parent);
-    b->setObjectName(name);
-    b->setCursor(Qt::PointingHandCursor);
-    return b;
-}
-static QLabel *label(QString text, QString name = {}) {
-    auto l = new QLabel(text);
-    l->setObjectName(name);
-    l->setWordWrap(true);
-    l->setTextFormat(Qt::PlainText);
-    return l;
-}
 static QString when(QString text) {
     auto time = QDateTime::fromString(text, Qt::ISODate);
     return time.isValid() ? time.toLocalTime().toString("HH:mm") : QString();
 }
 Window::Window(Api *api, QWidget *parent) : QMainWindow(parent), _api(api) {
     setObjectName("volnaWindow");
-    setWindowTitle("Волна Desktop · нативная версия");
+    setWindowTitle("Волна Desktop");
     setWindowIcon(QIcon(":/volna/icon.png"));
-    resize(1100, 760);
+    resize(1180, 780);
     setMinimumSize(720, 540);
     _theme = Theme::load(QSettings().value("dark", true).toBool());
     _theme.apply(*qApp);
+    _avatars = new AvatarStore(api, this);
     auto container = new QWidget;
     auto layout = new QVBoxLayout(container);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
+    _errorFrame = new QWidget;
+    _errorFrame->setObjectName("errorBanner");
+    auto alert = new QHBoxLayout(_errorFrame);
+    alert->setContentsMargins(16, 7, 8, 7);
     _error = label({}, "error");
+    alert->addWidget(_error, 1);
+    auto dismiss = button("×", "dismissError");
+    dismiss->setFixedSize(28, 28);
+    alert->addWidget(dismiss);
+    connect(dismiss, &QPushButton::clicked, this, [this] { error({}); });
     _error->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    _error->hide();
-    layout->addWidget(_error);
+    _errorFrame->hide();
+    layout->addWidget(_errorFrame);
     _root = new QStackedWidget;
     _root->addWidget(login());
     _root->addWidget(messenger());
@@ -75,6 +73,10 @@ Window::Window(Api *api, QWidget *parent) : QMainWindow(parent), _api(api) {
         _messages->clear();
         _chats->clear();
         _chatRows = {};
+        _folders = {};
+        _folderId = "builtin_all";
+        _selectedFolder = {{"rule", "all"}};
+        buildRail();
         _editor->clear();
         _drafts.clear();
         _outbox.clear();
@@ -271,136 +273,10 @@ QWidget *Window::login() {
     });
     return page;
 }
-QWidget *Window::messenger() {
-    auto root = new QSplitter;
-    root->setChildrenCollapsible(false);
-    auto side = new QWidget;
-    side->setObjectName("sidebar");
-    auto left = new QVBoxLayout(side);
-    left->setContentsMargins(0, 0, 0, 0);
-    auto bar = new QHBoxLayout;
-    auto menu = button("☰", "menu"), create = button("＋", "newChat");
-    _filter = new QLineEdit;
-    _filter->setObjectName("filter");
-    _filter->setPlaceholderText("Поиск чатов");
-    menu->setText({});
-    menu->setIcon(nativeIcon("menu"));
-    create->setText({});
-    create->setIcon(nativeIcon("plus"));
-    bar->addWidget(menu);
-    bar->addWidget(_filter, 1);
-    bar->addWidget(create);
-    left->addLayout(bar);
-    _chats = new QListWidget;
-    _chats->setObjectName("chats");
-    _chats->setItemDelegate(new ChatDelegate(_chats));
-    left->addWidget(_chats, 1);
-    root->addWidget(side);
-    connect(menu, &QPushButton::clicked, this, &Window::settings);
-    connect(create, &QPushButton::clicked, this, &Window::newChat);
-    connect(_filter, &QLineEdit::textChanged, this, &Window::showChats);
-    connect(_chats, &QListWidget::itemClicked, this,
-            [this](QListWidgetItem *item) { openChat(item->data(Qt::UserRole).toLongLong()); });
-    auto right = new QWidget;
-    auto body = new QVBoxLayout(right);
-    body->setContentsMargins(0, 0, 0, 0);
-    body->setSpacing(0);
-    auto header = new QWidget;
-    header->setObjectName("header");
-    auto head = new QHBoxLayout(header);
-    auto titles = new QVBoxLayout;
-    _chatTitle = label("Волна", "chatTitle");
-    _chatTitle->setStyleSheet("font-weight:600");
-    _chatSubtitle = label("Выберите чат слева", "subtitle");
-    titles->addWidget(_chatTitle);
-    titles->addWidget(_chatSubtitle);
-    head->addLayout(titles, 1);
-    _audio = button("☎", "audioCall");
-    _audio->setToolTip("Аудиозвонок");
-    _audio->setText({});
-    _audio->setIcon(nativeIcon("phone"));
-    _video = button("▣", "videoCall");
-    _video->setToolTip("Видеозвонок");
-    _video->setText({});
-    _video->setIcon(nativeIcon("camera"));
-    head->addWidget(_audio);
-    head->addWidget(_video);
-    body->addWidget(header);
-    _older = button("Предыдущие сообщения", "olderMessages");
-    _older->hide();
-    body->addWidget(_older);
-    _messages = new QListWidget;
-    _messages->setObjectName("messages");
-    _messages->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    _messages->setSelectionMode(QAbstractItemView::NoSelection);
-    _messages->setSpacing(2);
-    _messages->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    _messages->setContextMenuPolicy(Qt::CustomContextMenu);
-    body->addWidget(_messages, 1);
-    _empty = label("Выберите чат, чтобы начать общение", "subtitle");
-    _empty->setAlignment(Qt::AlignCenter);
-    body->addWidget(_empty);
-    auto composer = new QWidget;
-    composer->setObjectName("composer");
-    auto compose = new QHBoxLayout(composer);
-    _attach = button("＋", "attach");
-    _attach->setToolTip("Прикрепить файл");
-    _attach->setText({});
-    _attach->setIcon(nativeIcon("plus"));
-    _editor = new QPlainTextEdit;
-    _editor->setObjectName("editor");
-    _editor->setPlaceholderText("Сообщение…");
-    _editor->setMaximumHeight(80);
-    _voice = button("●", "recordVoice");
-    _voice->setToolTip("Записать голосовое сообщение");
-    _voice->setText({});
-    _voice->setIcon(nativeIcon("mic"));
-    _send = button("Отправить", "sendMessage");
-    compose->addWidget(_attach);
-    compose->addWidget(_editor, 1);
-    compose->addWidget(_voice);
-    compose->addWidget(_send);
-    body->addWidget(composer);
-    root->addWidget(right);
-    root->setStretchFactor(1, 1);
-    root->setSizes({330, 770});
-    for (auto button : {_audio, _video, _attach, _voice, _send})
-        button->setEnabled(false);
-    _editor->setEnabled(false);
-    connect(_audio, &QPushButton::clicked, this, [this] {
-        if (_calls)
-            _calls->start(_chat, false);
-    });
-    connect(_video, &QPushButton::clicked, this, [this] {
-        if (_calls)
-            _calls->start(_chat, true);
-    });
-    connect(_send, &QPushButton::clicked, this, [this] { sendMessage(); });
-    connect(_attach, &QPushButton::clicked, this, &Window::attachFile);
-    connect(_older, &QPushButton::clicked, this, [this] { loadHistory(true); });
-    connect(_messages, &QListWidget::customContextMenuRequested, this, &Window::messageMenu);
-    connect(_voice, &QPushButton::clicked, this, [this] {
-        if (!_calls || !_calls->ready()) {
-            error("Модуль голоса ещё загружается");
-            return;
-        }
-        if (_calls->active()) {
-            error("Завершите звонок перед записью");
-            return;
-        }
-        if (_recording) {
-            _calls->record(false, _pendingChat);
-        } else {
-            _recording = true;
-            _pendingChat = _chatId;
-            _calls->record(true, _chatId);
-        }
-    });
-    return root;
-}
 void Window::error(QString text) {
     _error->setText(text);
     _error->setVisible(!text.isEmpty());
+    _errorFrame->setVisible(!text.isEmpty());
 }
 void Window::cancelLogin() {
     ++_loginGeneration;
@@ -553,6 +429,8 @@ void Window::verifyCode() {
 void Window::loggedIn() {
     _userId = _api->session().value("user").toObject().value("id").toVariant().toLongLong();
     _root->setCurrentIndex(1);
+    _conversationStack->setCurrentIndex(_chatId ? 1 : 0);
+    loadFolders();
     _qrTimer.stop();
     ++_loginGeneration;
     _phone->clear();
@@ -574,23 +452,22 @@ void Window::loggedIn() {
                              {"client_id", QUuid::createUuid().toString(QUuid::WithoutBraces)}};
             postPending(chat);
         });
-        connect(_calls->findChild<CallBridge *>(), &CallBridge::recordingChanged, this,
-                [this](bool active) {
-                    _recording = active;
-                    _voice->setText({});
-                    _voice->setIcon(nativeIcon(active ? "stop" : "mic"));
-                    _voice->setToolTip(active ? "Завершить запись"
-                                              : "Записать голосовое сообщение");
-                });
+        connect(
+            _calls->findChild<CallBridge *>(), &CallBridge::recordingChanged, this,
+            [this](bool active) {
+                _recording = active;
+                _voice->setText({});
+                _voice->setIcon(nativeIcon(active ? "stop" : "mic"));
+                _voice->setToolTip(active ? "Завершить запись" : "Записать голосовое сообщение");
+                _editor->setPlaceholderText(active ? "Запись голосового сообщения…" : "Сообщение…");
+                composerState();
+            });
     }
     refreshChats();
     _api->startEvents();
     _presenceTimer.start();
     _chatRefreshTimer.start();
     presence();
-    if (!SessionStore::persistentAvailable())
-        statusBar()->showMessage("Проверочная сборка Linux: сеанс только в памяти. Windows "
-                                 "использует защищённое хранилище");
 }
 void Window::refreshChats() {
     if (!_userId || _refreshChatsBusy)
@@ -617,6 +494,7 @@ void Window::refreshChats() {
                     break;
                 }
             }
+            updateHeader();
         }
     });
 }
@@ -627,6 +505,39 @@ void Window::showChats() {
         QString name = chat.value("name").toString();
         if (name.isEmpty())
             name = "Пользователь";
+        auto hasId = [&](QString key) {
+            for (auto value : _selectedFolder.value(key).toArray())
+                if (value.toVariant().toLongLong() == chat.value("id").toVariant().toLongLong())
+                    return true;
+            return false;
+        };
+        bool explicitChat = hasId("chats") || hasId("pinned");
+        auto type = [&](QString rule) {
+            return rule == "all" ||
+                   rule == "archived" && chat.value("archived").toVariant().toBool() ||
+                   rule == "unread" && (chat.value("unread").toInt() > 0 ||
+                                        chat.value("manual_unread").toVariant().toBool()) ||
+                   rule == "direct" &&
+                       (chat.value("kind") == "direct" || chat.value("kind") == "saved") ||
+                   rule == "contacts" && chat.value("is_contact").toBool() ||
+                   rule == "non_contacts" && chat.value("kind") == "direct" &&
+                       !chat.value("is_contact").toBool() ||
+                   chat.value("kind").toString() == rule;
+        };
+        auto rule = _selectedFolder.value("rule").toString();
+        bool matches = !rule.isEmpty() && type(rule) &&
+                       (rule == "archived" || !chat.value("archived").toVariant().toBool());
+        for (auto value : _selectedFolder.value("types").toArray())
+            matches = matches || type(value.toString());
+        if (hasId("excluded") ||
+            !explicitChat && (!matches ||
+                              _selectedFolder.value("excludeRead").toBool() &&
+                                  chat.value("unread").toInt() == 0 ||
+                              _selectedFolder.value("excludeMuted").toBool() &&
+                                  chat.value("muted").toVariant().toBool() ||
+                              _selectedFolder.value("excludeArchived").toBool() &&
+                                  chat.value("archived").toVariant().toBool()))
+            continue;
         if (!name.contains(_filter->text(), Qt::CaseInsensitive) &&
             !chat.value("last_text").toString().contains(_filter->text(), Qt::CaseInsensitive))
             continue;
@@ -652,6 +563,10 @@ void Window::openChat(qint64 id) {
     if (_chatId)
         _drafts[_chatId] = _editor->toPlainText();
     _chatId = id;
+    _searchTimer.stop();
+    _chatSearch->clear();
+    _searchBar->hide();
+    _searchResults->hide();
     _messageRows.clear();
     _messages->clear();
     _historyBusy = false;
@@ -673,7 +588,10 @@ void Window::openChat(qint64 id) {
     _audio->setEnabled(call);
     _video->setEnabled(call);
     _editor->setPlainText(_drafts.value(id));
-    _empty->hide();
+    _conversationStack->setCurrentIndex(1);
+    _anchor = 0;
+    _latest->hide();
+    updateHeader();
     composerState();
     loadHistory();
 }
@@ -702,90 +620,176 @@ void Window::loadHistory(bool older) {
         }
         renderMessages(older);
         _older->setVisible(!_exhausted);
-        if (!_messageRows.isEmpty() && isActiveWindow())
+        if (!_anchor && !_messageRows.isEmpty() && isActiveWindow())
             _api->request("/chats/" + QString::number(_chatId) + "/read",
                           QJsonObject{{"message_id", _messageRows.lastKey()}}, [](ApiResult) {});
     });
 }
 void Window::renderMessages(bool preserve) {
+    if (!_messages)
+        return;
     auto scroll = _messages->verticalScrollBar();
-    const auto oldValue = scroll->value(), oldMax = scroll->maximum();
+    int oldValue = scroll->value(), oldMax = scroll->maximum();
     bool bottom = oldValue >= oldMax - 40;
     _messages->clear();
     QString previousDate;
+    qint64 previousSender = -1;
+    QDateTime previousTime;
     for (auto it = _messageRows.cbegin(); it != _messageRows.cend(); ++it) {
         auto message = it.value();
-        auto date =
+        auto created = QDateTime::fromString(message.value("created_at").toString(), Qt::ISODate)
+                           .toLocalTime();
+        auto date = created.date();
+        auto stamp =
             QLocale(QLocale::Russian, QLocale::Russia)
-                .toString(QDateTime::fromString(message.value("created_at").toString(), Qt::ISODate)
-                              .toLocalTime()
-                              .date(),
-                          "d MMMM yyyy");
-        if (date != previousDate) {
-            auto day = new QListWidgetItem(date, _messages);
-            day->setTextAlignment(Qt::AlignCenter);
-            day->setForeground(_theme.color("windowSubTextFg"));
-            day->setSizeHint({200, 36});
-            previousDate = date;
+                .toString(date,
+                          date.year() == QDate::currentDate().year() ? "d MMMM" : "d MMMM yyyy");
+        bool newDay = stamp != previousDate;
+        if (newDay) {
+            auto item = new QListWidgetItem(_messages);
+            auto row = new QWidget;
+            auto layout = new QHBoxLayout(row);
+            layout->setContentsMargins(0, 10, 0, 8);
+            layout->addStretch();
+            auto chip = button(stamp, "dateChip");
+            chip->setFixedHeight(24);
+            layout->addWidget(chip);
+            layout->addStretch();
+            item->setSizeHint({0, 42});
+            _messages->setItemWidget(item, row);
+            connect(chip, &QPushButton::clicked, this, [this, date] { chooseDate(date); });
+            previousDate = stamp;
         }
-        auto item = new QListWidgetItem(_messages);
-        item->setData(Qt::UserRole, it.key());
+        bool mine = message.value("sender_id").toVariant().toLongLong() == _userId;
+        auto sender = message.value("sender_id").toVariant().toLongLong();
+        bool grouped = !newDay && sender == previousSender && previousTime.secsTo(created) >= 0 &&
+                       previousTime.secsTo(created) < 120;
+        previousSender = sender;
+        previousTime = created;
+        bool deleted = !message.value("deleted_at").isNull() && message.contains("deleted_at");
+        auto attachment = deleted ? QJsonObject{} : message.value("attachment").toObject();
+        auto reply = message.value("reply").toObject();
+        bool senderName = !mine && _chat.value("kind") == "group" && !grouped;
+        QString textValue = deleted ? "Сообщение удалено" : message.value("text").toString();
+        int maxWidth = std::max(140, std::min(500, int(_messages->viewport()->width() * .78))),
+            padding = 22;
+        bool photo = attachment.value("mime").toString().startsWith("image/") &&
+                     attachment.value("size").toInt() < 4 * 1024 * 1024;
         auto row = new QWidget;
         auto outer = new QHBoxLayout(row);
-        outer->setContentsMargins(8, 1, 8, 1);
-        bool mine = message.value("sender_id").toVariant().toLongLong() == _userId;
+        outer->setContentsMargins(18, grouped ? 1 : 5, 18, 1);
+        outer->setSpacing(0);
         auto bubble = new QWidget;
+        bubble->setObjectName("messageBubble");
         auto content = new QVBoxLayout(bubble);
-        content->setContentsMargins(12, 8, 12, 7);
-        content->setSpacing(5);
-        const int maxBubble = std::max(180, std::min(530, _messages->viewport()->width() - 60));
-        bubble->setMaximumWidth(maxBubble);
-        auto color = _theme.color(mine ? "msgOutBg" : "msgInBg", _theme.color("windowBg")).name();
-        bubble->setStyleSheet("QWidget{background:" + color + ";border-radius:12px;}");
-        if (!mine) {
-            auto name = label(message.value("sender_name").toString());
-            name->setStyleSheet("color:#6ab3f3;font-weight:600");
+        content->setContentsMargins(11, 8, 11, 6);
+        content->setSpacing(3);
+        auto bg = _theme.color(mine ? "msgOutBg" : "msgInBg", _theme.color("windowBg")).name();
+        auto border = it.key() == _anchor ? "border:1px solid #6ab3f3;" : "border:0;";
+        bubble->setStyleSheet("QWidget#messageBubble{background:" + bg + ";border-radius:10px;" +
+                              border + "} QLabel{background:transparent;border:0;}");
+        if (senderName) {
+            auto name = label(message.value("sender_name").toString("Пользователь"));
+            name->setStyleSheet("color:#75b9ee;font-size:13px;font-weight:600");
             content->addWidget(name);
         }
-        auto text = label(message.value("deleted_at").isNull() || !message.contains("deleted_at")
-                              ? message.value("text").toString()
-                              : "Сообщение удалено");
+        if (!reply.isEmpty()) {
+            auto quoted = label(reply.value("name").toString() + "\n" +
+                                reply.value("text").toString().left(90));
+            quoted->setStyleSheet(
+                "border-left:2px solid #6ab3f3;padding:4px 8px;color:#91b8d8;font-size:12px;");
+            content->addWidget(quoted);
+        }
+        auto text = label(textValue);
+        auto messageFont = text->font();
+        messageFont.setPixelSize(14);
+        text->setFont(messageFont);
         text->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-        text->setMaximumWidth(490);
-        text->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-        if (!text->text().isEmpty())
-            content->addWidget(text);
-        auto attachment = message.value("attachment").toObject();
-        if (!attachment.isEmpty() && message.value("deleted_at").isNull()) {
-            auto file = button(
-                "↧ " + attachment.value("name").toString() +
-                    QString(" · %1 КБ").arg((attachment.value("size").toInt() + 1023) / 1024),
-                "file");
-            file->setMaximumWidth(480);
+        text->setStyleSheet(deleted ? "color:#8b9daa;font-size:14px;font-style:italic"
+                                    : "font-size:14px");
+        auto time = label(when(message.value("created_at").toString()), "messageTime");
+        time->setStyleSheet(QString("color:%1;font-size:11px")
+                                .arg(mine ? "#8cb3d7" : _theme.color("windowSubTextFg").name()));
+        auto info = new QHBoxLayout;
+        info->setContentsMargins(0, 0, 0, 0);
+        info->setSpacing(4);
+        info->addStretch();
+        info->addWidget(time);
+        if (mine) {
+            auto receipt = new QLabel;
+            bool read = _chat.value("peer_read").toVariant().toLongLong() >= it.key(),
+                 delivered = _chat.value("peer_delivered").toVariant().toLongLong() >= it.key();
+            receipt->setPixmap(nativeIcon(read || delivered ? "checks" : "check",
+                                          QColor(read ? "#74c7fc" : "#8cb3d7"))
+                                   .pixmap(18, 14));
+            receipt->setToolTip(read ? "Прочитано" : delivered ? "Доставлено" : "Отправлено");
+            info->addWidget(receipt);
+        }
+        bool inlineTime = !textValue.contains('\n') && attachment.isEmpty() && reply.isEmpty() &&
+                          !senderName &&
+                          text->fontMetrics().horizontalAdvance(textValue) +
+                                  time->fontMetrics().horizontalAdvance(time->text()) + 62 <
+                              maxWidth;
+        int width =
+            std::clamp(text->fontMetrics().horizontalAdvance(textValue.section('\n', 0, 0)) +
+                           padding + (inlineTime ? 66 : 0),
+                       92, maxWidth);
+        if (!attachment.isEmpty())
+            width = std::min(maxWidth, photo ? 338 : 310);
+        if (photo) {
+            auto picture =
+                new MediaView(_avatars,
+                              "/api/files/" + attachment.value("id").toString() +
+                                  "?message_id=" + QString::number(it.key()),
+                              width - padding, std::min(230, int((width - padding) * .72)));
+            picture->setProperty("messageId", it.key());
+            picture->setProperty("albumId", message.value("album_id"));
+            content->addWidget(picture);
+            connect(picture, &QPushButton::clicked, this, [this, message] { openFile(message); });
+        } else if (!attachment.isEmpty()) {
+            bool voice = attachment.value("name").toString().startsWith("Голосовое-") &&
+                         attachment.value("mime").toString().startsWith("audio/");
+            auto file =
+                button((voice ? "Голосовое сообщение" : attachment.value("name").toString()) +
+                           QString("\n%1 КБ").arg((attachment.value("size").toInt() + 1023) / 1024),
+                       "messageFile");
+            file->setIcon(nativeIcon(voice ? "play" : "file", QColor("#6ab3f3")));
+            file->setIconSize({36, 36});
+            file->setStyleSheet("text-align:left;padding:6px 2px;font-size:13px;");
+            file->setMinimumHeight(48);
             content->addWidget(file);
             connect(file, &QPushButton::clicked, this, [this, message] { openFile(message); });
         }
-        auto time =
-            label(when(message.value("created_at").toString()) + (mine ? "  ✓" : ""), "subtitle");
-        time->setAlignment(Qt::AlignRight);
-        content->addWidget(time);
+        bubble->setFixedWidth(width);
+        if (inlineTime) {
+            text->setWordWrap(false);
+            auto line = new QHBoxLayout;
+            line->setContentsMargins(0, 0, 0, 0);
+            line->setSpacing(8);
+            line->addWidget(text, 1);
+            line->addLayout(info);
+            content->addLayout(line);
+        } else {
+            if (!textValue.isEmpty()) {
+                content->addWidget(text);
+                text->ensurePolished();
+                text->setFixedHeight(
+                    std::max(text->fontMetrics().height(), text->heightForWidth(width - padding)));
+            }
+            content->addLayout(info);
+        }
+        bubble->setFixedWidth(width);
+        content->activate();
+        int height = content->totalHeightForWidth(width);
+        bubble->setMinimumHeight(height);
         if (mine)
             outer->addStretch();
         outer->addWidget(bubble);
         if (!mine)
             outer->addStretch();
-        int width =
-            std::clamp(text->fontMetrics().horizontalAdvance(text->text().section('\n', 0, 0)) + 40,
-                       180, maxBubble);
-        if (!attachment.isEmpty())
-            width = maxBubble;
-        bubble->setFixedWidth(width);
-        text->setFixedHeight(
-            std::max(text->fontMetrics().height(), text->heightForWidth(width - 24)));
-        content->activate();
-        int bubbleHeight = content->totalHeightForWidth(width);
-        bubble->setMinimumHeight(bubbleHeight);
-        item->setSizeHint({0, bubbleHeight + 4});
+        auto item = new QListWidgetItem(_messages);
+        item->setData(Qt::UserRole, it.key());
+        item->setSizeHint({0, height + (grouped ? 4 : 8)});
         _messages->setItemWidget(item, row);
     }
     if (preserve)
@@ -797,8 +801,15 @@ void Window::composerState() {
     bool allowed = _chatId && _chat.value("can_send").toInt(1) != 0;
     bool pending = _outbox.contains(_chatId), sending = _sending.contains(_chatId);
     _editor->setEnabled(allowed);
-    _editor->setReadOnly(pending);
-    _send->setText(pending ? "Повторить отправку" : "Отправить");
+    _editor->setReadOnly(pending || _recording);
+    _emoji->setEnabled(allowed && !pending && !_recording);
+    _send->setText({});
+    _send->setProperty("pending", pending);
+    _send->setAccessibleName(pending ? "Повторить отправку" : "Отправить сообщение");
+    _send->setToolTip(_send->accessibleName());
+    _send->setIcon(nativeIcon(pending ? "retry" : "send", QColor("#64b5ef")));
+    _send->setVisible(pending || !_editor->toPlainText().trimmed().isEmpty());
+    _voice->setVisible(!pending && _editor->toPlainText().trimmed().isEmpty() || _recording);
     _send->setEnabled(allowed && !sending);
     _attach->setEnabled(allowed && !pending);
     _voice->setEnabled(allowed && !pending);
@@ -890,6 +901,11 @@ void Window::attachFile() {
 }
 void Window::openFile(QJsonObject message) {
     auto attachment = message.value("attachment").toObject();
+    if (attachment.value("mime").toString().startsWith("image/")) {
+        auto viewer = new ImageViewer(_api, message, this);
+        viewer->show();
+        return;
+    }
     _api->download(attachment.value("id").toString(), message.value("id").toVariant().toLongLong(),
                    [this, attachment](ApiResult result) {
                        if (!result.ok()) {
@@ -1027,15 +1043,17 @@ void Window::newChat() {
 void Window::presence() {
     if (!_userId)
         return;
-    bool visible = !_quitting && qApp->applicationState() == Qt::ApplicationActive &&
-                   ((isVisible() && !isMinimized() && isActiveWindow()) ||
-                    (_calls && _calls->isVisible() && _calls->isActiveWindow()));
+    auto active = QApplication::activeWindow();
+    bool visible = !_quitting && qApp->applicationState() == Qt::ApplicationActive && active &&
+                   (active == this || isAncestorOf(active)) && active->isVisible() &&
+                   !active->isMinimized();
     _api->request("/presence",
                   QJsonObject{{"client", _presenceClient},
                               {"visible", visible},
                               {"sequence", ++_presenceSequence}},
                   [](ApiResult) {});
-    if (visible && !_messageRows.isEmpty())
+    if (visible && !_anchor && !_messageRows.isEmpty() &&
+        _messages->verticalScrollBar()->value() >= _messages->verticalScrollBar()->maximum() - 40)
         _api->request("/chats/" + QString::number(_chatId) + "/read",
                       QJsonObject{{"message_id", _messageRows.lastKey()}}, [](ApiResult) {});
 }
@@ -1043,12 +1061,22 @@ void Window::receive(QJsonObject event) {
     if (_calls)
         _calls->dispatch(event);
     auto type = event.value("type").toString();
+    if (type == "folders-update") {
+        loadFolders();
+        return;
+    }
     if (type == "message" || type == "message-update") {
         auto message = event.value("message").toObject();
+        if (message.value("chat_id").toVariant().toLongLong() == _chatId && _anchor) {
+            _latest->setText("К последним сообщениям · Есть новые ↓");
+            refreshChats();
+            return;
+        }
         if (message.value("chat_id").toVariant().toLongLong() == _chatId) {
             _messageRows[message.value("id").toVariant().toLongLong()] = message;
             renderMessages();
-            if (isActiveWindow())
+            if (isActiveWindow() && _messages->verticalScrollBar()->value() >=
+                                        _messages->verticalScrollBar()->maximum() - 40)
                 _api->request("/chats/" + QString::number(_chatId) + "/read",
                               QJsonObject{{"message_id", message.value("id")}}, [](ApiResult) {});
         }
@@ -1058,72 +1086,9 @@ void Window::receive(QJsonObject event) {
                                message.value("text").toString().left(120),
                                QSystemTrayIcon::Information, 5000);
         refreshChats();
-    } else if (type == "chats" || type == "presence" || type == "read" || type == "delivered")
+    } else if (type == "chats" || type == "profile" || type == "presence" || type == "read" ||
+               type == "delivered")
         refreshChats();
-}
-void Window::settings() {
-    QDialog dialog(this);
-    dialog.setWindowTitle("Настройки Волны Desktop");
-    dialog.setMinimumWidth(420);
-    auto layout = new QVBoxLayout(&dialog);
-    layout->addWidget(
-        label("Волна Native Desktop 0.1.0\nQt/C++ · компоненты Telegram Desktop\nСервер: " +
-                  _api->origin().toString(),
-              "title"));
-    auto dark = new QCheckBox("Ночная тема");
-    dark->setChecked(QSettings().value("dark", true).toBool());
-    layout->addWidget(dark);
-    connect(dark, &QCheckBox::toggled, this, [this](bool value) {
-        QSettings().setValue("dark", value);
-        _theme = Theme::load(value);
-        _theme.apply(*qApp);
-        renderMessages(true);
-    });
-    auto tray = new QCheckBox("Показывать иконку в трее");
-    tray->setChecked(_tray && _tray->isVisible());
-    tray->setEnabled(_tray);
-    layout->addWidget(tray);
-    connect(tray, &QCheckBox::toggled, this, [this](bool value) {
-        QSettings().setValue("tray", value);
-        if (_tray)
-            _tray->setVisible(value);
-    });
-    layout->addWidget(label("Windows защищает сохранённый сеанс через DPAPI. Эта версия хранит "
-                            "аккаунт отдельно от установленного клиента Волны.",
-                            "subtitle"));
-    auto about = button("Исходный код и лицензии", "about");
-    layout->addWidget(about);
-    connect(about, &QPushButton::clicked, &dialog, [this] {
-        QMessageBox::information(
-            this, "О клиенте",
-            "Нативный интерфейс Qt/C++ для протокола Волны.\nИспользованы палитры Telegram Desktop "
-            "v6.3.3 (GPL-3.0-or-later) и QR-генератор из его зависимостей (MIT).\nЗвонки и "
-            "голосовые: WebRTC Волны в Qt WebEngine.\nИсходный код: "
-            "https://github.com/andluk87/volna/tree/main/desktop-native\nЭто самостоятельный "
-            "клиент, не официальный Telegram.");
-    });
-    if (_userId) {
-        auto logout = button("Выйти из аккаунта", "logout");
-        layout->addWidget(logout);
-        connect(logout, &QPushButton::clicked, &dialog, [this, &dialog] {
-            if ((_calls && _calls->active()) || _recording) {
-                error("Сначала завершите звонок или запись");
-                return;
-            }
-            if (QMessageBox::question(this, "Выйти из аккаунта?",
-                                      "Переписка останется на сервере") != QMessageBox::Yes)
-                return;
-            dialog.accept();
-            _api->logout([this](ApiResult result) {
-                if (!result.ok())
-                    error(result.error);
-            });
-        });
-    }
-    auto close = new QDialogButtonBox(QDialogButtonBox::Close);
-    layout->addWidget(close);
-    connect(close, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    dialog.exec();
 }
 void Window::closeEvent(QCloseEvent *event) {
     if (_quitting) {

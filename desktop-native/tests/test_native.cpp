@@ -2,12 +2,26 @@
 #include "session_store.h"
 #include "sse.h"
 #include "theme.h"
+#include "widgets.h"
 #include <QFile>
 #include <QTemporaryDir>
 #include <QtTest>
 class NativeTests : public QObject {
     Q_OBJECT
   private slots:
+    void composerKeyboard() {
+        ComposerEdit editor;
+        editor.show();
+        QSignalSpy sends(&editor, &ComposerEdit::sendPressed);
+        QTest::keyClicks(&editor, "first");
+        QTest::keyClick(&editor, Qt::Key_Return, Qt::ShiftModifier);
+        QTest::keyClicks(&editor, "second");
+        QCOMPARE(editor.toPlainText(), QString("first\nsecond"));
+        QCOMPARE(sends.count(), 0);
+        QTest::keyClick(&editor, Qt::Key_Return);
+        QCOMPARE(sends.count(), 1);
+        QCOMPARE(editor.toPlainText(), QString("first\nsecond"));
+    }
     void origins() {
         QVERIFY(Api::validOrigin(QUrl("https://volna.lknet.ru")));
         QVERIFY(Api::validOrigin(QUrl("http://127.0.0.1:3210")));

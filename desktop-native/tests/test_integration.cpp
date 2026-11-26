@@ -1,13 +1,18 @@
 #include "api.h"
 #include "calls.h"
+#include "image_viewer.h"
+#include "widgets.h"
 #include "window.h"
+#include <QCalendarWidget>
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QMenu>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QScrollBar>
 #include <QTemporaryDir>
+#include <QToolButton>
 #include <QWebEngineProfile>
 #include <QWebEngineScript>
 #include <QWebEngineScriptCollection>
@@ -90,7 +95,8 @@ class Integration : public QObject {
         QByteArray output;
         QElapsedTimer timer;
         timer.start();
-        while (!output.contains('\n') && timer.elapsed() < 20000) {
+        while (!output.contains('\n') && timer.elapsed() < 20000 &&
+               fixture.state() != QProcess::NotRunning) {
             fixture.waitForReadyRead(500);
             output += fixture.readAllStandardOutput();
         }
@@ -238,20 +244,129 @@ class Integration : public QObject {
                              "эмодзи 👋\nЧаты и звонки работают через сервер Волны.");
         QTest::mouseClick(window.findChild<QPushButton *>("sendMessage"), Qt::LeftButton);
         auto retry = window.findChild<QPushButton *>("sendMessage");
-        QTRY_VERIFY_WITH_TIMEOUT(retry->text() == "Повторить отправку" && retry->isEnabled(),
-                                 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(retry->property("pending").toBool() && retry->isEnabled(), 10000);
         QVERIFY(editor->isReadOnly());
         const auto sentText = editor->toPlainText();
         QTest::mouseClick(retry, Qt::LeftButton);
         QTRY_VERIFY_WITH_TIMEOUT(editor->toPlainText().isEmpty(), 10000);
         QCOMPARE(control("/message-count", {{"text", sentText}}).value("count").toInt(), 1);
         QTest::qWait(100);
+        if (!screenshot.isEmpty())
+            window.grab().save(screenshot + "/chat.png");
         for (auto text : messages->findChildren<QLabel *>())
-            if (text->text().startsWith("Проверка нативной отправки"))
+            if (text->text().startsWith("Проверка нативной отправки")) {
                 QVERIFY(text->height() >= text->heightForWidth(text->width()));
+            }
         QVERIFY(messages->horizontalScrollBar()->maximum() == 0);
         if (!screenshot.isEmpty())
             QVERIFY(window.grab().save(screenshot + "/chat.png"));
+        QTest::mouseClick(window.findChild<QPushButton *>("emoji"), Qt::LeftButton);
+        auto emoji = window.findChild<QDialog *>("emojiPopup");
+        QTRY_VERIFY(emoji && emoji->isVisible());
+        QTest::mouseClick(emoji->findChild<QPushButton *>("emojiChoice"), Qt::LeftButton);
+        QVERIFY(!editor->toPlainText().isEmpty());
+        editor->clear();
+        QTest::mouseClick(window.findChild<QPushButton *>("searchMessages"), Qt::LeftButton);
+        auto search = window.findChild<QLineEdit *>("chatSearch");
+        search->setText("продвигается");
+        auto results = window.findChild<QListWidget *>("searchResults");
+        QTRY_VERIFY_WITH_TIMEOUT(
+            results->count() == 1 && results->item(0)->text().contains("продвигается"), 10000);
+        QTest::mouseClick(results->viewport(), Qt::LeftButton, Qt::NoModifier,
+                          results->visualItemRect(results->item(0)).center());
+        auto latest = window.findChild<QPushButton *>("latestMessages");
+        QTRY_VERIFY(latest->isVisible());
+        QTest::mouseClick(latest, Qt::LeftButton);
+        QTest::mouseClick(window.findChild<QPushButton *>("closeChatSearch"), Qt::LeftButton);
+        QTRY_VERIFY(!latest->isVisible());
+        auto dateChip = window.findChild<QPushButton *>("dateChip");
+        QVERIFY(dateChip);
+        dateChip->click();
+        auto calendar = window.findChild<QCalendarWidget *>();
+        QTRY_VERIFY(calendar && calendar->isVisible());
+        calendar->setSelectedDate(QDate::currentDate());
+        calendar->activated(calendar->selectedDate());
+        QTRY_VERIFY_WITH_TIMEOUT(latest->isVisible(), 10000);
+        QTest::mouseClick(latest, Qt::LeftButton);
+        QTRY_VERIFY(!latest->isVisible());
+        auto tabs = window.findChildren<QToolButton *>();
+        QToolButton *groups = nullptr, *all = nullptr;
+        for (auto tab : tabs) {
+            if (tab->property("folderId") == "builtin_group")
+                groups = tab;
+            if (tab->property("folderId") == "builtin_all")
+                all = tab;
+        }
+        QVERIFY(groups && all);
+        QTest::mouseClick(groups, Qt::LeftButton);
+        QVERIFY(chats->count() >= 3);
+        for (int i = 0; i < chats->count(); ++i)
+            QCOMPARE(chats->item(i)->data(Qt::UserRole + 1).toJsonObject().value("kind").toString(),
+                     QString("group"));
+        QTest::mouseClick(all, Qt::LeftButton);
+        bool settingsSeen = false, daySaved = false;
+        QTimer::singleShot(150, &window, [&] {
+            auto settings = window.findChild<QDialog *>("settingsDialog");
+            if (!settings)
+                return;
+            settingsSeen = true;
+            if (!screenshot.isEmpty())
+                settings->grab().save(screenshot + "/settings.png");
+            for (auto toggle : settings->findChildren<Toggle *>())
+                if (toggle->accessibleName() == "Ночная тема") {
+                    auto original = toggle->isChecked();
+                    toggle->setChecked(false);
+                    QTest::qWait(100);
+                    daySaved = screenshot.isEmpty() || window.grab().save(screenshot + "/day.png");
+                    toggle->setChecked(original);
+                }
+            settings->accept();
+        });
+        QTest::mouseClick(window.findChild<QPushButton *>("nativeSettings"), Qt::LeftButton);
+        QVERIFY(settingsSeen && daySaved);
+        bool menuSeen = false;
+        QTimer::singleShot(150, &window, [&] {
+            auto menu = window.findChild<QMenu *>("mainMenuPopup");
+            if (!menu)
+                return;
+            menuSeen = true;
+            if (!screenshot.isEmpty())
+                menu->grab().save(screenshot + "/menu.png");
+            menu->close();
+        });
+        QTest::mouseClick(window.findChild<QPushButton *>("menu"), Qt::LeftButton);
+        QVERIFY(menuSeen);
+        for (int i = 0; i < chats->count(); ++i)
+            if (chats->item(i)->data(Qt::UserRole).toInt() == config.value("photoChat").toInt())
+                QTest::mouseClick(chats->viewport(), Qt::LeftButton, Qt::NoModifier,
+                                  chats->visualItemRect(chats->item(i)).center());
+        QTRY_VERIFY_WITH_TIMEOUT(!window.findChildren<MediaView *>().isEmpty(), 10000);
+        MediaView *picture = nullptr;
+        for (auto candidate : window.findChildren<MediaView *>())
+            if (candidate->property("messageId").toInt() == config.value("albumMessage").toInt())
+                picture = candidate;
+        QVERIFY(picture);
+        QTRY_VERIFY_WITH_TIMEOUT(picture->loaded(), 10000);
+        for (int i = 0; i < messages->count(); ++i)
+            if (messages->item(i)->data(Qt::UserRole).toInt() ==
+                config.value("albumMessage").toInt())
+                messages->scrollToItem(messages->item(i), QAbstractItemView::PositionAtCenter);
+        QTest::qWait(50);
+        if (!screenshot.isEmpty())
+            window.grab().save(screenshot + "/media.png");
+        QTest::mouseClick(picture, Qt::LeftButton);
+        auto viewer = window.findChild<ImageViewer *>();
+        QTRY_VERIFY(viewer && viewer->isVisible());
+        auto count = viewer->findChild<QLabel *>("photoCounter");
+        QTRY_COMPARE_WITH_TIMEOUT(count->text(), QString("1 / 2"), 10000);
+        QTRY_VERIFY(viewer->findChild<QPushButton *>("savePhoto")->isEnabled());
+        QTest::mouseClick(viewer->findChild<QPushButton *>("nextPhoto"), Qt::LeftButton);
+        QTRY_COMPARE(count->text(), QString("2 / 2"));
+        QVERIFY(!viewer->findChild<QPushButton *>("nextPhoto")->isEnabled());
+        QTRY_VERIFY(viewer->findChild<QPushButton *>("savePhoto")->isEnabled());
+        if (!screenshot.isEmpty())
+            viewer->grab().save(screenshot + "/viewer.png");
+        viewer->close();
     }
     void realRtcCall() {
         if (qEnvironmentVariable("VOLNA_NATIVE_TURN_TEST") != "1")
@@ -299,10 +414,11 @@ class Integration : public QObject {
                 "document.querySelector('.call-person [role=status]')?.textContent==='Разговор'")
                 .toBool(),
             10000);
-        javascript(viewB, "Promise.all(window.__testPeers.map(pc=>pc.getStats())).then(all=>window."
-                          "__rtpPackets=all.flatMap(s=>[...s.values()]).filter(s=>s.type==='"
-                          "inbound-rtp').reduce((n,s)=>n+(s.packetsReceived||0),0))");
-        QTRY_VERIFY_WITH_TIMEOUT(javascript(viewB, "window.__rtpPackets||0").toInt() > 0, 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            javascript(viewB, "Promise.all(window.__testPeers.map(pc=>pc.getStats())).then(all=>window."
+                              "__rtpPackets=all.flatMap(s=>[...s.values()]).filter(s=>s.type==='"
+                              "inbound-rtp').reduce((n,s)=>n+(s.packetsReceived||0),0));"
+                              "window.__rtpPackets||0").toInt() > 0, 10000);
         javascript(viewA, "document.querySelector('[aria-label=\"Свернуть звонок, чтобы открыть "
                           "переписку\"]').click()");
         QTRY_VERIFY(!a.isVisible());
