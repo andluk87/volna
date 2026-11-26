@@ -14,11 +14,23 @@ Remove-Item Env:QT_QPA_PLATFORM
 $Stage = Join-Path $Root "$BuildDirectory/package/VolnaDesktopNative"
 New-Item -ItemType Directory -Path $Stage -Force | Out-Null
 Run 'cmake' @('--install', $BuildDirectory, '--prefix', $Stage)
-Run "$QtDirectory/bin/windeployqt.exe" @('--release', '--compiler-runtime', '--no-translations', "$Stage/VolnaDesktop.exe")
+Run "$QtDirectory/bin/windeployqt.exe" @('--release', '--compiler-runtime', '--no-translations', '--skip-plugin-types', 'position', "$Stage/VolnaDesktop.exe")
+# Install app-local MSVC runtime DLLs so the per-user installer does not need
+# administrator rights or a preinstalled Visual C++ redistributable.
+$Crt = Get-ChildItem (Join-Path $env:VCToolsRedistDir 'x64') -Directory | Where-Object Name -Like 'Microsoft.VC*.CRT' | Select-Object -First 1
+if (-not $Crt) { throw 'Cannot find the x64 MSVC redistributable CRT directory.' }
+Copy-Item "$($Crt.FullName)/*.dll" $Stage -Force
+Remove-Item "$Stage/vc_redist.x64.exe" -ErrorAction SilentlyContinue
 foreach ($RuntimeFile in @('QtWebEngineProcess.exe', 'Qt6WebEngineCore.dll', 'resources/qtwebengine_resources.pak', 'platforms/qwindows.dll', 'tls/qschannelbackend.dll')) {
     if (-not (Test-Path "$Stage/$RuntimeFile")) { throw "Missing deployed runtime: $RuntimeFile" }
 }
-$Smoke = Start-Process -FilePath "$Stage/VolnaDesktop.exe" -ArgumentList '--version' -PassThru
+$SmokeInfo = [System.Diagnostics.ProcessStartInfo]::new()
+$SmokeInfo.FileName = "$Stage/VolnaDesktop.exe"
+$SmokeInfo.Arguments = '--version'
+$SmokeInfo.UseShellExecute = $false
+$SmokeInfo.Environment['PATH'] = (($env:PATH -split ';') | Where-Object { $_ -and -not $_.StartsWith($QtDirectory, [System.StringComparison]::OrdinalIgnoreCase) }) -join ';'
+foreach ($Variable in @('QT_PLUGIN_PATH', 'QML2_IMPORT_PATH', 'QML_IMPORT_PATH')) { $SmokeInfo.Environment.Remove($Variable) | Out-Null }
+$Smoke = [System.Diagnostics.Process]::Start($SmokeInfo)
 if (-not $Smoke.WaitForExit(20000)) { $Smoke.Kill(); throw 'Packaged client did not start within 20 seconds.' }
 if ($Smoke.ExitCode -ne 0) { throw "Packaged client failed to start ($($Smoke.ExitCode))" }
 Copy-Item 'desktop-native/third_party/qt' "$Stage/licenses/qt" -Recurse -Force
