@@ -14,16 +14,35 @@ jobs:
       - uses: actions/checkout@v4
       - uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.3'
+          version: '6.10.2'
           arch: win64_msvc2022_64
           modules: 'qtwebengine qtwebchannel qtpositioning'
           cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build shared call engine
+        shell: pwsh
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm --prefix client ci --ignore-scripts --no-audit --no-fund
+          npm --prefix client run build
+          python desktop-native/scripts/verify-sources.py
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
       - name: Build, test and package native Windows client
         shell: pwsh
         run: ./desktop-native/scripts/build-windows.ps1
+      - name: Test native login, chats, files, refresh and QR against real local API
+        shell: pwsh
+        run: |
+          $env:VOLNA_NATIVE_FIXTURE_SCRIPT = "$PWD/tests/native-desktop-fixture.mjs"
+          $env:VOLNA_NATIVE_SCREENSHOTS = "$PWD/build-native/screenshots"
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $env:QTWEBENGINE_CHROMIUM_FLAGS = '--disable-gpu --use-fake-device-for-media-stream --use-fake-ui-for-media-stream'
+          & ./build-native/volna_native_integration.exe -txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Include corresponding application source
         shell: pwsh
         run: git archive --format=zip --output=build-native/Volna-Native-0.1.0-source.zip HEAD

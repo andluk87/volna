@@ -2,8 +2,8 @@ The Windows distribution dynamically links unmodified Qt libraries supplied by
 The Qt Company: Qt Core, Gui, Widgets, Network, Qml, Quick, Positioning,
 WebChannel and WebEngine (including Chromium and its third-party components).
 
-Qt 6.8.3 source: https://download.qt.io/archive/qt/6.8/6.8.3/single/
-Module repositories and the matching tag v6.8.3:
+Qt 6.10.2 source: https://download.qt.io/archive/qt/6.10/6.10.2/single/
+Module repositories and the matching tag v6.10.2:
 https://code.qt.io/cgit/qt/qtbase.git/
 https://code.qt.io/cgit/qt/qtdeclarative.git/
 https://code.qt.io/cgit/qt/qtwebchannel.git/

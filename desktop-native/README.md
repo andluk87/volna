@@ -19,20 +19,20 @@
 
 ## Сборка Windows x64
 
-Нужны Windows 10/11 x64, Visual Studio 2022 C++ Desktop, CMake 3.25+, Ninja, Inno Setup 6 и Qt **6.8.3 msvc2022_64** с WebEngine, WebChannel, Positioning и Declarative. Выполните из Developer PowerShell:
+Нужны Windows 10/11 x64, Visual Studio 2022 C++ Desktop, CMake 3.25+, Ninja, Inno Setup 6 и Qt **6.10.2 msvc2022_64** с WebEngine, WebChannel, Positioning и Declarative. Выполните из Developer PowerShell:
 
 ```powershell
-$env:QT_ROOT_DIR = 'C:\Qt\6.8.3\msvc2022_64'
+$env:QT_ROOT_DIR = 'C:\Qt\6.10.2\msvc2022_64'
 ./desktop-native/scripts/build-windows.ps1
 ```
 
-Скрипт собирает приложение, запускает C++-тесты, кладёт Qt DLL/плагины/WebEngineProcess, лицензии, portable ZIP и отдельный установщик в `build-native`. Работает workflow **Volna Native Desktop**, артефакт содержит установщик, portable ZIP и соответствующий исходный код. Версия нативной ветки — 0.1.0; текущая версия остальных клиентов не меняется.
+Скрипт собирает приложение, запускает C++-тесты, кладёт Qt DLL/плагины/WebEngineProcess, лицензии, portable ZIP и отдельный установщик в `build-native`. Работает workflow **Volna Native Desktop**, артефакт содержит установщик, portable ZIP и соответствующий исходный код. Предварительный выпуск: https://github.com/andluk87/volna/releases/tag/native-v0.1.0 (установщик пока без цифровой подписи). Версия нативной ветки — 0.1.0; текущая версия остальных клиентов не меняется.
 
 Звонкам и голосовым нужна новая страница `native-call.html` на сервере: обычный `npm --prefix client ci && npm --prefix client run build` включает её в `client/dist`; обновите Web штатным способом. До обновления Web нативные чаты работают, а клиент сообщает, что модуль звонков недоступен. API авторизации совместим с сервером Волны 0.12.112.
 
 ## Проверка Linux / разработка
 
-Qt 6.8+ Widgets, Network, WebEngineWidgets, WebChannel, Test; CMake, компилятор C++20:
+Qt 6.10.2 Widgets, Network, WebEngineWidgets, WebChannel, Test; CMake, компилятор C++20:
 
 ```sh
 cmake -S desktop-native -B build-native -DCMAKE_PREFIX_PATH=/path/to/Qt/gcc_64
@@ -42,3 +42,5 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir build-native --output-on-failure
 ```
 
 По умолчанию сервер `https://volna.lknet.ru`. Для локального тестового сервера разрешён `--server http://127.0.0.1:PORT`; в других случаях требуется HTTPS. Пароль, токен и параметры в URL сервера запрещены. Перенаправления API не выполняются. Мост звонков существует только на странице `/native-call.html` того же origin, не выдаёт refresh token и использует единый нативный механизм обновления сеанса. Браузерный профиль непостоянный; токены не передаются в URL, localStorage или JS-файле.
+
+Для интеграционных проверок сначала соберите `client/dist`, затем задайте `VOLNA_NATIVE_FIXTURE_SCRIPT` абсолютным путём к `tests/native-desktop-fixture.mjs` и запустите `volna_native_integration`. Проверка реальных RTP/видео выполняется с локальным coturn на 127.0.0.1:3478, тестовым REST-secret `volna-native-local-test-only` и `VOLNA_NATIVE_TURN_TEST=1`; для Chromium используются тестовые аудио/видеоисточники. Этот секрет относится только к локальным тестам и не должен использоваться в боевом TURN. Контроль исходных файлов: `python3 desktop-native/scripts/verify-sources.py`.

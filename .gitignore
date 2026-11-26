@@ -22,3 +22,5 @@ client/electron-builder.windows.json
 android-native/.kotlin/
 
 /work/
+
+/build-native/
